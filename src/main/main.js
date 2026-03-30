@@ -1,15 +1,18 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog } = require('electron')
 const path = require('path')
 const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
+const { startMCPServer, stopMCPServer, setWindowGetter } = require('./mcp-server')
+const PM = require('./profile-manager')
 
 // App icon (monkey emoji) — resolved once at startup
 const APP_ICON = nativeImage.createFromPath(
   path.join(__dirname, '../../assets/icon.ico')
 )
 
+// Legacy store — kept for migration & window bounds (shared across profiles)
 const store = new Store({
   defaults: {
     theme: 'dark',
@@ -86,11 +89,16 @@ function setupContentBlocker() {
   // Webviews use the default session unless a partition is set
   const ses = session.defaultSession
 
+  // Never block these domains
+  const whitelist = ['seoz.se', 'flow.seoz.se', 'api.seoz.se']
+  const isWhitelisted = host => whitelist.some(w => host === w || host.endsWith('.' + w))
+
   ses.webRequest.onBeforeRequest((details, callback) => {
     if (!blockerEnabled) { callback({}); return }
 
     try {
       const url = new URL(details.url)
+      if (isWhitelisted(url.hostname)) { callback({}); return }
       if (isDomainBlocked(url.hostname)) {
         blockerStats.blocked++
         blockerStats.session++
@@ -153,25 +161,98 @@ ipcMain.handle('blocker-set-enabled', (_, v) => { blockerEnabled = !!v; return b
 ipcMain.handle('blocker-get-stats', () => blockerStats)
 ipcMain.on('blocker-reset-stats', () => { blockerStats.session = 0 })
 
-// ── Theme ──
-ipcMain.handle('get-theme', () => store.get('theme', 'dark'))
-ipcMain.on('set-theme', (e, t) => store.set('theme', t))
+// ── Theme (profile-scoped) ──
+ipcMain.handle('get-theme', () => PM.profileGet('theme', 'dark'))
+ipcMain.on('set-theme', (e, t) => PM.profileSet('theme', t))
 
-// ── Store (generic get/set) ──
-ipcMain.handle('store-get', (_, k, d) => store.get(k, d))
-ipcMain.handle('store-set', (_, k, v) => { store.set(k, v); return true })
+// ── Store (profile-scoped get/set) ──
+ipcMain.handle('store-get', (_, k, d) => PM.profileGet(k, d))
+ipcMain.handle('store-set', (_, k, v) => { PM.profileSet(k, v); return true })
 
-// ── API key ──
-ipcMain.handle('get-api-key', () => store.get('apiKey'))
-ipcMain.handle('set-api-key', (e, k) => { store.set('apiKey', k); return true })
-ipcMain.handle('del-api-key', () => { store.delete('apiKey'); return true })
+// ── API key (profile-scoped) ──
+ipcMain.handle('get-api-key', () => PM.profileGet('apiKey'))
+ipcMain.handle('set-api-key', (e, k) => { PM.profileSet('apiKey', k); return true })
+ipcMain.handle('del-api-key', () => { PM.profileDelete('apiKey'); return true })
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PROFILE MANAGEMENT — Chrome-like user profiles
+// ══════════════════════════════════════════════════════════════════════════════
+ipcMain.handle('profile-list', () => PM.listProfiles())
+ipcMain.handle('profile-get-active', () => ({
+  profile: PM.getActiveProfile(),
+  id: PM.getActiveProfileId(),
+}))
+ipcMain.handle('profile-create', (_, { name, email }) => PM.createProfile({ name, email }))
+ipcMain.handle('profile-update', (_, { id, updates }) => PM.updateProfile(id, updates))
+ipcMain.handle('profile-delete', (_, id) => PM.deleteProfile(id))
+ipcMain.handle('profile-switch', (_, id) => {
+  const profile = PM.switchProfile(id)
+  if (!profile) return { ok: false }
+  // Restart sync with the new profile's API key
+  stopSync()
+  startSync()
+  return { ok: true, profile }
+})
+
+// ── Profile avatar ──
+ipcMain.handle('profile-pick-avatar', async (_, profileId) => {
+  const result = await dialog.showOpenDialog(win, {
+    title: 'Välj profilbild',
+    filters: [{ name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'] }],
+    properties: ['openFile'],
+  })
+  if (result.canceled || !result.filePaths[0]) return { ok: false }
+  const avatarPath = PM.saveAvatar(profileId, result.filePaths[0])
+  PM.updateProfile(profileId, { avatar: avatarPath })
+  return { ok: true, path: avatarPath }
+})
+
+ipcMain.handle('profile-get-avatar', (_, profileId) => {
+  return PM.getAvatarPath(profileId)
+})
+
+ipcMain.handle('profile-remove-avatar', (_, profileId) => {
+  PM.deleteAvatar(profileId)
+  PM.updateProfile(profileId, { avatar: null })
+  return { ok: true }
+})
+
+// ── Claude AI (Anthropic API) ──
+ipcMain.handle('claude-chat', async (_, { messages, systemPrompt, apiKey }) => {
+  if (!apiKey) return { error: 'No Anthropic API key configured' }
+  try {
+    const body = JSON.stringify({
+      model: 'claude-sonnet-4-20250514',
+      max_tokens: 4096,
+      system: systemPrompt || 'You are a helpful SEO assistant integrated in the SEOZ Browser. Respond in Swedish unless the user writes in another language. Be concise and actionable.',
+      messages
+    })
+    const res = await net.fetch('https://api.anthropic.com/v1/messages', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'x-api-key': apiKey,
+        'anthropic-version': '2023-06-01',
+      },
+      body
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => 'Unknown error')
+      return { error: `API error ${res.status}: ${txt}` }
+    }
+    const data = await res.json()
+    return { ok: true, content: data.content?.[0]?.text || '', usage: data.usage }
+  } catch (err) {
+    return { error: err.message || 'Claude API call failed' }
+  }
+})
 
 // ── Open external links ──
 ipcMain.on('open-external', (e, url) => shell.openExternal(url))
 
-// ── OS notifications ──
+// ── OS notifications (profile-scoped) ──
 ipcMain.on('send-notification', (_, { title, body }) => {
-  if (store.get('osNotifs', true) && Notification.isSupported())
+  if (PM.profileGet('osNotifs', true) && Notification.isSupported())
     new Notification({ title, body }).show()
 })
 
@@ -261,12 +342,12 @@ ipcMain.on('updater-install', () => {
 })
 ipcMain.handle('updater-get-version', () => app.getVersion())
 
-// ── Auto-sync every 30 s ──
+// ── Auto-sync every 30 s (profile-scoped) ──
 function startSync() {
   stopSync()
-  if (!store.get('autoSync', true)) return
+  if (!PM.profileGet('autoSync', true)) return
   syncInterval = setInterval(async () => {
-    const key = store.get('apiKey', '')
+    const key = PM.profileGet('apiKey', '')
     if (!key) return
     const r = await doAPISync(key)
     if (r.ok) win?.webContents.send('sync-data', r)
@@ -276,12 +357,18 @@ function stopSync() { if (syncInterval) { clearInterval(syncInterval); syncInter
 
 // ── Lifecycle ──
 app.whenReady().then(() => {
+  // Migrate legacy single-user data to first profile (runs once)
+  PM.migrateLegacyData(store)
+
   setupContentBlocker()
   createWindow()
   startSync()
+  // MCP server — lets Claude control the browser
+  setWindowGetter(() => win)
+  startMCPServer()
   // Check for updates 3s after launch (silent)
   setTimeout(() => { autoUpdater.checkForUpdates().catch(() => {}) }, 3000)
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
-app.on('before-quit', () => stopSync())
+app.on('before-quit', () => { stopSync(); stopMCPServer() })

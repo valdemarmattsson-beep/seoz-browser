@@ -2,7 +2,7 @@
 <html lang="sv" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
 <title>SEOZ Browser</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -53,7 +53,8 @@ input,textarea,select{user-select:text}
 }
 .tab:hover:not(.active){background:rgba(255,255,255,.05)}
 .tab.active{background:var(--card);color:var(--head);font-weight:600}
-.tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain}
+.tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:block}
+.tab-ico-wrap{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tab-x{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;flex-shrink:0;transition:opacity .15s}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
@@ -89,7 +90,8 @@ input,textarea,select{user-select:text}
 .nb:hover{background:var(--border)}
 .url-wrap{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:7px;cursor:text;transition:border-color .15s;-webkit-app-region:no-drag}
 .url-wrap:focus-within{border-color:var(--p)}
-.url-fav{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:none}
+.url-fav{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;visibility:hidden}
+.url-fav.show{visibility:visible}
 .lock{font-size:10px;color:var(--g);flex-shrink:0}
 #urlInput{flex:1;border:none;background:none;outline:none;font-size:12px;font-family:'Inter',sans-serif;color:var(--txt)}
 #urlInput::placeholder{color:var(--muted)}
@@ -193,6 +195,42 @@ input,textarea,select{user-select:text}
 .bm-drop-sep{height:1px;background:var(--border);margin:4px 8px}
 .bm-drop-item.danger{color:var(--r)}
 .bm-drop-item.muted{color:var(--muted);font-style:italic}
+
+/* Client selector in bookmark bar */
+.client-sel{
+  margin-left:auto;flex-shrink:0;position:relative;
+  display:flex;align-items:center;
+}
+.client-sel-btn{
+  height:22px;padding:0 8px 0 6px;border-radius:4px;
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;color:var(--txt);cursor:pointer;
+  white-space:nowrap;transition:background .12s;
+  border:none;background:none;font-family:inherit;
+}
+.client-sel-btn:hover{background:rgba(255,255,255,.08)}
+.client-sel-dot{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+.client-sel-name{max-width:120px;overflow:hidden;text-overflow:ellipsis}
+.client-sel-arrow{font-size:8px;opacity:.5;margin-left:1px}
+.client-sel-drop{
+  position:absolute;top:100%;right:0;z-index:200;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  min-width:200px;max-width:280px;padding:4px 0;
+  display:none;margin-top:4px;
+}
+.client-sel-drop.open{display:block}
+.client-sel-drop-item{
+  padding:7px 12px;display:flex;align-items:center;gap:8px;
+  font-size:11px;color:var(--txt);cursor:pointer;transition:background .1s;
+}
+.client-sel-drop-item:hover{background:rgba(255,255,255,.06)}
+.client-sel-drop-item.active{color:var(--p);font-weight:600}
+.client-sel-drop-item .client-sel-dot{width:8px;height:8px}
+.client-sel-drop-hdr{
+  padding:6px 12px 4px;font-size:9px;font-weight:700;letter-spacing:.06em;
+  text-transform:uppercase;color:var(--muted);
+}
 
 /* Context menu (right-click) */
 .ctx-menu{
@@ -350,6 +388,39 @@ input,textarea,select{user-select:text}
 .ac-sec{width:100%;height:36px;background:none;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;margin-bottom:6px}
 .ac-sec:hover{background:var(--border)}
 .ac-sec:last-child{margin-bottom:0}
+
+/* ── PROFILE PICKER ── */
+#profilePicker{position:fixed;inset:0;z-index:10000;background:var(--bg);display:flex;align-items:center;justify-content:center;flex-direction:column}
+#profilePicker.gone{display:none}
+.pp-card{width:420px;background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.35);overflow:hidden}
+.pp-top{padding:28px 28px 20px}
+.pp-h{font-size:1.1rem;font-weight:800;color:var(--head);margin-bottom:4px}
+.pp-sub{font-size:11px;color:var(--muted);margin-bottom:20px}
+.pp-grid{display:flex;flex-direction:column;gap:6px;max-height:320px;overflow-y:auto;padding-right:4px}
+.pp-profile{display:flex;align-items:center;gap:12px;padding:10px 12px;border-radius:10px;cursor:pointer;border:1.5px solid transparent;transition:all .15s}
+.pp-profile:hover{background:var(--panel);border-color:var(--border)}
+.pp-avatar{width:40px;height:40px;border-radius:12px;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:#fff;flex-shrink:0}
+.pp-info{flex:1;min-width:0}
+.pp-name{font-size:13px;font-weight:700;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-email{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pp-badge{font-size:9px;font-weight:700;color:var(--p);background:rgba(70,128,255,.1);padding:2px 8px;border-radius:4px}
+.pp-arrow{color:var(--muted);font-size:14px;flex-shrink:0}
+.pp-foot{padding:14px 28px;border-top:1px solid var(--border);background:var(--panel);display:flex;gap:8px}
+.pp-add{flex:1;height:36px;background:none;border:1.5px dashed var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
+.pp-add:hover{border-color:var(--p);color:var(--p);background:rgba(70,128,255,.04)}
+/* Create profile form */
+.pp-form{display:none;padding:0 28px 20px}
+.pp-form.open{display:block}
+.pp-form-h{font-size:12px;font-weight:700;color:var(--head);margin-bottom:10px;display:flex;align-items:center;justify-content:space-between}
+.pp-form-close{background:none;border:none;color:var(--muted);cursor:pointer;font-size:16px;padding:2px 6px;border-radius:4px}
+.pp-form-close:hover{color:var(--head);background:var(--panel)}
+.pp-form .ac-inp{margin-bottom:10px}
+/* Profile menu on right-click / edit */
+.pp-edit-row{display:flex;gap:6px;margin-top:4px}
+.pp-edit-btn{height:30px;flex:1;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:10px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .12s}
+.pp-edit-btn:hover{background:var(--border)}
+.pp-edit-btn.danger{color:var(--r)}
+.pp-edit-btn.danger:hover{background:rgba(220,38,38,.1)}
 
 /* Action button (panel) */
 .act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
@@ -525,6 +596,37 @@ input,textarea,select{user-select:text}
 </head>
 <body>
 
+<!-- PROFILE PICKER -->
+<div id="profilePicker" class="gone">
+  <div class="pp-card">
+    <div class="pp-top">
+      <div class="ac-logo">
+        <div class="ac-mark">SZ</div>
+        <div class="ac-word">SEOZ<span>.se</span></div>
+      </div>
+      <div class="pp-h">Vem surfar?</div>
+      <div class="pp-sub">Välj din profil för att ladda dina bokmärken, historik och API-koppling.</div>
+      <div class="pp-grid" id="ppGrid">
+        <!-- Profiles rendered by JS -->
+      </div>
+    </div>
+    <div class="pp-form" id="ppForm">
+      <div class="pp-form-h">
+        <span>Skapa ny profil</span>
+        <button class="pp-form-close" onclick="closePpForm()">✕</button>
+      </div>
+      <div class="ac-lbl">Namn</div>
+      <input class="ac-inp" id="ppName" placeholder="T.ex. Valdemar" onkeydown="if(event.key==='Enter')submitNewProfile()">
+      <div class="ac-lbl">E-post (valfritt)</div>
+      <input class="ac-inp" id="ppEmail" placeholder="namn@foretag.se" onkeydown="if(event.key==='Enter')submitNewProfile()">
+      <button class="ac-btn" onclick="submitNewProfile()" style="margin-top:4px">Skapa profil</button>
+    </div>
+    <div class="pp-foot">
+      <button class="pp-add" onclick="openPpForm()">+ Lägg till profil</button>
+    </div>
+  </div>
+</div>
+
 <!-- AUTH -->
 <div id="auth">
   <div class="ac">
@@ -569,7 +671,7 @@ input,textarea,select{user-select:text}
       <div class="nb" onclick="wvFwd()">→</div>
       <div class="nb" id="relBtn" onclick="wvReload()">↻</div>
       <div class="url-wrap" onclick="document.getElementById('urlInput').focus()">
-        <img class="url-fav" id="urlFav" src="" onload="this.style.display='block'" onerror="this.style.display='none'">
+        <img class="url-fav" id="urlFav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
         <span class="lock" id="urlLock">🔒</span>
         <input id="urlInput" placeholder="Sök eller ange URL..."
                onkeydown="if(event.key==='Enter')doNav(this.value)"
@@ -721,10 +823,23 @@ input,textarea,select{user-select:text}
         <div class="dtt">AI-synlighet</div>
       </div>
       <div class="dock-sep"></div>
-      <div class="di" id="di-clients" onclick="togglePanel('clients')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
-        <div class="dtt">Klienter</div>
+      <div class="di" id="di-cwv" onclick="togglePanel('cwv')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
+        <div class="dtt">Core Web Vitals</div>
       </div>
+      <div class="di" id="di-creative" onclick="togglePanel('creative')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
+        <div class="dtt">Creative AI</div>
+      </div>
+      <div class="di" id="di-compads" onclick="togglePanel('compads')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
+        <div class="dtt">Konkurrentannonser</div>
+      </div>
+      <div class="di" id="di-claude" onclick="togglePanel('claude')" style="color:#d4a574">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
+        <div class="dtt">Claude AI</div>
+      </div>
+      <div class="dock-sep"></div>
       <div class="dock-spacer"></div>
       <div class="di" id="di-settings" onclick="togglePanel('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -735,10 +850,13 @@ input,textarea,select{user-select:text}
 
   <!-- STATUS BAR -->
   <div class="statusbar">
+    <div class="sb" id="sbProfile" onclick="showProfilePicker()" style="cursor:pointer;gap:5px;padding:1px 8px;border-radius:4px;transition:background .12s" onmouseover="this.style.background='var(--panel)'" onmouseout="this.style.background='transparent'">
+      <div id="sbProfileAvatar" style="width:14px;height:14px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:7px;font-weight:800;color:#fff;background:var(--p)">?</div>
+      <span id="sbProfileName">Profil</span>
+    </div>
     <div class="sb"><div class="sb-dot" id="sbDot"></div><span id="sbSync">Ej synkad</span></div>
     <div style="flex:1"></div>
     <div class="sb" id="sbDomain">—</div>
-    <div class="sb" id="sbClient">—</div>
     <div class="sb" id="sbVersion" style="opacity:.5">v—</div>
   </div>
 </div>
@@ -783,6 +901,150 @@ const SE = window.seoz || {
   notify:()=>{}, openExternal:()=>{}, storeGet:async()=>null, storeSet:async()=>true,
   on:()=>{}, off:()=>{},
   isWindows:true, isMac:false,
+  // Profile mock (fallback for dev)
+  profileList:async()=>[], profileGetActive:async()=>({profile:null,id:null}),
+  profileCreate:async()=>({}), profileUpdate:async()=>null,
+  profileDelete:async()=>({ok:true}), profileSwitch:async()=>({ok:true}),
+  profilePickAvatar:async()=>({ok:false}), profileGetAvatar:async()=>null, profileRemoveAvatar:async()=>({ok:true}),
+}
+
+// ══════════════════════════════════════════════════════
+//  PROFILE PICKER — Chrome-like user profiles
+// ══════════════════════════════════════════════════════
+let currentProfileId = null
+
+function getInitials(name) {
+  if (!name) return '?'
+  const parts = name.trim().split(/\s+/)
+  if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
+  return parts[0].substring(0, 2).toUpperCase()
+}
+
+async function renderProfilePicker() {
+  const profiles = await SE.profileList()
+  const grid = document.getElementById('ppGrid')
+  const { id: activeId } = await SE.profileGetActive()
+
+  if (profiles.length === 0) {
+    grid.innerHTML = '<div style="padding:12px 0;font-size:12px;color:var(--muted);text-align:center">Inga profiler ännu — skapa din första!</div>'
+    return
+  }
+
+  // Fetch avatar paths for all profiles
+  const avatarPaths = {}
+  for (const p of profiles) {
+    avatarPaths[p.id] = await SE.profileGetAvatar(p.id)
+  }
+
+  grid.innerHTML = profiles.map(p => {
+    const avPath = avatarPaths[p.id]
+    const avatarHtml = avPath
+      ? `<div class="pp-avatar" style="background:${p.color || '#4680ff'};overflow:hidden;padding:0">
+           <img src="file://${avPath}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" onerror="this.parentElement.innerHTML='${getInitials(p.name)}'">
+         </div>`
+      : `<div class="pp-avatar" style="background:${p.color || '#4680ff'}">${getInitials(p.name)}</div>`
+    return `
+      <div class="pp-profile" data-pid="${p.id}">
+        <div onclick="pickAvatarFor('${p.id}', event)" style="cursor:pointer;position:relative" title="Klicka för att byta bild">
+          ${avatarHtml}
+          <div style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:50%;background:var(--card);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px">📷</div>
+        </div>
+        <div class="pp-info" onclick="selectProfile('${p.id}')" style="cursor:pointer;flex:1">
+          <div class="pp-name">${esc(p.name)}</div>
+          ${p.email ? `<div class="pp-email">${esc(p.email)}</div>` : '<div class="pp-email">Ej ansluten</div>'}
+        </div>
+        ${p.id === activeId ? '<span class="pp-badge">Aktiv</span>' : ''}
+        <span class="pp-arrow" onclick="selectProfile('${p.id}')" style="cursor:pointer">›</span>
+      </div>
+    `
+  }).join('')
+}
+
+async function pickAvatarFor(profileId, event) {
+  event.stopPropagation()
+  const res = await SE.profilePickAvatar(profileId)
+  if (res.ok) {
+    await renderProfilePicker()
+    updateProfileStatusBar()
+  }
+}
+
+async function showProfilePicker() {
+  await renderProfilePicker()
+  document.getElementById('profilePicker').classList.remove('gone')
+}
+
+function hideProfilePicker() {
+  document.getElementById('profilePicker').classList.add('gone')
+}
+
+async function selectProfile(id) {
+  const res = await SE.profileSwitch(id)
+  if (!res.ok) return
+  currentProfileId = id
+  hideProfilePicker()
+  updateProfileStatusBar()
+
+  // Update the profile's name/email from SEOZ API after auth
+  const key = await SE.getApiKey()
+  if (key) {
+    document.getElementById('auth').classList.add('gone')
+    await syncNow()
+    // Update profile name/email from synced user data
+    if (synced.user) {
+      await SE.profileUpdate(id, {
+        name: synced.user.name || synced.user.email,
+        email: synced.user.email || '',
+      })
+    }
+  } else {
+    // No API key for this profile — show auth overlay
+    document.getElementById('auth').classList.remove('gone')
+  }
+  renderTabs()
+  loadBookmarks()
+  loadHistory()
+}
+
+function openPpForm() {
+  document.getElementById('ppForm').classList.add('open')
+  document.getElementById('ppName').focus()
+}
+
+function closePpForm() {
+  document.getElementById('ppForm').classList.remove('open')
+  document.getElementById('ppName').value = ''
+  document.getElementById('ppEmail').value = ''
+}
+
+async function submitNewProfile() {
+  const name = document.getElementById('ppName').value.trim()
+  const email = document.getElementById('ppEmail').value.trim()
+  if (!name) { document.getElementById('ppName').focus(); return }
+
+  await SE.profileCreate({ name, email })
+  closePpForm()
+  await renderProfilePicker()
+}
+
+async function updateProfileStatusBar() {
+  const { profile } = await SE.profileGetActive()
+  if (!profile) return
+  const el = document.getElementById('sbProfileName')
+  const av = document.getElementById('sbProfileAvatar')
+  if (el) el.textContent = profile.name || 'Profil'
+  if (av) {
+    const avatarPath = await SE.profileGetAvatar(profile.id)
+    if (avatarPath) {
+      av.innerHTML = `<img src="file://${avatarPath}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" onerror="this.parentElement.textContent='${getInitials(profile.name)}'">`
+      av.style.background = 'transparent'
+      av.style.overflow = 'hidden'
+    } else {
+      av.innerHTML = ''
+      av.textContent = getInitials(profile.name)
+      av.style.background = profile.color || 'var(--p)'
+    }
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -802,27 +1064,35 @@ const synced = {
 // ══════════════════════════════════════════════════════
 const wv = document.getElementById('wv')
 
+// Batched tab rendering — coalesce rapid events into one paint
+let _tabRenderPending = false
+function scheduleRenderTabs() {
+  if (_tabRenderPending) return
+  _tabRenderPending = true
+  requestAnimationFrame(() => { _tabRenderPending = false; renderTabs() })
+}
+
 wv.addEventListener('did-navigate', e => updateURL(e.url))
 wv.addEventListener('did-navigate-in-page', e => updateURL(e.url))
 wv.addEventListener('did-start-loading', () => {
   document.getElementById('spinner').classList.add('on')
   document.getElementById('relBtn').textContent = '✕'
-  const tab = getActive(); if (tab) { tab.loading = true; renderTabs() }
+  const tab = getActive(); if (tab) { tab.loading = true; scheduleRenderTabs() }
 })
 wv.addEventListener('did-stop-loading', () => {
   document.getElementById('spinner').classList.remove('on')
   document.getElementById('relBtn').textContent = '↻'
-  const tab = getActive(); if (tab) { tab.loading = false; renderTabs() }
+  const tab = getActive(); if (tab) { tab.loading = false; scheduleRenderTabs() }
 })
 wv.addEventListener('page-title-updated', e => {
   const tab = getActive()
-  if (tab) { tab.title = e.title; renderTabs() }
+  if (tab) { tab.title = e.title; scheduleRenderTabs() }
 })
 wv.addEventListener('page-favicon-updated', e => {
   const tab = getActive()
   if (tab && e.favicons && e.favicons.length > 0) {
     tab.favicon = e.favicons[0]
-    renderTabs()
+    scheduleRenderTabs()
     // Also update URL bar favicon
     setUrlFavicon(e.favicons[0])
   }
@@ -892,33 +1162,64 @@ const getActive = () => tabs.find(t => t.id === activeId)
 
 function renderTabs() {
   const bar = document.getElementById('tabbar')
-  bar.querySelectorAll('.tab').forEach(el => el.remove())
   const ntBtn = document.getElementById('newtabBtn')
+  const existing = bar.querySelectorAll('.tab[data-tab-id]')
+  const existingMap = new Map()
+  existing.forEach(el => existingMap.set(el.dataset.tabId, el))
+
+  const tabIds = new Set(tabs.map(t => String(t.id)))
+
+  // Remove tabs that no longer exist
+  existingMap.forEach((el, id) => { if (!tabIds.has(id)) el.remove() })
 
   tabs.forEach(tab => {
-    const el = document.createElement('div')
-    el.className = 'tab' + (tab.id === activeId ? ' active' : '')
+    const id = String(tab.id)
+    let el = existingMap.get(id)
 
-    let icoHtml
-    if (tab.loading) {
-      icoHtml = '<div class="tab-spin"></div>'
-    } else if (tab.favicon) {
-      icoHtml = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.textContent='🌐';this.style.fontSize='11px'">`
-    } else {
-      icoHtml = '<span class="tab-ico" style="font-size:11px">🌐</span>'
+    if (!el) {
+      // Create new tab element
+      el = document.createElement('div')
+      el.dataset.tabId = id
+      el.className = 'tab'
+      el.innerHTML = `
+        <div class="tab-ico-wrap"></div>
+        <div class="tab-title"></div>
+        <div class="tab-x">✕</div>
+        <div class="tab-tip">
+          <div class="tab-tip-title"></div>
+          <div class="tab-tip-url"></div>
+        </div>
+      `
+      el.querySelector('.tab-x').addEventListener('click', e => closeTab(e, tab.id))
+      el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
+      bar.insertBefore(el, ntBtn)
     }
 
-    el.innerHTML = `
-      ${icoHtml}
-      <div class="tab-title">${esc(tab.title)}</div>
-      <div class="tab-x" onclick="closeTab(event,${tab.id})">✕</div>
-      <div class="tab-tip">
-        <div class="tab-tip-title">${esc(tab.title)}</div>
-        <div class="tab-tip-url">${esc(tab.url)}</div>
-      </div>
-    `
-    el.addEventListener('click', () => switchTab(tab.id))
-    bar.insertBefore(el, ntBtn)
+    // Update active state
+    el.classList.toggle('active', tab.id === activeId)
+
+    // Update icon (only if changed)
+    const icoWrap = el.querySelector('.tab-ico-wrap')
+    if (tab.loading) {
+      if (!icoWrap.querySelector('.tab-spin')) icoWrap.innerHTML = '<div class="tab-spin"></div>'
+    } else if (tab.favicon) {
+      const img = icoWrap.querySelector('img.tab-ico')
+      if (!img || img.src !== tab.favicon) {
+        icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\\'tab-ico\\' style=\\'font-size:11px\\'>🌐</span>'">`
+      }
+    } else {
+      if (!icoWrap.querySelector('span.tab-ico')) icoWrap.innerHTML = '<span class="tab-ico" style="font-size:11px">🌐</span>'
+    }
+
+    // Update title (only if changed)
+    const titleEl = el.querySelector('.tab-title')
+    const escaped = esc(tab.title)
+    if (titleEl.innerHTML !== escaped) titleEl.innerHTML = escaped
+    const tipTitle = el.querySelector('.tab-tip-title')
+    if (tipTitle.innerHTML !== escaped) tipTitle.innerHTML = escaped
+    const tipUrl = el.querySelector('.tab-tip-url')
+    const escUrl = esc(tab.url)
+    if (tipUrl.innerHTML !== escUrl) tipUrl.innerHTML = escUrl
   })
 }
 
@@ -1047,12 +1348,99 @@ async function renderPanelContent(name) {
     } else {
       body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Inga klienter hittade. Synka ditt konto.</p>'
     }
+  } else if (name === 'cwv') {
+    icon.textContent = '⚡'; title.textContent = 'Core Web Vitals'
+    body.innerHTML = `
+      <div class="sh">LIVE MÄTNING</div>
+      <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Mäter CWV i realtid på aktiv sida. Påverkar Google Ads Quality Score och ranking.</p>
+      <div id="cwvResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att mäta</div></div>
+      <button class="act-btn" style="margin-top:10px" onclick="measureCWV()">⚡ Mät Core Web Vitals</button>
+      <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">📊 Live-övervakning (auto)</button>
+      <div id="cwvHistory" style="margin-top:14px"></div>
+    `
+  } else if (name === 'creative') {
+    icon.textContent = '✨'; title.textContent = 'Creative Intelligence'
+    body.innerHTML = `
+      <div class="sh">AI ANNONSFÖRSLAG</div>
+      <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Analyserar sidans H1, USPs och produktbeskrivning och genererar annonsförslag för Google Ads & Meta.</p>
+      <div id="creativeResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att analysera sidan</div></div>
+      <button class="act-btn" style="margin-top:10px" onclick="generateCreative()">✨ Generera annonsförslag</button>
+    `
+  } else if (name === 'compads') {
+    icon.textContent = '👁'; title.textContent = 'Konkurrentannonser'
+    const url = document.getElementById('urlInput').value
+    let domain = ''
+    try { domain = new URL(url).hostname.replace('www.','') } catch(_){}
+    body.innerHTML = `
+      <div class="sh">AD-NÄTVERK PÅ SIDAN</div>
+      <div id="adNetResults"><div style="text-align:center;padding:12px;color:var(--muted)">Klicka nedan för att skanna</div></div>
+      <button class="act-btn" style="margin-top:8px" onclick="scanAdNetworks()">🔍 Skanna sidan efter ad-teknik</button>
+
+      <div class="sh" style="margin-top:16px">ANNONSFORSKNING — ${esc(domain || 'domän')}</div>
+      <p style="font-size:10px;color:var(--muted);margin-bottom:8px">Öppna annonsbibliotek direkt i browsern.</p>
+      <button class="act-btn" onclick="wv.loadURL('https://adstransparency.google.com/?region=SE&domain=${esc(encodeURIComponent(domain))}')">📊 Google Ads Transparency Center</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=SE&q=${esc(encodeURIComponent(domain))}')">📘 Meta Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://library.tiktok.com/ads?region=SE&search_value=${esc(encodeURIComponent(domain))}')">🎵 TikTok Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://ads.linkedin.com/ads/library?q=${esc(encodeURIComponent(domain))}')">💼 LinkedIn Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.google.com/search?q=${esc(encodeURIComponent(domain))}+ads')">🔎 Google-sök "${esc(domain)} ads"</button>
+
+      <div class="sh" style="margin-top:16px">SÖK ANNAN DOMÄN</div>
+      <input class="ac-inp" id="compAdsDomain" value="${esc(domain)}" placeholder="example.com" style="margin-bottom:6px;height:32px;font-size:11px">
+      <button class="act-btn" onclick="openAdResearch(document.getElementById('compAdsDomain').value)">🔍 Sök</button>
+
+      <div class="sh" style="margin-top:16px">SEOZ API</div>
+      <div id="compAdsResults"><div style="text-align:center;padding:8px;color:var(--muted);font-size:10px">API-data visas här om tillgänglig</div></div>
+      <button class="act-btn" style="margin-top:4px" onclick="fetchCompAds()">⚡ Hämta via SEOZ API</button>
+    `
+    // Auto-scan on panel open
+    scanAdNetworks()
+  } else if (name === 'claude') {
+    icon.textContent = '💬'; title.textContent = 'Claude AI'
+    body.innerHTML = `
+      <div id="claudeChat" style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:300px">
+        <div id="claudeMessages" style="flex:1;overflow-y:auto;padding:4px 0;display:flex;flex-direction:column;gap:6px"></div>
+        <div style="border-top:1px solid var(--border);padding:8px 0 0">
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('seo')">🔍 SEO-analys</button>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('improve')">✨ Förbättra</button>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('summary')">📝 Sammanfatta</button>
+          </div>
+          <div style="display:flex;gap:4px">
+            <textarea id="claudeInput" placeholder="Fråga Claude om sidan..." style="flex:1;min-height:36px;max-height:120px;resize:vertical;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--txt);outline:none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendClaudeMessage()}"></textarea>
+            <button onclick="sendClaudeMessage()" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--border);background:var(--p);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">↑</button>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
+            <span style="font-size:9px;color:var(--muted)" id="claudeStatus">Redo</span>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearClaudeChat()">Rensa chatt</button>
+          </div>
+        </div>
+      </div>
+    `
+    // Show welcome if empty
+    if (!_claudeMessages.length) {
+      document.getElementById('claudeMessages').innerHTML = `
+        <div style="text-align:center;padding:20px 8px;color:var(--muted)">
+          <div style="font-size:24px;margin-bottom:6px">💬</div>
+          <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
+          <div style="font-size:10px;line-height:1.5">Ställ frågor om sidan du besöker, få SEO-tips, eller be Claude analysera innehållet. Claude har tillgång till sidans HTML, meta-data och mer.</div>
+        </div>
+      `
+    } else {
+      renderClaudeMessages()
+    }
   } else if (name === 'settings') {
     icon.textContent = '⚙️'; title.textContent = 'Inställningar'
     const key = await SE.getApiKey()
     const masked = key ? key.slice(0,10) + '••••••••' : 'Ej ansluten'
+    const { profile: activeProfile } = await SE.profileGetActive()
+    const profileName = activeProfile ? esc(activeProfile.name) : '—'
+    const profileEmail = activeProfile?.email ? esc(activeProfile.email) : ''
     body.innerHTML = `
-      <div class="sh">KONTO</div>
+      <div class="sh">PROFIL</div>
+      <div class="mr"><span class="mrl">Aktiv profil</span><span class="mrv">${profileName}</span></div>
+      ${profileEmail ? `<div class="mr"><span class="mrl">E-post</span><span class="mrv" style="font-size:10px">${profileEmail}</span></div>` : ''}
+      <button class="act-btn" style="margin-top:8px" onclick="showProfilePicker()">👥 Byt profil</button>
+      <div class="sh" style="margin-top:18px">KONTO</div>
       <div class="mr"><span class="mrl">API-nyckel</span><span class="mrv" style="font-size:10px;font-family:monospace">${esc(masked)}</span></div>
       <div class="mr"><span class="mrl">Workspace</span><span class="mrv">${synced.workspace ? esc(synced.workspace.name || '—') : '—'}</span></div>
       <button class="act-btn" style="margin-top:8px" onclick="openApiKeyPage()">🔑 Hantera nycklar på seoz.se</button>
@@ -1060,6 +1448,19 @@ async function renderPanelContent(name) {
       <div class="sh" style="margin-top:18px">SYNK</div>
       <div class="mr"><span class="mrl">Auto-synk</span><span class="mrv">Var 30:e sekund</span></div>
       <button class="act-btn" style="margin-top:8px" onclick="syncNow()">⚡ Synka nu</button>
+      <div class="sh" style="margin-top:18px">CLAUDE AI</div>
+      <div class="mr"><span class="mrl">Anthropic API-nyckel</span><span class="mrv" id="settingsAnthropicKey" style="font-size:10px;font-family:monospace">Laddar...</span></div>
+      <div style="display:flex;gap:4px;margin-top:6px">
+        <input class="ac-inp" id="anthropicKeyInput" type="password" placeholder="sk-ant-..." style="flex:1;height:30px;font-size:10px;font-family:monospace">
+        <button class="act-btn" style="width:60px" onclick="saveAnthropicKey()">Spara</button>
+      </div>
+      <button class="act-btn" style="margin-top:4px;color:var(--r);font-size:10px" onclick="removeAnthropicKey()">Ta bort nyckel</button>
+      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Nyckeln lagras lokalt och skickas bara till Anthropics API. Hämta din nyckel från <span style="color:var(--p);cursor:pointer" onclick="SE.openExternal('https://console.anthropic.com/account/keys')">console.anthropic.com</span></p>
+
+      <div class="sh" style="margin-top:18px">MCP-SERVER</div>
+      <div class="mr"><span class="mrl">Status</span><span class="mrv" style="color:var(--g)">Aktiv på port 19532</span></div>
+      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Claude Code kan ansluta till browsern via MCP. Lägg till i din MCP-config:<br><code style="font-size:9px;background:var(--panel);padding:2px 4px;border-radius:3px">http://127.0.0.1:19532/sse</code></p>
+
       <div class="sh" style="margin-top:18px">UPPDATERINGAR</div>
       <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
       <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">🔄 Sök efter uppdateringar</button>
@@ -1067,6 +1468,10 @@ async function renderPanelContent(name) {
     SE.updaterGetVersion().then(v => {
       const el = document.getElementById('settingsVersion')
       if (el) el.textContent = 'v' + v
+    })
+    SE.storeGet('anthropicApiKey', '').then(k => {
+      const el = document.getElementById('settingsAnthropicKey')
+      if (el) el.textContent = k ? k.slice(0, 12) + '••••••••' : 'Ej konfigurerad'
     })
   }
 }
@@ -1077,9 +1482,9 @@ async function renderPanelContent(name) {
 async function selectClient(clientId) {
   synced.activeClientId = clientId
   await SE.storeSet('activeClientId', clientId)
-  // Update status bar
   const cl = synced.clients.find(c => c.id === clientId)
-  if (cl) document.getElementById('sbClient').textContent = cl.name
+  // Re-render bookmark bar to update client selector
+  renderBmBar()
   // Fetch client-specific data
   await fetchClientData(clientId)
   // Re-render current panel
@@ -1107,11 +1512,42 @@ async function fetchClientData(clientId) {
 //  AUTH & SYNC
 // ══════════════════════════════════════════════════════
 async function init() {
+  // ── Profile system: show picker if multiple profiles or no active profile ──
+  const profiles = await SE.profileList()
+  const { id: activeId } = await SE.profileGetActive()
+
+  if (profiles.length === 0) {
+    // First launch — show profile picker to create first profile
+    await showProfilePicker()
+    return
+  }
+
+  if (profiles.length > 1 && !activeId) {
+    // Multiple profiles, none selected — must pick
+    await showProfilePicker()
+    return
+  }
+
+  // Single profile or active profile exists — proceed
+  currentProfileId = activeId || profiles[0]?.id
+  if (!activeId && profiles[0]) {
+    await SE.profileSwitch(profiles[0].id)
+  }
+  hideProfilePicker()
+  updateProfileStatusBar()
+
   const key = await SE.getApiKey()
   if (key) {
     document.getElementById('auth').classList.add('gone')
     // Auto-sync on startup
     await syncNow()
+    // Keep profile name/email in sync with SEOZ account
+    if (synced.user && currentProfileId) {
+      await SE.profileUpdate(currentProfileId, {
+        name: synced.user.name || synced.user.email,
+        email: synced.user.email || '',
+      })
+    }
   }
   renderTabs()
 }
@@ -1140,6 +1576,14 @@ async function doConnect(mode) {
       synced.user = res.user
       synced.workspace = res.workspace
       synced.clients = res.clients || []
+      // Update profile name/email from the SEOZ account
+      if (currentProfileId && res.user) {
+        await SE.profileUpdate(currentProfileId, {
+          name: res.user.name || res.user.email,
+          email: res.user.email || '',
+        })
+        updateProfileStatusBar()
+      }
       okEl.classList.add('show')
       setTimeout(() => {
         document.getElementById('auth').classList.add('gone')
@@ -1161,7 +1605,7 @@ async function doDisconnect() {
   synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.activeClientId = null
   document.getElementById('auth').classList.remove('gone')
   document.getElementById('sbSync').textContent = 'Ej synkad'
-  document.getElementById('sbClient').textContent = '—'
+  renderBmBar()
   closePanel()
   toast('Konto frånkopplat', '#e58a00')
 }
@@ -1182,7 +1626,7 @@ async function syncNow() {
       if (saved && synced.clients.find(c => c.id === saved)) {
         synced.activeClientId = saved
         const cl = synced.clients.find(c => c.id === saved)
-        if (cl) document.getElementById('sbClient').textContent = cl.name
+        renderBmBar()
         await fetchClientData(saved)
       } else if (synced.clients.length) {
         await selectClient(synced.clients[0].id)
@@ -1203,7 +1647,7 @@ function updateSyncUI() {
 }
 
 function openApiKeyPage() {
-  wv.loadURL('https://flow.seoz.se/dashboard/verktyg/api')
+  wv.loadURL('https://seoz.se/dashboard/verktyg/api')
   document.getElementById('auth').classList.add('gone')
 }
 
@@ -1290,10 +1734,10 @@ function renderBmBar() {
     btn.onclick = () => toggleFolderDrop(wrap)
     btn.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, folderCtxItems(fname)) }
     // Drop target: drag bookmark onto folder
-    btn.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; btn.classList.add('drag-over') })
-    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'))
+    btn.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; btn.classList.add('drag-over') })
+    btn.addEventListener('dragleave', e => { if (!btn.contains(e.relatedTarget)) btn.classList.remove('drag-over') })
     btn.addEventListener('drop', e => {
-      e.preventDefault(); btn.classList.remove('drag-over')
+      e.preventDefault(); e.stopPropagation(); btn.classList.remove('drag-over')
       if (bmDragId != null) { moveBmToFolder(bmDragId, fname) }
     })
     wrap.appendChild(btn)
@@ -1311,10 +1755,10 @@ function renderBmBar() {
       item.innerHTML = fav + `<span>${esc(b.title)}</span>`
       item.onclick = (e) => { e.stopPropagation(); wv.loadURL(b.url); closeAllDrops() }
       item.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, bmCtxItems(b)) }
-      item.addEventListener('dragstart', e => { bmDragId = b.id; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move' })
+      item.addEventListener('dragstart', e => { bmDragId = b.id; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(b.id)) })
       item.addEventListener('dragend', () => { bmDragId = null; item.classList.remove('dragging') })
-      item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over') })
-      item.addEventListener('dragleave', () => item.classList.remove('drag-over'))
+      item.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); item.classList.add('drag-over') })
+      item.addEventListener('dragleave', e => { if (!item.contains(e.relatedTarget)) item.classList.remove('drag-over') })
       item.addEventListener('drop', e => {
         e.preventDefault(); e.stopPropagation(); item.classList.remove('drag-over')
         if (bmDragId != null && bmDragId !== b.id) reorderBm(bmDragId, b.id)
@@ -1338,8 +1782,66 @@ function renderBmBar() {
     bar.appendChild(wrap)
   })
 
+  // Client selector (far right)
+  renderClientSelector(bar)
+
   updateBmStar()
 }
+
+function renderClientSelector(bar) {
+  const wrap = document.createElement('div')
+  wrap.className = 'client-sel'
+
+  const colors = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
+  const active = synced.clients.find(c => c.id === synced.activeClientId)
+  const col = active ? colors[synced.clients.indexOf(active) % colors.length] : 'var(--muted)'
+
+  const btn = document.createElement('button')
+  btn.className = 'client-sel-btn'
+  btn.innerHTML = `<div class="client-sel-dot" style="background:${col}"></div><span class="client-sel-name">${active ? esc(active.name) : 'Välj klient'}</span><span class="client-sel-arrow">▾</span>`
+  btn.onclick = (e) => { e.stopPropagation(); toggleClientDrop(wrap) }
+  wrap.appendChild(btn)
+
+  const drop = document.createElement('div')
+  drop.className = 'client-sel-drop'
+  drop.innerHTML = '<div class="client-sel-drop-hdr">Klienter</div>'
+
+  if (synced.clients.length) {
+    synced.clients.forEach((c, i) => {
+      const item = document.createElement('div')
+      item.className = 'client-sel-drop-item' + (c.id === synced.activeClientId ? ' active' : '')
+      const cCol = colors[i % colors.length]
+      const score = c.seoScore != null ? Math.round(c.seoScore) : '—'
+      item.innerHTML = `<div class="client-sel-dot" style="background:${cCol}"></div><span style="flex:1">${esc(c.name)}</span><span style="font-size:10px;color:${cCol};font-weight:700">${score}</span>`
+      item.onclick = (e) => { e.stopPropagation(); selectClient(c.id); closeClientDrop() }
+      drop.appendChild(item)
+    })
+  } else {
+    const empty = document.createElement('div')
+    empty.className = 'client-sel-drop-item'
+    empty.style.cssText = 'color:var(--muted);font-style:italic;font-size:10px'
+    empty.textContent = 'Inga klienter — synka ditt konto'
+    drop.appendChild(empty)
+  }
+
+  wrap.appendChild(drop)
+  bar.appendChild(wrap)
+}
+
+function toggleClientDrop(wrap) {
+  const drop = wrap?.querySelector('.client-sel-drop')
+  if (!drop) return
+  const isOpen = drop.classList.contains('open')
+  closeAllDrops()
+  if (!isOpen) drop.classList.add('open')
+}
+
+function closeClientDrop() {
+  document.querySelectorAll('.client-sel-drop.open').forEach(d => d.classList.remove('open'))
+}
+
+// Close client dropdown on outside click
+document.addEventListener('click', () => closeClientDrop())
 
 function makeBmEl(b) {
   const el = document.createElement('div')
@@ -1351,7 +1853,7 @@ function makeBmEl(b) {
   el.onclick = () => wv.loadURL(b.url)
   el.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, bmCtxItems(b)) }
   // Drag
-  el.addEventListener('dragstart', e => { bmDragId = b.id; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move' })
+  el.addEventListener('dragstart', e => { bmDragId = b.id; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(b.id)) })
   el.addEventListener('dragend', () => { bmDragId = null; el.classList.remove('dragging') })
   // Drop (reorder)
   el.addEventListener('dragover', e => {
@@ -1361,7 +1863,7 @@ function makeBmEl(b) {
     el.classList.toggle('drag-over-left', e.clientX < half)
     el.classList.toggle('drag-over-right', e.clientX >= half)
   })
-  el.addEventListener('dragleave', () => { el.classList.remove('drag-over-left','drag-over-right') })
+  el.addEventListener('dragleave', e => { if (!el.contains(e.relatedTarget)) el.classList.remove('drag-over-left','drag-over-right') })
   el.addEventListener('drop', e => {
     e.preventDefault(); e.stopPropagation()
     el.classList.remove('drag-over-left','drag-over-right')
@@ -1913,6 +2415,752 @@ function toggleTheme() {
   document.documentElement.dataset.theme = next
   SE.setTheme(next)
   toast(next === 'dark' ? 'Mörkt tema' : 'Ljust tema', '#4680ff')
+}
+
+// ══════════════════════════════════════════════════════
+//  CORE WEB VITALS — real-time measurement
+// ══════════════════════════════════════════════════════
+let cwvMonitorInterval = null
+let cwvHistory = [] // [{time, lcp, cls, inp, fcp, ttfb}]
+
+async function measureCWV() {
+  const container = document.getElementById('cwvResults')
+  if (!container) return
+  container.innerHTML = '<div style="text-align:center;padding:8px;color:var(--muted)">Mäter...</div>'
+
+  try {
+    const data = await wv.executeJavaScript(`(function(){
+      const nav = performance.getEntriesByType('navigation')[0] || {};
+      const paint = performance.getEntriesByType('paint');
+      const fcp = paint.find(p => p.name === 'first-contentful-paint');
+
+      // LCP — largest contentful paint
+      let lcp = 0;
+      try {
+        const lcpEntries = performance.getEntriesByType('largest-contentful-paint');
+        if (lcpEntries.length) lcp = lcpEntries[lcpEntries.length - 1].startTime;
+      } catch(_){}
+
+      // CLS — cumulative layout shift
+      let cls = 0;
+      try {
+        const clsEntries = performance.getEntriesByType('layout-shift');
+        clsEntries.forEach(e => { if (!e.hadRecentInput) cls += e.value; });
+      } catch(_){}
+
+      // INP approximation via event timing
+      let inp = 0;
+      try {
+        const events = performance.getEntriesByType('event');
+        if (events.length) {
+          const durations = events.map(e => e.duration).sort((a,b) => b - a);
+          inp = durations[0] || 0;
+        }
+      } catch(_){}
+
+      return {
+        lcp: Math.round(lcp),
+        cls: Math.round(cls * 1000) / 1000,
+        inp: Math.round(inp),
+        fcp: fcp ? Math.round(fcp.startTime) : 0,
+        ttfb: Math.round(nav.responseStart - nav.startTime || 0),
+        domLoad: Math.round(nav.domContentLoadedEventEnd - nav.startTime || 0),
+        fullLoad: Math.round(nav.loadEventEnd - nav.startTime || 0),
+      };
+    })()`)
+
+    cwvHistory.push({ ...data, time: Date.now() })
+    if (cwvHistory.length > 50) cwvHistory.shift()
+
+    renderCWVResults(data, container)
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--r);padding:8px">Fel: ${esc(e.message)}</div>`
+  }
+}
+
+function renderCWVResults(d, container) {
+  function cwvBadge(metric, val) {
+    const thresholds = {
+      lcp: [2500, 4000], cls: [0.1, 0.25], inp: [200, 500],
+      fcp: [1800, 3000], ttfb: [800, 1800]
+    }
+    const t = thresholds[metric]
+    if (!t) return `<span class="insp-tag blue">${val}</span>`
+    if (val <= t[0]) return `<span class="insp-tag green">${val}${metric === 'cls' ? '' : 'ms'}</span>`
+    if (val <= t[1]) return `<span class="insp-tag yellow">${val}${metric === 'cls' ? '' : 'ms'}</span>`
+    return `<span class="insp-tag red">${val}${metric === 'cls' ? '' : 'ms'}</span>`
+  }
+
+  function cwvMeter(metric, val) {
+    const thresholds = { lcp: [2500, 4000], cls: [0.1, 0.25], inp: [200, 500] }
+    const t = thresholds[metric]
+    if (!t) return ''
+    const max = t[1] * 1.5
+    const pct = Math.min(100, (val / max) * 100)
+    const col = val <= t[0] ? 'var(--g)' : val <= t[1] ? 'var(--w)' : 'var(--r)'
+    return `<div class="insp-meter" style="margin:3px 0"><div class="insp-meter-fill" style="width:${pct}%;background:${col}"></div></div>`
+  }
+
+  let html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:8px;margin-bottom:12px">'
+  html += `<div class="kpi"><div class="kpi-l">LCP</div><div class="kpi-v">${cwvBadge('lcp', d.lcp)}</div>${cwvMeter('lcp', d.lcp)}</div>`
+  html += `<div class="kpi"><div class="kpi-l">CLS</div><div class="kpi-v">${cwvBadge('cls', d.cls)}</div>${cwvMeter('cls', d.cls)}</div>`
+  html += `<div class="kpi"><div class="kpi-l">INP</div><div class="kpi-v">${cwvBadge('inp', d.inp)}</div>${cwvMeter('inp', d.inp)}</div>`
+  html += '</div>'
+
+  // Additional metrics
+  html += '<div class="sh">DETALJERADE MÄTVÄRDEN</div>'
+  html += `<div class="mr"><span class="mrl">First Contentful Paint</span>${cwvBadge('fcp', d.fcp)}</div>`
+  html += `<div class="mr"><span class="mrl">Time to First Byte</span>${cwvBadge('ttfb', d.ttfb)}</div>`
+  html += `<div class="mr"><span class="mrl">DOM Content Loaded</span><span class="mrv">${d.domLoad}ms</span></div>`
+  html += `<div class="mr"><span class="mrl">Full Page Load</span><span class="mrv">${d.fullLoad}ms</span></div>`
+
+  // Google thresholds explanation
+  html += '<div class="sh" style="margin-top:12px">GOOGLE-GRÄNSER</div>'
+  html += '<div style="font-size:10px;color:var(--muted);line-height:1.7">'
+  html += '<span class="insp-tag green">Bra</span> <span class="insp-tag yellow">Behöver förbättras</span> <span class="insp-tag red">Dålig</span><br>'
+  html += 'LCP: &lt;2.5s / &lt;4s · CLS: &lt;0.1 / &lt;0.25 · INP: &lt;200ms / &lt;500ms'
+  html += '</div>'
+
+  // Impact on ads
+  const adsImpact = d.lcp <= 2500 && d.cls <= 0.1 && d.inp <= 200
+  html += `<div style="margin-top:12px;padding:10px;border-radius:8px;background:${adsImpact ? 'rgba(44,168,127,.08)' : 'rgba(220,38,38,.08)'};border:1px solid ${adsImpact ? 'rgba(44,168,127,.2)' : 'rgba(220,38,38,.2)'}">
+    <div style="font-size:11px;font-weight:700;color:${adsImpact ? 'var(--g)' : 'var(--r)'}">${adsImpact ? '✓ Bra för Google Ads Quality Score' : '⚠ Kan sänka Quality Score i Google Ads'}</div>
+    <div style="font-size:10px;color:var(--muted);margin-top:3px">${adsImpact ? 'Alla CWV-mått klarar Googles gränsvärden.' : 'Förbättra CWV för bättre annonsplacering och lägre CPC.'}</div>
+  </div>`
+
+  container.innerHTML = html
+}
+
+function startCWVMonitor() {
+  if (cwvMonitorInterval) { clearInterval(cwvMonitorInterval); cwvMonitorInterval = null; toast('CWV-övervakning stoppad', '#e58a00'); return }
+  toast('CWV-övervakning startad — mäter var 5:e sekund', '#2ca87f')
+  measureCWV()
+  cwvMonitorInterval = setInterval(() => measureCWV(), 5000)
+}
+
+// Stop monitor on navigation
+wv.addEventListener('did-start-loading', () => {
+  if (cwvMonitorInterval) { clearInterval(cwvMonitorInterval); cwvMonitorInterval = null }
+})
+
+// ══════════════════════════════════════════════════════
+//  CREATIVE INTELLIGENCE — AI ad copy from page content
+// ══════════════════════════════════════════════════════
+async function generateCreative() {
+  const container = document.getElementById('creativeResults')
+  if (!container) return
+  container.innerHTML = '<div style="text-align:center;padding:12px;color:var(--muted)">Analyserar sidinnehåll...</div>'
+
+  try {
+    // Extract page content
+    const pageData = await wv.executeJavaScript(`(function(){
+      const h1 = document.querySelector('h1')?.textContent?.trim() || '';
+      const h2s = [...document.querySelectorAll('h2')].map(h => h.textContent.trim()).slice(0,5);
+      const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+      const title = document.title || '';
+      const ogTitle = document.querySelector('meta[property="og:title"]')?.content || '';
+      const ogDesc = document.querySelector('meta[property="og:description"]')?.content || '';
+
+      // Find potential USPs (li items, strong text, feature sections)
+      const bullets = [...document.querySelectorAll('li')].map(l => l.textContent.trim()).filter(t => t.length > 10 && t.length < 150).slice(0,8);
+      const strongs = [...document.querySelectorAll('strong,b')].map(s => s.textContent.trim()).filter(t => t.length > 5 && t.length < 100).slice(0,6);
+
+      // Find prices
+      const priceRegex = /\\d+[.,]?\\d*\\s*(kr|SEK|:-|\\$|€)/gi;
+      const bodyText = document.body?.innerText || '';
+      const prices = (bodyText.match(priceRegex) || []).slice(0,3);
+
+      // CTA buttons
+      const ctas = [...document.querySelectorAll('a,button')].map(el => el.textContent.trim()).filter(t => t.length > 2 && t.length < 40 && /köp|boka|testa|prova|gratis|läs mer|se mer|handla|registrera|starta|beställ/i.test(t)).slice(0,5);
+
+      const url = location.href;
+      const domain = location.hostname.replace('www.','');
+
+      return { h1, h2s, metaDesc, title, ogTitle, ogDesc, bullets, strongs, prices, ctas, url, domain };
+    })()`)
+
+    // Generate ad suggestions locally (no API needed — rule-based)
+    renderCreativeResults(pageData, container)
+
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--r);padding:8px">Fel: ${esc(e.message)}</div>`
+  }
+}
+
+function renderCreativeResults(d, container) {
+  let html = ''
+
+  // Page analysis summary
+  html += '<div class="sh">SIDANALYS</div>'
+  html += `<div class="mr"><span class="mrl">H1</span><span class="mrv" style="font-size:10px">${esc(d.h1 || 'Saknas')}</span></div>`
+  html += `<div class="mr"><span class="mrl">Title</span><span class="mrv" style="font-size:10px">${esc(d.title || 'Saknas')}</span></div>`
+  if (d.prices.length) html += `<div class="mr"><span class="mrl">Priser</span><span class="mrv">${d.prices.map(p => esc(p)).join(', ')}</span></div>`
+  if (d.ctas.length) html += `<div class="mr"><span class="mrl">CTAs</span><span class="mrv" style="font-size:10px">${d.ctas.map(c => '<span class="insp-tag blue">' + esc(c) + '</span>').join(' ')}</span></div>`
+
+  // Extract keywords/USPs
+  const usps = [...new Set([...d.strongs, ...d.bullets.slice(0,3)])].slice(0,5)
+  if (usps.length) {
+    html += '<div class="sh" style="margin-top:10px">IDENTIFIERADE USPs</div>'
+    usps.forEach(u => { html += `<div style="padding:2px 0;font-size:10px;color:var(--txt)">• ${esc(u)}</div>` })
+  }
+
+  // Generate Google Ads headlines (max 30 chars)
+  html += '<div class="sh" style="margin-top:14px">GOOGLE ADS — RUBRIKER (max 30 tecken)</div>'
+  const headlines = generateHeadlines(d)
+  headlines.forEach((h, i) => {
+    const ok = h.length <= 30
+    html += `<div class="mr"><span class="mrl" style="width:20px">${i+1}</span><span class="mrv" style="font-size:11px;flex:1">${esc(h)}</span><span class="insp-tag ${ok ? 'green' : 'red'}">${h.length}/30</span></div>`
+  })
+
+  // Generate Google Ads descriptions (max 90 chars)
+  html += '<div class="sh" style="margin-top:10px">GOOGLE ADS — BESKRIVNINGAR (max 90 tecken)</div>'
+  const descs = generateDescriptions(d)
+  descs.forEach((desc, i) => {
+    const ok = desc.length <= 90
+    html += `<div class="mr"><span class="mrl" style="width:20px">${i+1}</span><span class="mrv" style="font-size:10px;flex:1">${esc(desc)}</span><span class="insp-tag ${ok ? 'green' : 'red'}">${desc.length}/90</span></div>`
+  })
+
+  // Generate Meta Ads
+  html += '<div class="sh" style="margin-top:14px">META ADS — PRIMARY TEXT</div>'
+  const metaTexts = generateMetaAdTexts(d)
+  metaTexts.forEach((t, i) => {
+    html += `<div style="padding:6px 8px;margin:4px 0;background:var(--panel);border-radius:6px;border:1px solid var(--border);font-size:11px;color:var(--txt);line-height:1.5">${esc(t)}</div>`
+  })
+
+  // Copy all button
+  html += `<button class="act-btn" style="margin-top:12px" onclick="copyCreativeOutput()">📋 Kopiera alla förslag</button>`
+
+  container.innerHTML = html
+
+  // Store for copy
+  window._creativeOutput = { headlines, descs, metaTexts, pageData: d }
+}
+
+function generateHeadlines(d) {
+  const headlines = []
+  // From H1
+  if (d.h1) {
+    if (d.h1.length <= 30) headlines.push(d.h1)
+    else headlines.push(d.h1.substring(0, 27) + '...')
+  }
+  // Domain brand
+  const brand = d.domain.split('.')[0].charAt(0).toUpperCase() + d.domain.split('.')[0].slice(1)
+  headlines.push(brand + ' — Officiell Sida')
+  // From CTAs
+  d.ctas.forEach(c => { if (c.length <= 30) headlines.push(c) })
+  // With prices
+  d.prices.forEach(p => { headlines.push('Från ' + p) })
+  // USP-based
+  d.strongs.forEach(s => { if (s.length <= 30) headlines.push(s) })
+  // From H2s
+  d.h2s.forEach(h => { if (h.length <= 30) headlines.push(h) })
+  // Generic power headlines
+  headlines.push('Handla Online Idag')
+  headlines.push('Fri Frakt & Snabb Leverans')
+  headlines.push('Bäst i Test ' + new Date().getFullYear())
+
+  return [...new Set(headlines)].slice(0, 15)
+}
+
+function generateDescriptions(d) {
+  const descs = []
+  if (d.metaDesc && d.metaDesc.length <= 90) descs.push(d.metaDesc)
+  else if (d.metaDesc) descs.push(d.metaDesc.substring(0, 87) + '...')
+  if (d.ogDesc && d.ogDesc !== d.metaDesc) {
+    if (d.ogDesc.length <= 90) descs.push(d.ogDesc)
+    else descs.push(d.ogDesc.substring(0, 87) + '...')
+  }
+  // Combine USPs
+  if (d.strongs.length >= 2) {
+    const combo = d.strongs.slice(0,3).join('. ')
+    if (combo.length <= 90) descs.push(combo)
+  }
+  if (d.bullets.length >= 2) {
+    const combo = d.bullets.slice(0,2).join('. ')
+    if (combo.length <= 90) descs.push(combo)
+  }
+  descs.push(`Upptäck ${d.domain} — ${d.h1 || 'bästa erbjudanden'}. Handla online idag!`.substring(0,90))
+  return [...new Set(descs)].slice(0, 4)
+}
+
+function generateMetaAdTexts(d) {
+  const texts = []
+  const h1 = d.h1 || d.title || d.domain
+  texts.push(`${h1}\n\n${d.metaDesc || d.ogDesc || 'Upptäck mer på ' + d.domain + '.'}${d.prices.length ? '\n\nFrån ' + d.prices[0] : ''}`)
+  if (d.usps?.length) {
+    texts.push(`Varför välja ${d.domain}?\n\n${d.strongs.slice(0,3).map(s => '✓ ' + s).join('\n')}`)
+  }
+  if (d.ctas.length) {
+    texts.push(`${h1} — ${d.ctas[0]}!\n\n${d.metaDesc || d.ogDesc || ''}`.trim())
+  }
+  return texts.slice(0, 3)
+}
+
+function copyCreativeOutput() {
+  if (!window._creativeOutput) return
+  const o = window._creativeOutput
+  let text = '=== GOOGLE ADS HEADLINES ===\n'
+  o.headlines.forEach((h,i) => { text += `${i+1}. ${h} (${h.length}/30)\n` })
+  text += '\n=== GOOGLE ADS DESCRIPTIONS ===\n'
+  o.descs.forEach((d,i) => { text += `${i+1}. ${d} (${d.length}/90)\n` })
+  text += '\n=== META ADS PRIMARY TEXT ===\n'
+  o.metaTexts.forEach((t,i) => { text += `\n--- Variant ${i+1} ---\n${t}\n` })
+  navigator.clipboard.writeText(text).then(() => toast('Annonsförslag kopierade!', '#2ca87f'))
+}
+
+// ══════════════════════════════════════════════════════
+//  COMPETITOR ADS — Ad Network Scanner + Research
+// ══════════════════════════════════════════════════════
+async function scanAdNetworks() {
+  const container = document.getElementById('adNetResults')
+  if (!container) return
+  container.innerHTML = '<div style="text-align:center;padding:8px;color:var(--muted)">Skannar...</div>'
+
+  try {
+    const wv = getWV()
+    if (!wv) { container.innerHTML = '<div style="color:var(--muted);padding:8px;font-size:10px">Ingen sida laddad</div>'; return }
+
+    const result = await wv.executeJavaScript(`(function(){
+      const scripts = Array.from(document.querySelectorAll('script[src]')).map(s => s.src)
+      const iframes = Array.from(document.querySelectorAll('iframe[src]')).map(f => f.src)
+      const links = Array.from(document.querySelectorAll('link[href]')).map(l => l.href)
+      const allText = scripts.join(' ') + ' ' + iframes.join(' ') + ' ' + links.join(' ') + ' ' + document.documentElement.innerHTML.slice(0,50000)
+
+      const nets = []
+      if (/googleads|googletag|doubleclick|adservice\\.google|pagead2|adsense/i.test(allText)) nets.push({name:'Google Ads / AdSense',icon:'\\u{1F4CA}',color:'#4285f4'})
+      if (/googletagmanager|gtm\\.js|gtag/i.test(allText)) nets.push({name:'Google Tag Manager',icon:'\\u{1F3F7}',color:'#4285f4'})
+      if (/google-analytics|analytics\\.js|gtag.*\\/config/i.test(allText)) nets.push({name:'Google Analytics',icon:'\\u{1F4C8}',color:'#e37400'})
+      if (/fbevents|facebook\\.net\\/en_US\\/fbevents|fbq\\(|connect\\.facebook\\.net/i.test(allText)) nets.push({name:'Meta Pixel',icon:'\\u{1F4D8}',color:'#1877f2'})
+      if (/analytics\\.tiktok|tiktok.*pixel/i.test(allText)) nets.push({name:'TikTok Pixel',icon:'\\u{1F3B5}',color:'#010101'})
+      if (/snap\\.licdn|linkedin.*insight|linkedin.*tag/i.test(allText)) nets.push({name:'LinkedIn Insight Tag',icon:'\\u{1F4BC}',color:'#0a66c2'})
+      if (/static\\.ads-twitter|platform\\.twitter\\.com.*uwt/i.test(allText)) nets.push({name:'X (Twitter) Pixel',icon:'\\u{1F426}',color:'#1da1f2'})
+      if (/sc-static\\.net.*scevent/i.test(allText)) nets.push({name:'Snapchat Pixel',icon:'\\u{1F47B}',color:'#fffc00'})
+      if (/pintrk|assets\\.pinterest/i.test(allText)) nets.push({name:'Pinterest Tag',icon:'\\u{1F4CC}',color:'#e60023'})
+      if (/bat\\.bing\\.com|clarity\\.ms|uetag/i.test(allText)) nets.push({name:'Microsoft Ads / Clarity',icon:'\\u{1F537}',color:'#00a4ef'})
+      if (/static\\.criteo|criteo\\.com\\/js/i.test(allText)) nets.push({name:'Criteo',icon:'\\u{1F534}',color:'#f47920'})
+      if (/amazon-adsystem|aax\\.amazon/i.test(allText)) nets.push({name:'Amazon Ads',icon:'\\u{1F4E6}',color:'#ff9900'})
+      if (/static\\.hotjar|hotjar\\.com/i.test(allText)) nets.push({name:'Hotjar',icon:'\\u{1F525}',color:'#fd3a5c'})
+      if (/js\\.hs-scripts|hubspot\\.com/i.test(allText)) nets.push({name:'HubSpot',icon:'\\u{1F7E0}',color:'#ff7a59'})
+      if (/adform\\.net|track\\.adform/i.test(allText)) nets.push({name:'Adform',icon:'\\u{1F7E2}',color:'#69b846'})
+      if (/taboola|cdn\\.taboola/i.test(allText)) nets.push({name:'Taboola',icon:'\\u{1F4F0}',color:'#0055ff'})
+      if (/outbrain|widgets\\.outbrain/i.test(allText)) nets.push({name:'Outbrain',icon:'\\u{1F4F0}',color:'#ee6723'})
+
+      return { nets, scriptCount: scripts.length, iframeCount: iframes.length }
+    }())`)
+
+    if (!result.nets.length) {
+      container.innerHTML = '<div style="padding:8px;font-size:11px;color:var(--muted)">Inga ad-n\u00e4tverk eller pixlar hittades p\u00e5 denna sida.</div>'
+    } else {
+      let html = ''
+      result.nets.forEach(n => {
+        html += `<div style="display:flex;align-items:center;gap:8px;padding:6px 8px;margin:3px 0;background:var(--panel);border-left:3px solid ${n.color};border-radius:4px">
+          <span style="font-size:14px">${n.icon}</span>
+          <span style="font-size:11px;font-weight:600;color:var(--head)">${esc(n.name)}</span>
+        </div>`
+      })
+      html += `<div style="font-size:9px;color:var(--muted);margin-top:6px;padding:0 8px">${result.nets.length} n\u00e4tverk \u2022 ${result.scriptCount} scripts \u2022 ${result.iframeCount} iframes</div>`
+      container.innerHTML = html
+    }
+  } catch(e) {
+    container.innerHTML = `<div style="color:var(--r);padding:8px;font-size:10px">Kunde inte skanna: ${esc(e.message)}</div>`
+  }
+}
+
+function openAdResearch(domain) {
+  if (!domain) return
+  domain = domain.replace(/^https?:\/\//, '').replace('www.','').replace(/\/.*$/, '').trim()
+  if (!domain) return
+  wv.loadURL('https://adstransparency.google.com/?region=SE&domain=' + encodeURIComponent(domain))
+}
+
+async function fetchCompAds(domain) {
+  if (!domain) {
+    try { domain = new URL(document.getElementById('urlInput').value).hostname.replace('www.','') } catch(_){ return }
+  }
+  domain = domain.replace('www.','').trim()
+  if (!domain) return
+
+  const container = document.getElementById('compAdsResults')
+  if (!container) return
+  container.innerHTML = '<div style="text-align:center;padding:8px;color:var(--muted);font-size:10px">H\u00e4mtar fr\u00e5n SEOZ API...</div>'
+
+  try {
+    const apiKey = await SE.getApiKey()
+    if (!apiKey) { container.innerHTML = '<div style="padding:8px;font-size:10px;color:var(--muted)">Ej ansluten till SEOZ API</div>'; return }
+
+    const res = await SE.fetchApi({ endpoint: '/ads/competitor', apiKey, params: { domain } })
+    if (res && res.ads && res.ads.length) {
+      let html = `<div style="font-size:11px;font-weight:700;color:var(--head);margin-bottom:4px">${res.ads.length} annonser via SEOZ API</div>`
+      res.ads.forEach((ad, i) => {
+        html += `<div style="padding:6px 8px;margin:4px 0;background:var(--panel);border:1px solid var(--border);border-radius:6px">
+          <div style="font-size:10px;font-weight:700;color:var(--p)">${esc(ad.headline || 'Annons ' + (i+1))}</div>
+          ${ad.description ? `<div style="font-size:9px;color:var(--txt);margin-top:2px">${esc(ad.description)}</div>` : ''}
+          <div style="display:flex;gap:4px;margin-top:3px">
+            ${ad.platform ? `<span class="insp-tag blue">${esc(ad.platform)}</span>` : ''}
+            ${ad.lastSeen ? `<span class="insp-tag green">${esc(ad.lastSeen)}</span>` : ''}
+          </div>
+        </div>`
+      })
+      container.innerHTML = html
+    } else {
+      container.innerHTML = '<div style="padding:8px;font-size:10px;color:var(--muted)">Inga annonser hittades via API. Anv\u00e4nd l\u00e4nkarna ovan ist\u00e4llet.</div>'
+    }
+  } catch(e) {
+    container.innerHTML = '<div style="padding:8px;font-size:10px;color:var(--muted)">API ej tillg\u00e4ngligt. Anv\u00e4nd l\u00e4nkarna ovan ist\u00e4llet.</div>'
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  CLAUDE AI CHAT — built-in AI assistant
+// ══════════════════════════════════════════════════════
+const _claudeMessages = [] // { role, content }
+let _claudeStreaming = false
+
+async function getPageContext() {
+  const wv = getWV()
+  if (!wv) return null
+  try {
+    return await wv.executeJavaScript(`(function(){
+      const metas = {};
+      document.querySelectorAll('meta[name],meta[property]').forEach(m => {
+        metas[m.name || m.getAttribute('property')] = m.content
+      });
+      const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim()).slice(0, 5);
+      const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.textContent.trim()).slice(0, 10);
+      return {
+        url: location.href,
+        title: document.title,
+        meta: metas,
+        h1s, h2s,
+        text: document.body.innerText.slice(0, 8000)
+      }
+    }())`)
+  } catch { return null }
+}
+
+async function sendClaudeMessage() {
+  const input = document.getElementById('claudeInput')
+  if (!input) return
+  const text = input.value.trim()
+  if (!text || _claudeStreaming) return
+  input.value = ''
+
+  // Get Anthropic API key
+  const anthropicKey = await SE.storeGet('anthropicApiKey', '')
+  if (!anthropicKey) {
+    addClaudeMessage('assistant', 'Du behöver ange en Anthropic API-nyckel först. Gå till **Inställningar** i docken och lägg till din nyckel under "Claude AI".')
+    renderClaudeMessages()
+    return
+  }
+
+  // Add user message
+  addClaudeMessage('user', text)
+  renderClaudeMessages()
+
+  // Get page context
+  const ctx = await getPageContext()
+  const systemPrompt = `Du är Claude, en AI-assistent inbyggd i SEOZ Browser — en SEO-fokuserad webbläsare. Svara på svenska om inte användaren skriver på ett annat språk. Var koncis och handlingsinriktad.
+
+${ctx ? `AKTUELL SIDA:
+URL: ${ctx.url}
+Titel: ${ctx.title}
+Meta description: ${ctx.meta?.description || 'Saknas'}
+H1: ${ctx.h1s?.join(', ') || 'Inga'}
+H2: ${ctx.h2s?.join(', ') || 'Inga'}
+OG title: ${ctx.meta?.['og:title'] || ''}
+OG description: ${ctx.meta?.['og:description'] || ''}
+
+SIDINNEHÅLL (utdrag):
+${ctx.text?.slice(0, 4000) || '(ej tillgängligt)'}` : 'Ingen sida är laddad just nu.'}`
+
+  // Build messages for API
+  const apiMessages = _claudeMessages.map(m => ({ role: m.role, content: m.content }))
+
+  _claudeStreaming = true
+  updateClaudeStatus('Tänker...')
+
+  try {
+    const res = await SE.claudeChat({ messages: apiMessages, systemPrompt, apiKey: anthropicKey })
+    if (res.error) {
+      addClaudeMessage('assistant', '⚠️ Fel: ' + res.error)
+    } else {
+      addClaudeMessage('assistant', res.content)
+    }
+  } catch (err) {
+    addClaudeMessage('assistant', '⚠️ Kunde inte nå Claude: ' + (err.message || err))
+  }
+
+  _claudeStreaming = false
+  updateClaudeStatus('Redo')
+  renderClaudeMessages()
+}
+
+function addClaudeMessage(role, content) {
+  _claudeMessages.push({ role, content, ts: Date.now() })
+}
+
+function clearClaudeChat() {
+  _claudeMessages.length = 0
+  const el = document.getElementById('claudeMessages')
+  if (el) el.innerHTML = `
+    <div style="text-align:center;padding:20px 8px;color:var(--muted)">
+      <div style="font-size:24px;margin-bottom:6px">💬</div>
+      <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
+      <div style="font-size:10px;line-height:1.5">Chatt rensad. Ställ en ny fråga!</div>
+    </div>
+  `
+}
+
+function updateClaudeStatus(text) {
+  const el = document.getElementById('claudeStatus')
+  if (el) el.textContent = text
+}
+
+function renderClaudeMessages() {
+  const container = document.getElementById('claudeMessages')
+  if (!container) return
+  container.innerHTML = ''
+
+  _claudeMessages.forEach(m => {
+    const div = document.createElement('div')
+    const isUser = m.role === 'user'
+    div.style.cssText = `padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.6;max-width:95%;word-break:break-word;white-space:pre-wrap;${
+      isUser
+        ? 'background:var(--p);color:#fff;align-self:flex-end;border-bottom-right-radius:2px'
+        : 'background:var(--panel);color:var(--txt);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:2px'
+    }`
+    // Simple markdown: **bold**, `code`, \n
+    let html = esc(m.content)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:10px">$1</code>')
+    div.innerHTML = html
+    container.appendChild(div)
+  })
+
+  // Auto-scroll
+  container.scrollTop = container.scrollHeight
+}
+
+async function claudeQuickAction(type) {
+  const input = document.getElementById('claudeInput')
+  if (!input) return
+  const prompts = {
+    seo: 'Gör en SEO-analys av denna sida. Ge konkreta förbättringsförslag med prioritering.',
+    improve: 'Vilka förbättringar kan göras på denna sida? Fokusera på SEO, UX och konvertering.',
+    summary: 'Sammanfatta sidans innehåll kort och koncist.'
+  }
+  input.value = prompts[type] || ''
+  sendClaudeMessage()
+}
+
+async function saveAnthropicKey() {
+  const input = document.getElementById('anthropicKeyInput')
+  if (!input) return
+  const key = input.value.trim()
+  if (!key) { toast('Ange en API-nyckel', '#dc2626'); return }
+  await SE.storeSet('anthropicApiKey', key)
+  input.value = ''
+  toast('Anthropic API-nyckel sparad!', '#2ca87f')
+  const el = document.getElementById('settingsAnthropicKey')
+  if (el) el.textContent = key.slice(0, 12) + '••••••••'
+}
+
+async function removeAnthropicKey() {
+  await SE.storeSet('anthropicApiKey', '')
+  toast('API-nyckel borttagen', '#e58a00')
+  const el = document.getElementById('settingsAnthropicKey')
+  if (el) el.textContent = 'Ej konfigurerad'
+}
+
+// ══════════════════════════════════════════════════════
+//  MCP BRIDGE — lets Claude control the browser via MCP server
+// ══════════════════════════════════════════════════════
+const _mcpConsoleLogs = []
+const _MCP_MAX_LOGS = 200
+
+// Capture console messages for MCP
+;(function() {
+  const wvEl = document.getElementById('wv')
+  if (!wvEl) return
+  wvEl.addEventListener('console-message', e => {
+    if (e.message && e.message.startsWith('[SEOZ-PICK]')) return
+    _mcpConsoleLogs.push({ level: e.level, message: e.message, line: e.line, source: e.sourceId })
+    if (_mcpConsoleLogs.length > _MCP_MAX_LOGS) _mcpConsoleLogs.shift()
+  })
+})()
+
+window.__mcpExecute = async function(toolName, args) {
+  const wv = getWV()
+
+  switch (toolName) {
+    case 'navigate': {
+      let url = args.url || ''
+      if (url && !url.match(/^https?:\/\//)) url = 'https://' + url
+      if (wv) wv.loadURL(url)
+      const tab = getActive()
+      if (tab) { tab.url = url; tab.loading = true; scheduleRenderTabs() }
+      document.getElementById('urlInput').value = url
+      return { ok: true, url }
+    }
+
+    case 'get_page_content': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const sel = ${JSON.stringify(args.selector || null)};
+        const root = sel ? document.querySelector(sel) : document.body;
+        if (!root) return { error: 'Element not found: ' + ${JSON.stringify(args.selector || '')} };
+        const metas = {};
+        document.querySelectorAll('meta[name],meta[property]').forEach(m => {
+          metas[m.name || m.getAttribute('property')] = m.content
+        });
+        return {
+          title: document.title,
+          url: location.href,
+          meta: metas,
+          text: root.innerText.slice(0, 50000)
+        }
+      }())`)
+    }
+
+    case 'get_page_html': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const sel = ${JSON.stringify(args.selector || null)};
+        if (sel) {
+          const el = document.querySelector(sel);
+          return el ? el.outerHTML.slice(0, 100000) : 'Element not found: ' + ${JSON.stringify(args.selector || '')};
+        }
+        return document.documentElement.outerHTML.slice(0, 100000);
+      }())`)
+    }
+
+    case 'execute_javascript': {
+      if (!wv) return { error: 'No page loaded' }
+      const result = await wv.executeJavaScript(`(async function(){ ${args.code} }())`)
+      return result
+    }
+
+    case 'click': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const el = document.querySelector(${JSON.stringify(args.selector)});
+        if (!el) return { error: 'Element not found: ' + ${JSON.stringify(args.selector)} };
+        el.click();
+        return { ok: true, tag: el.tagName, text: el.textContent.slice(0, 100) }
+      }())`)
+    }
+
+    case 'type_text': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const el = document.querySelector(${JSON.stringify(args.selector)});
+        if (!el) return { error: 'Element not found: ' + ${JSON.stringify(args.selector)} };
+        el.focus();
+        if (${args.clear !== false}) { el.value = ''; el.dispatchEvent(new Event('input', {bubbles:true})) }
+        el.value = ${JSON.stringify(args.text)};
+        el.dispatchEvent(new Event('input', {bubbles:true}));
+        el.dispatchEvent(new Event('change', {bubbles:true}));
+        return { ok: true }
+      }())`)
+    }
+
+    case 'get_tabs': {
+      return tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.id === activeId, loading: t.loading }))
+    }
+
+    case 'switch_tab': {
+      const id = args.tabId
+      const tab = tabs.find(t => t.id === id)
+      if (!tab) return { error: 'Tab not found: ' + id }
+      switchTab(id)
+      return { ok: true, tab: { id: tab.id, title: tab.title, url: tab.url } }
+    }
+
+    case 'new_tab': {
+      newTab(args.url || 'https://www.google.com')
+      const tab = getActive()
+      return { ok: true, tab: { id: tab.id, url: tab.url } }
+    }
+
+    case 'close_tab': {
+      const id = args.tabId
+      const tab = tabs.find(t => t.id === id)
+      if (!tab) return { error: 'Tab not found: ' + id }
+      if (tabs.length === 1) return { error: 'Cannot close the last tab' }
+      closeTab(new Event('click'), id)
+      return { ok: true }
+    }
+
+    case 'screenshot': {
+      if (!wv) return { error: 'No page loaded' }
+      const img = await wv.capturePage()
+      return { base64: img.toPNG().toString('base64'), format: 'png' }
+    }
+
+    case 'get_seo_analysis': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const title = document.title;
+        const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+        const canonical = document.querySelector('link[rel="canonical"]')?.href || '';
+        const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim());
+        const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.textContent.trim());
+        const imgs = Array.from(document.querySelectorAll('img')).map(i => ({src: i.src?.slice(0,200), alt: i.alt, width: i.naturalWidth, height: i.naturalHeight}));
+        const imgsNoAlt = imgs.filter(i => !i.alt).length;
+        const links = Array.from(document.querySelectorAll('a[href]'));
+        const internal = links.filter(l => l.hostname === location.hostname).length;
+        const external = links.length - internal;
+        const schemas = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(s => { try { return JSON.parse(s.textContent) } catch { return null } }).filter(Boolean);
+        const og = {}; document.querySelectorAll('meta[property^="og:"]').forEach(m => og[m.getAttribute('property')] = m.content);
+        return {
+          url: location.href, title, titleLength: title.length,
+          metaDescription: metaDesc, metaDescLength: metaDesc.length,
+          canonical, h1s, h2s,
+          images: { total: imgs.length, missingAlt: imgsNoAlt },
+          links: { total: links.length, internal, external },
+          schema: schemas,
+          openGraph: og
+        }
+      }())`)
+    }
+
+    case 'get_console_logs': {
+      return _mcpConsoleLogs.slice(-50)
+    }
+
+    case 'get_network_requests': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        return performance.getEntriesByType('resource').map(r => ({
+          name: r.name, type: r.initiatorType,
+          duration: Math.round(r.duration),
+          size: r.transferSize || 0,
+          startTime: Math.round(r.startTime)
+        }))
+      }())`)
+    }
+
+    case 'scroll': {
+      if (!wv) return { error: 'No page loaded' }
+      const dir = args.direction
+      const amt = args.amount || 500
+      const code = dir === 'top' ? 'window.scrollTo(0,0)'
+        : dir === 'bottom' ? 'window.scrollTo(0, document.body.scrollHeight)'
+        : dir === 'up' ? `window.scrollBy(0, -${amt})`
+        : `window.scrollBy(0, ${amt})`
+      await wv.executeJavaScript(code)
+      return { ok: true, direction: dir }
+    }
+
+    case 'find_in_page': {
+      if (!wv) return { error: 'No page loaded' }
+      const r = await wv.findInPage(args.text)
+      return { text: args.text, found: r }
+    }
+
+    default:
+      return { error: 'Unknown tool: ' + toolName }
+  }
 }
 
 // ══════════════════════════════════════════════════════

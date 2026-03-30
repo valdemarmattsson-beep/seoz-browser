@@ -21,6 +21,17 @@ contextBridge.exposeInMainWorld('seoz', {
   setApiKey:   k  => ipcRenderer.invoke('set-api-key', k),
   delApiKey:   () => ipcRenderer.invoke('del-api-key'),
 
+  // Profiles (Chrome-like user profiles)
+  profileList:      () => ipcRenderer.invoke('profile-list'),
+  profileGetActive: () => ipcRenderer.invoke('profile-get-active'),
+  profileCreate:    ({ name, email }) => ipcRenderer.invoke('profile-create', { name, email }),
+  profileUpdate:    (id, updates) => ipcRenderer.invoke('profile-update', { id, updates }),
+  profileDelete:    (id) => ipcRenderer.invoke('profile-delete', id),
+  profileSwitch:    (id) => ipcRenderer.invoke('profile-switch', id),
+  profilePickAvatar:(id) => ipcRenderer.invoke('profile-pick-avatar', id),
+  profileGetAvatar: (id) => ipcRenderer.invoke('profile-get-avatar', id),
+  profileRemoveAvatar:(id) => ipcRenderer.invoke('profile-remove-avatar', id),
+
   // Generic store
   storeGet:    (k, d) => ipcRenderer.invoke('store-get', k, d),
   storeSet:    (k, v) => ipcRenderer.invoke('store-set', k, v),
@@ -28,6 +39,9 @@ contextBridge.exposeInMainWorld('seoz', {
   // SEOZ API
   triggerSync: (apiKey) => ipcRenderer.invoke('trigger-sync', apiKey),
   fetchApi:    (opts)   => ipcRenderer.invoke('fetch-browser-api', opts),
+
+  // Claude AI
+  claudeChat:  (opts) => ipcRenderer.invoke('claude-chat', opts),
 
   // OS notifications
   notify:      (title, body) => ipcRenderer.send('send-notification', { title, body }),
@@ -49,7 +63,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

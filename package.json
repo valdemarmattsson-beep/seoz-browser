@@ -33,8 +33,8 @@
     ],
     "publish": {
       "provider": "github",
-      "owner": "seoz-se",
-      "repo": "seoz-browser",
+      "owner": "valdemarmattsson-beep",
+      "repo": "seoz-se-seoz-browser",
       "releaseType": "release"
     },
     "win": {

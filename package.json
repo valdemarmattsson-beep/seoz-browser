@@ -1,0 +1,57 @@
+{
+  "name": "seoz-browser",
+  "version": "1.0.0",
+  "description": "SEOZ Desktop Browser",
+  "main": "src/main/main.js",
+  "author": "SEOZ <hello@seoz.se>",
+  "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron . --dev",
+    "build": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win --mac",
+    "publish": "electron-builder --win --x64 --publish always",
+    "publish:mac": "electron-builder --mac --publish always"
+  },
+  "dependencies": {
+    "electron-store": "^8.1.0",
+    "electron-updater": "^6.1.7"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^28.0.0",
+    "electron-builder": "^24.9.1"
+  },
+  "build": {
+    "appId": "se.seoz.browser",
+    "productName": "SEOZ Browser",
+    "icon": "assets/icon.png",
+    "files": [
+      "src/**/*",
+      "assets/**/*"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "seoz-se",
+      "repo": "seoz-browser",
+      "releaseType": "release"
+    },
+    "win": {
+      "target": [{ "target": "nsis", "arch": ["x64"] }],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [{ "target": "dmg", "arch": ["x64", "arm64"] }],
+      "category": "public.app-category.productivity"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SEOZ Browser",
+      "differentialPackage": true
+    }
+  }
+}

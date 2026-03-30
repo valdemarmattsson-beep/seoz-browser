@@ -1,0 +1,2789 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<title>SEOZ Browser</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --p:#4680ff; --p50:#eef3ff; --p100:#dce6ff; --p600:#2563eb;
+  --g:#2ca87f; --g50:#eafaf5;
+  --w:#e58a00; --r:#dc2626;
+  --bg:#131920; --card:#1b232d; --panel:#151d27;
+  --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
+  --tab-h:34px; --addr-h:42px; --bm-h:28px; --chrome-h:104px;
+  --dock-w:48px; --panel-w:280px; --status-h:22px;
+}
+[data-theme="light"] {
+  --bg:#f0f2f5; --card:#ffffff; --panel:#f8f9fa;
+  --border:#e7eaee; --head:#1d2630; --txt:#131920; --muted:rgba(33,37,41,.6);
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100vh;overflow:hidden;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);color:var(--txt);user-select:none}
+input,textarea,select{user-select:text}
+
+/* ── LAYOUT ── */
+#app{display:flex;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── CHROME (tab bar + address bar) ── */
+.chrome{
+  height:var(--chrome-h);flex-shrink:0;
+  background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;flex-direction:column;
+  -webkit-app-region:drag;
+}
+
+/* Tab bar */
+.tabbar{
+  height:var(--tab-h);
+  background:var(--bg);
+  display:flex;align-items:flex-end;
+  padding:0 6px;gap:1px;
+}
+.tab{
+  height:28px;min-width:60px;max-width:200px;flex:0 1 auto;
+  padding:0 8px;border-radius:7px 7px 0 0;
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;cursor:pointer;
+  background:transparent;color:var(--muted);
+  transition:background .1s;
+  -webkit-app-region:no-drag;
+  position:relative;
+}
+.tab:hover:not(.active){background:rgba(255,255,255,.05)}
+.tab.active{background:var(--card);color:var(--head);font-weight:600}
+.tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain}
+.tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab-x{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;flex-shrink:0;transition:opacity .15s}
+.tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
+.tab-x:hover{opacity:1!important;background:rgba(255,255,255,.15)}
+.tab-spin{width:10px;height:10px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite}
+/* Tab tooltip (Chrome-style) */
+.tab-tip{
+  position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);z-index:150;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 6px 20px rgba(0,0,0,.35);
+  padding:8px 10px;min-width:180px;max-width:320px;
+  pointer-events:none;opacity:0;transition:opacity .2s .4s;
+  white-space:normal;
+}
+.tab:hover .tab-tip{opacity:1}
+.tab-tip-title{font-size:11px;font-weight:700;color:var(--head);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
+.tab-tip-url{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.newtab{width:24px;height:24px;border-radius:5px;margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
+.newtab:hover{background:rgba(255,255,255,.08)}
+.tsp{flex:1;min-width:8px}
+.wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center}
+.wc{width:34px;height:34px;border:none;background:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);cursor:pointer;transition:background .1s}
+.wc:hover{background:rgba(255,255,255,.08)}
+.wc.x:hover{background:#e81123;color:#fff}
+
+/* Address bar */
+.addrbar{
+  height:var(--addr-h);
+  background:var(--card);
+  display:flex;align-items:center;padding:0 10px;gap:6px;
+}
+.nb{width:32px;height:32px;border-radius:6px;border:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--muted);flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
+.nb:hover{background:var(--border)}
+.url-wrap{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:7px;cursor:text;transition:border-color .15s;-webkit-app-region:no-drag}
+.url-wrap:focus-within{border-color:var(--p)}
+.url-fav{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:none}
+.lock{font-size:10px;color:var(--g);flex-shrink:0}
+#urlInput{flex:1;border:none;background:none;outline:none;font-size:12px;font-family:'Inter',sans-serif;color:var(--txt)}
+#urlInput::placeholder{color:var(--muted)}
+.addr-spinner{width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite;display:none}
+.addr-spinner.on{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+.seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(70,128,255,.15);color:var(--p);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
+.seoz-pill:hover{background:rgba(70,128,255,.25)}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--p);animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+
+/* Shield (content blocker) in URL bar */
+.blocker-shield{
+  width:26px;height:26px;border-radius:5px;border:none;background:none;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  font-size:13px;color:var(--g);flex-shrink:0;transition:all .15s;
+  -webkit-app-region:no-drag;padding:0;position:relative;
+}
+.blocker-shield:hover{background:rgba(255,255,255,.08)}
+.blocker-shield.off{color:var(--muted)}
+.blocker-badge{
+  position:absolute;top:-2px;right:-4px;
+  min-width:14px;height:14px;border-radius:7px;
+  background:var(--p);color:#fff;font-size:8px;font-weight:800;
+  display:flex;align-items:center;justify-content:center;
+  padding:0 3px;line-height:1;
+}
+.blocker-badge:empty{display:none}
+
+/* Blocker popup */
+.blocker-popup{
+  position:absolute;top:calc(100% + 6px);right:0;z-index:300;
+  width:240px;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);padding:12px;
+  display:none;
+}
+.blocker-popup.open{display:block}
+.blocker-popup-title{font-size:12px;font-weight:700;color:var(--head);margin-bottom:8px;display:flex;align-items:center;gap:6px}
+.blocker-stat{font-size:20px;font-weight:800;color:var(--p);margin:6px 0}
+.blocker-stat-label{font-size:10px;color:var(--muted)}
+.blocker-toggle{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:8px 0;border-top:1px solid var(--border);margin-top:8px;
+}
+.blocker-toggle label{font-size:11px;color:var(--txt)}
+/* Toggle switch */
+.toggle-sw{width:36px;height:20px;border-radius:10px;background:var(--border);cursor:pointer;position:relative;transition:background .2s;flex-shrink:0}
+.toggle-sw.on{background:var(--g)}
+.toggle-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
+.toggle-sw.on::after{transform:translateX(16px)}
+
+/* Star bookmark button in URL bar */
+.bm-star{width:24px;height:24px;border-radius:5px;border:none;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--muted);flex-shrink:0;transition:all .15s;-webkit-app-region:no-drag;padding:0}
+.bm-star:hover{background:rgba(255,255,255,.08)}
+.bm-star.saved{color:#f59e0b}
+
+/* ── BOOKMARK BAR ── */
+.bmbar{
+  height:var(--bm-h);flex-shrink:0;
+  background:var(--card);
+  border-bottom:1px solid var(--border);
+  display:flex;align-items:center;
+  padding:0 10px;gap:2px;
+  overflow:visible;position:relative;
+  -webkit-app-region:no-drag;
+}
+.bm-empty{font-size:11px;color:var(--muted);cursor:default;padding:0 4px;white-space:nowrap}
+.bm-item{
+  height:22px;padding:0 8px;border-radius:4px;
+  display:flex;align-items:center;gap:5px;
+  font-size:11px;color:var(--txt);cursor:grab;
+  white-space:nowrap;flex-shrink:0;
+  transition:background .12s,opacity .15s,transform .15s;
+}
+.bm-item:hover{background:rgba(255,255,255,.08)}
+.bm-item.dragging{opacity:.4;transform:scale(.95)}
+.bm-item.drag-over-left{box-shadow:inset 2px 0 0 var(--p)}
+.bm-item.drag-over-right{box-shadow:inset -2px 0 0 var(--p)}
+.bm-ico{width:12px;height:12px;border-radius:2px;flex-shrink:0;object-fit:contain}
+.bm-folder-item{color:var(--head);font-weight:600;cursor:pointer;position:relative}
+.bm-folder-item .bm-folder-arrow{font-size:8px;opacity:.5;margin-left:1px}
+.bm-folder-item.drag-over{background:rgba(70,128,255,.2);box-shadow:inset 0 0 0 1px var(--p)}
+
+/* Bookmark dropdown (for folders & context menu) */
+.bm-drop{
+  position:absolute;top:100%;left:0;z-index:200;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  min-width:180px;padding:4px 0;
+  display:none;
+}
+.bm-drop.open{display:block}
+.bm-drop-item{
+  padding:6px 12px;display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--txt);cursor:pointer;transition:background .1s;
+}
+.bm-drop-item:hover{background:rgba(255,255,255,.06)}
+.bm-drop-item .bm-ico{width:14px;height:14px}
+.bm-drop-item.dragging{opacity:.4}
+.bm-drop-item.drag-over{background:rgba(70,128,255,.15)}
+.bm-drop-sep{height:1px;background:var(--border);margin:4px 8px}
+.bm-drop-item.danger{color:var(--r)}
+.bm-drop-item.muted{color:var(--muted);font-style:italic}
+
+/* Context menu (right-click) */
+.ctx-menu{
+  position:fixed;z-index:250;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.35);
+  min-width:160px;padding:4px 0;
+  display:none;
+}
+.ctx-menu.open{display:block}
+.ctx-item{
+  padding:6px 12px;font-size:11px;color:var(--txt);cursor:pointer;
+  display:flex;align-items:center;gap:7px;transition:background .1s;
+}
+.ctx-item:hover{background:rgba(255,255,255,.06)}
+.ctx-item.danger{color:var(--r)}
+.ctx-sep{height:1px;background:var(--border);margin:4px 8px}
+
+/* Bookmark edit modal */
+.bm-modal-bg{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center}
+.bm-modal-bg.open{display:flex}
+.bm-modal{background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.4);width:340px;overflow:hidden}
+.bm-modal-hdr{padding:14px 16px 10px;display:flex;align-items:center;justify-content:space-between;border-bottom:1px solid var(--border)}
+.bm-modal-hdr h3{font-size:13px;font-weight:700;color:var(--head)}
+.bm-modal-body{padding:14px 16px}
+.bm-modal-body label{display:block;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:4px}
+.bm-modal-body input,.bm-modal-body select{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;color:var(--txt);outline:none;margin-bottom:10px}
+.bm-modal-body input:focus,.bm-modal-body select:focus{border-color:var(--p)}
+.bm-modal-foot{padding:10px 16px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:8px}
+.bm-modal-foot button{height:30px;padding:0 14px;border-radius:6px;font-size:11px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s}
+.bm-modal-foot .bm-del{border:1px solid rgba(220,38,38,.3);background:none;color:var(--r)}
+.bm-modal-foot .bm-del:hover{background:rgba(220,38,38,.1)}
+.bm-modal-foot .bm-cancel{border:1px solid var(--border);background:none;color:var(--txt)}
+.bm-modal-foot .bm-cancel:hover{background:var(--border)}
+.bm-modal-foot .bm-save{border:none;background:var(--p);color:#fff}
+.bm-modal-foot .bm-save:hover{background:var(--p600)}
+
+/* ── BODY ROW ── */
+.body-row{flex:1;display:flex;min-height:0;overflow:hidden}
+
+/* Webview (styled inline for flex container) */
+
+/* ── DOCK (right side icons) ── */
+.dock{
+  width:var(--dock-w);flex-shrink:0;
+  background:var(--card);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;align-items:center;
+  padding:8px 0;gap:2px;
+}
+.di{
+  width:34px;height:34px;border-radius:8px;
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;position:relative;font-size:15px;
+  transition:background .15s;flex-shrink:0;color:var(--muted);
+}
+.di:hover{background:rgba(70,128,255,.12)}
+.di.active{background:rgba(70,128,255,.15)}
+.di.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--p)}
+.di svg{width:16px;height:16px;flex-shrink:0}
+.dock-sep{width:24px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0}
+.dock-spacer{flex:1}
+/* Tooltip */
+.di .dtt{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);background:var(--head);color:var(--bg);font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100}
+.di:hover .dtt{opacity:1}
+.dtt::after{content:'';position:absolute;left:100%;top:50%;transform:translateY(-50%);border:4px solid transparent;border-left-color:var(--head)}
+
+/* ── SEOZ PANEL (slide-out from right, between webview and dock) ── */
+.seoz-panel{
+  width:0;overflow:hidden;
+  background:var(--card);border-left:1px solid var(--border);
+  display:flex;flex-direction:column;
+  transition:width .2s ease;flex-shrink:0;
+}
+.seoz-panel.open{width:var(--panel-w)}
+.panel-hdr{height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0;background:var(--panel)}
+.ph-mark{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+.ph-tit{font-size:12px;font-weight:700;color:var(--head);flex:1}
+.ph-cls{width:22px;height:22px;border-radius:5px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);transition:background .15s}
+.ph-cls:hover{background:var(--border)}
+.panel-body{flex:1;overflow-y:auto;padding:12px 14px}
+.panel-body::-webkit-scrollbar{width:3px}
+.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+
+/* Panel content components */
+.sh{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p);margin:12px 0 6px}
+.kpi-grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.kpi{padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:8px}
+.kpi-l{font-size:10px;color:var(--muted)}.kpi-v{font-size:16px;font-weight:800;color:var(--head);letter-spacing:-.02em}
+.mr{display:flex;align-items:center;justify-content:space-between;padding:5px 0;border-bottom:1px solid var(--border)}
+.mr:last-child{border-bottom:none}
+.mrl{font-size:11px;color:var(--muted);display:flex;align-items:center;gap:5px}
+.md{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.dg{background:var(--g)}.do{background:var(--w)}.dr{background:var(--r)}.db{background:var(--p)}
+.mrv{font-size:11px;font-weight:700;color:var(--head)}
+.bdg{font-size:9px;font-weight:800;padding:2px 7px;border-radius:3px}
+.bg{background:var(--g50);color:var(--g)}.bw{background:#fff8ec;color:var(--w)}.bb{background:#fff0f0;color:var(--r)}.bi{background:var(--p50);color:var(--p)}
+[data-theme="dark"] .bg{background:rgba(44,168,127,.12)}[data-theme="dark"] .bw{background:rgba(229,138,0,.12)}[data-theme="dark"] .bb{background:rgba(220,38,38,.12)}[data-theme="dark"] .bi{background:rgba(70,128,255,.12)}
+
+.kw{display:flex;align-items:center;gap:6px;padding:5px 0;border-bottom:1px solid var(--border)}
+.kw:last-child{border-bottom:none}
+.kp{width:22px;height:22px;border-radius:5px;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;flex-shrink:0}
+.kpt{background:var(--g50);color:var(--g)}.kpm{background:#fff8ec;color:var(--w)}.kpl{background:var(--panel);color:var(--muted)}
+[data-theme="dark"] .kpt{background:rgba(44,168,127,.12)}[data-theme="dark"] .kpm{background:rgba(229,138,0,.12)}
+.kw-w{flex:1;font-size:11px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.kw-v{font-size:10px;color:var(--muted);width:28px;text-align:right}
+.kw-d{font-size:10px;font-weight:700;width:20px;text-align:right}
+.up{color:var(--g)}.dn{color:var(--r)}
+
+/* Client list */
+.client-row{display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:8px;cursor:pointer;transition:background .12s;border:1px solid transparent;margin-bottom:4px}
+.client-row:hover{background:var(--panel);border-color:var(--border)}
+.client-row.sel{background:rgba(70,128,255,.08);border-color:rgba(70,128,255,.25)}
+.cl-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
+.cl-name{flex:1;font-size:12px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.cl-score{font-size:10px;font-weight:800}
+
+/* Score ring */
+.score-ring{position:relative;width:50px;height:50px;flex-shrink:0}
+.score-ring svg{transform:rotate(-90deg)}
+.score-num{position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:15px;font-weight:800;color:var(--g)}
+
+/* ── STATUS BAR ── */
+.statusbar{
+  height:var(--status-h);flex-shrink:0;
+  background:var(--card);border-top:1px solid var(--border);
+  display:flex;align-items:center;padding:0 12px;gap:10px;
+}
+.sb{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px}
+.sb-dot{width:5px;height:5px;border-radius:50%;background:var(--g)}
+
+/* ── AUTH ── */
+#auth{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center}
+#auth.gone{display:none}
+.ac{width:380px;background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.35);overflow:hidden}
+.ac-top{padding:28px}
+.ac-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px}
+.ac-mark{width:36px;height:36px;border-radius:10px;background:var(--p);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;box-shadow:0 4px 14px rgba(70,128,255,.35)}
+.ac-word{font-size:1.1rem;font-weight:800;color:var(--head);letter-spacing:-.03em}
+.ac-word span{color:var(--p)}
+.ac-h{font-size:1rem;font-weight:800;color:var(--head);margin-bottom:5px}
+.ac-sub{font-size:11px;color:var(--muted);line-height:1.65;margin-bottom:18px}
+.ac-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px}
+.ac-inp{width:100%;height:40px;background:var(--panel);border:1.5px solid var(--border);border-radius:8px;padding:0 13px;font-size:12px;font-family:inherit;color:var(--txt);outline:none;transition:border-color .15s,box-shadow .15s;margin-bottom:7px}
+.ac-inp:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(70,128,255,.12)}
+.ac-inp::placeholder{color:var(--muted)}
+.ac-hint{font-size:11px;color:var(--muted);margin-bottom:16px}
+.ac-hint a{color:var(--p);cursor:pointer;font-weight:600}
+.ac-msg{border-radius:7px;padding:9px 12px;font-size:11px;margin-bottom:12px;display:none;align-items:center;gap:6px}
+.ac-msg.show{display:flex}
+.ac-msg.err{background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.2);color:var(--r)}
+.ac-msg.ok{background:rgba(44,168,127,.08);border:1px solid rgba(44,168,127,.2);color:var(--g)}
+.ac-btn{width:100%;height:40px;background:var(--p);color:#fff;border:none;border-radius:8px;font-size:13px;font-weight:700;cursor:pointer;font-family:inherit;box-shadow:0 2px 10px rgba(70,128,255,.3);display:flex;align-items:center;justify-content:center;gap:7px;transition:background .15s}
+.ac-btn:hover{background:var(--p600)}
+.ac-foot{padding:14px 28px;border-top:1px solid var(--border);background:var(--panel)}
+.ac-sec{width:100%;height:36px;background:none;border:1.5px solid var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;margin-bottom:6px}
+.ac-sec:hover{background:var(--border)}
+.ac-sec:last-child{margin-bottom:0}
+
+/* Action button (panel) */
+.act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
+.act-btn:hover{background:var(--border)}
+
+/* ── CHROME MENU (three-dot) ── */
+.chrome-menu-btn{
+  width:32px;height:32px;border-radius:6px;border:1px solid var(--border);background:var(--panel);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--muted);
+  flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag;letter-spacing:1px;line-height:1;padding:0;
+}
+.chrome-menu-btn:hover{background:var(--border)}
+.chrome-dd{
+  position:fixed;z-index:400;
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 10px 30px rgba(0,0,0,.4);
+  width:260px;padding:6px 0;display:none;
+}
+.chrome-dd.open{display:block}
+.chrome-dd-item{
+  padding:7px 14px;font-size:12px;color:var(--txt);cursor:pointer;
+  display:flex;align-items:center;gap:10px;transition:background .1s;
+}
+.chrome-dd-item:hover{background:rgba(255,255,255,.06)}
+.chrome-dd-item .cdi-icon{width:20px;text-align:center;flex-shrink:0;font-size:13px}
+.chrome-dd-item .cdi-label{flex:1}
+.chrome-dd-item .cdi-shortcut{font-size:10px;color:var(--muted);font-family:'Inter',monospace}
+.chrome-dd-sep{height:1px;background:var(--border);margin:4px 10px}
+.chrome-dd-section{padding:4px 14px 2px;font-size:9px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--muted)}
+/* Zoom row */
+.zoom-row{display:flex;align-items:center;padding:4px 14px;gap:0}
+.zoom-btn{width:28px;height:28px;border-radius:6px;border:1px solid var(--border);background:none;color:var(--txt);cursor:pointer;font-size:14px;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.zoom-btn:hover{background:rgba(255,255,255,.08)}
+.zoom-label{flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--head)}
+
+/* ── FIND BAR ── */
+.find-bar{
+  height:0;overflow:hidden;background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 10px;gap:6px;
+  transition:height .15s ease;
+}
+.find-bar.open{height:36px}
+.find-input{flex:1;max-width:260px;height:26px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;color:var(--txt);outline:none}
+.find-input:focus{border-color:var(--p)}
+.find-count{font-size:10px;color:var(--muted);min-width:60px}
+.find-btn{width:26px;height:26px;border-radius:5px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:background .12s}
+.find-btn:hover{background:rgba(255,255,255,.08)}
+
+/* ── HISTORY PANEL ── */
+.history-overlay{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center}
+.history-overlay.open{display:flex}
+.history-box{width:480px;max-height:70vh;background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:0 10px 30px rgba(0,0,0,.4);display:flex;flex-direction:column;overflow:hidden}
+.history-hdr{padding:14px 16px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:10px}
+.history-hdr h3{font-size:13px;font-weight:700;color:var(--head);flex:1}
+.history-search{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;color:var(--txt);outline:none}
+.history-search:focus{border-color:var(--p)}
+.history-list{flex:1;overflow-y:auto;padding:4px 0}
+.history-list::-webkit-scrollbar{width:3px}
+.history-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.history-item{padding:8px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .1s}
+.history-item:hover{background:rgba(255,255,255,.04)}
+.history-item img{width:16px;height:16px;border-radius:2px;flex-shrink:0}
+.history-item-info{flex:1;min-width:0}
+.history-item-title{font-size:12px;color:var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item-url{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.history-item-time{font-size:10px;color:var(--muted);flex-shrink:0}
+.history-empty{padding:30px;text-align:center;font-size:12px;color:var(--muted)}
+
+/* ── SEOZ INSPECTOR (bottom drawer) ── */
+.inspector-drawer{
+  position:absolute;bottom:0;left:0;right:0;z-index:100;
+  height:0;overflow:hidden;
+  background:var(--card);border-top:2px solid var(--p);
+  display:flex;flex-direction:column;
+  transition:height .2s ease;
+}
+.inspector-drawer.open{height:320px}
+.inspector-drawer.resizing{transition:none!important}
+.inspector-hdr{
+  height:36px;flex-shrink:0;
+  display:flex;align-items:center;padding:0 12px;gap:8px;
+  border-bottom:1px solid var(--border);background:var(--panel);
+  cursor:ns-resize;
+}
+.inspector-hdr-title{font-size:11px;font-weight:700;color:var(--p);display:flex;align-items:center;gap:5px}
+.inspector-tabs{display:flex;align-items:center;gap:0;margin-left:8px}
+.inspector-tab{
+  padding:4px 12px;font-size:10px;font-weight:600;color:var(--muted);cursor:pointer;
+  border-bottom:2px solid transparent;transition:all .12s;
+}
+.inspector-tab:hover{color:var(--txt)}
+.inspector-tab.active{color:var(--p);border-bottom-color:var(--p)}
+.inspector-hdr-spacer{flex:1}
+.inspector-btn{width:24px;height:24px;border-radius:5px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:background .12s}
+.inspector-btn:hover{background:rgba(255,255,255,.08)}
+.inspector-body{flex:1;overflow-y:auto;padding:10px 14px;font-size:11px;line-height:1.7}
+.inspector-body::-webkit-scrollbar{width:3px}
+.inspector-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.insp-section{margin-bottom:12px}
+.insp-section-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p);margin-bottom:4px}
+.insp-row{display:flex;align-items:flex-start;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
+.insp-label{width:120px;flex-shrink:0;font-size:10px;font-weight:600;color:var(--muted)}
+.insp-value{flex:1;font-size:11px;color:var(--head);word-break:break-word}
+.insp-value.ok{color:var(--g)}.insp-value.warn{color:var(--w)}.insp-value.err{color:var(--r)}
+.insp-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;margin:0 2px 2px 0}
+.insp-tag.green{background:rgba(44,168,127,.12);color:var(--g)}
+.insp-tag.yellow{background:rgba(229,138,0,.12);color:var(--w)}
+.insp-tag.red{background:rgba(220,38,38,.12);color:var(--r)}
+.insp-tag.blue{background:rgba(70,128,255,.12);color:var(--p)}
+.insp-code{font-family:'Consolas','Monaco',monospace;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin:4px 0;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
+.insp-heading-tree{margin:4px 0}
+.insp-heading-tree div{padding:1px 0}
+.insp-h-indent{display:inline-block;width:16px}
+.insp-link-item{padding:2px 0;display:flex;gap:6px;align-items:baseline}
+.insp-link-item a{color:var(--p);text-decoration:none;font-size:10px;word-break:break-all}
+.insp-link-item a:hover{text-decoration:underline}
+.insp-link-status{font-size:9px;font-weight:700;flex-shrink:0}
+.insp-meter{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin:2px 0}
+.insp-meter-fill{height:100%;border-radius:3px;transition:width .3s}
+
+/* Console */
+.console-entry{padding:3px 8px;font-family:'Consolas','Monaco',monospace;font-size:10px;border-bottom:1px solid rgba(255,255,255,.03);display:flex;gap:6px;align-items:flex-start}
+.console-entry.error{background:rgba(220,38,38,.06);color:var(--r)}
+.console-entry.warn{background:rgba(229,138,0,.06);color:var(--w)}
+.console-entry.info{color:var(--txt)}
+.console-entry .con-type{width:16px;flex-shrink:0;text-align:center;font-size:9px}
+.console-entry .con-msg{flex:1;word-break:break-word;white-space:pre-wrap}
+.console-entry .con-src{flex-shrink:0;font-size:9px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+
+/* Network */
+.net-table{width:100%;border-collapse:collapse;font-size:10px}
+.net-table th{position:sticky;top:0;background:var(--panel);text-align:left;padding:4px 6px;font-weight:700;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
+.net-table td{padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.03);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
+.net-table tr:hover td{background:rgba(255,255,255,.03)}
+.net-bar{height:4px;border-radius:2px;background:var(--border);min-width:30px;position:relative}
+.net-bar-fill{height:100%;border-radius:2px;position:absolute;left:0;top:0}
+.net-status{font-weight:700}
+.net-status.s2{color:var(--g)}.net-status.s3{color:var(--p)}.net-status.s4{color:var(--w)}.net-status.s5{color:var(--r)}
+
+/* Elements */
+.elem-tree{font-family:'Consolas','Monaco',monospace;font-size:10px;line-height:1.6}
+.elem-node{padding:1px 0;cursor:pointer;white-space:nowrap}
+.elem-node:hover{background:rgba(70,128,255,.08)}
+.elem-tag{color:#e06c75}.elem-attr{color:#d19a66}.elem-str{color:#98c379}.elem-text{color:var(--muted);font-style:italic}
+.elem-toggle{display:inline-block;width:12px;color:var(--muted);cursor:pointer;text-align:center;font-size:9px}
+.elem-picker-btn{font-size:14px;padding:2px 6px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:none;color:var(--muted);transition:all .12s}
+.elem-picker-btn.active{background:var(--p);color:#fff;border-color:var(--p)}
+
+/* ── UPDATE BANNER ── */
+.update-banner{
+  display:none;align-items:center;gap:8px;
+  padding:6px 14px;background:rgba(70,128,255,.1);border-bottom:1px solid rgba(70,128,255,.2);
+  font-size:11px;color:var(--p);
+}
+.update-banner.show{display:flex}
+.update-banner .ub-msg{flex:1}
+.update-banner .ub-btn{
+  height:24px;padding:0 12px;border-radius:5px;border:none;
+  font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;transition:background .15s;
+}
+.update-banner .ub-btn.primary{background:var(--p);color:#fff}
+.update-banner .ub-btn.primary:hover{background:var(--p600)}
+.update-banner .ub-btn.secondary{background:none;border:1px solid var(--border);color:var(--txt)}
+.update-banner .ub-btn.secondary:hover{background:var(--border)}
+.update-progress{height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex:1;max-width:120px}
+.update-progress-fill{height:100%;background:var(--p);border-radius:2px;transition:width .3s}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:20px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:11px;font-weight:600;color:var(--head);box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:7px;z-index:1000;transform:translateY(40px);opacity:0;transition:all .25s ease;pointer-events:none}
+#toast.on{transform:translateY(0);opacity:1}
+.td{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+</style>
+</head>
+<body>
+
+<!-- AUTH -->
+<div id="auth">
+  <div class="ac">
+    <div class="ac-top">
+      <div class="ac-logo">
+        <div class="ac-mark">SZ</div>
+        <div class="ac-word">SEOZ<span>.se</span></div>
+      </div>
+      <div class="ac-h">Anslut ditt konto</div>
+      <div class="ac-sub">Gå till <strong>Inställningar → API</strong> i SEOZ, generera en nyckel och klistra in den nedan.</div>
+      <div class="ac-msg err" id="authErr">⚠️ Ogiltig nyckel — kontrollera och försök igen.</div>
+      <div class="ac-msg ok"  id="authOk">✓ Anslutning lyckades!</div>
+      <div class="ac-lbl">API-nyckel</div>
+      <input class="ac-inp" id="apiKeyInput" type="password" placeholder="seoz_live_••••••••••••••••" onkeydown="if(event.key==='Enter')doConnect()">
+      <div class="ac-hint">Hittar du inte nyckeln? <a onclick="openApiKeyPage()">Skapa en på seoz.se →</a></div>
+      <button class="ac-btn" onclick="doConnect()">⚡ Anslut konto</button>
+    </div>
+    <div class="ac-foot">
+      <button class="ac-sec" onclick="openApiKeyPage()">🔑 Skapa API-nyckel i SEOZ</button>
+      <button class="ac-sec" onclick="doConnect('demo')">Prova med demokonto</button>
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="app">
+  <!-- CHROME -->
+  <div class="chrome">
+    <!-- Tab bar -->
+    <div class="tabbar" id="tabbar">
+      <div id="newtabBtn" class="newtab" onclick="newTab()">+</div>
+      <div class="tsp"></div>
+      <div class="wc-wrap">
+        <div class="wc" onclick="SE.minimize()">─</div>
+        <div class="wc" onclick="SE.maximize()">□</div>
+        <div class="wc x" onclick="SE.close()">✕</div>
+      </div>
+    </div>
+    <!-- Address bar -->
+    <div class="addrbar">
+      <div class="nb" onclick="wvBack()">←</div>
+      <div class="nb" onclick="wvFwd()">→</div>
+      <div class="nb" id="relBtn" onclick="wvReload()">↻</div>
+      <div class="url-wrap" onclick="document.getElementById('urlInput').focus()">
+        <img class="url-fav" id="urlFav" src="" onload="this.style.display='block'" onerror="this.style.display='none'">
+        <span class="lock" id="urlLock">🔒</span>
+        <input id="urlInput" placeholder="Sök eller ange URL..."
+               onkeydown="if(event.key==='Enter')doNav(this.value)"
+               onfocus="this.select()">
+        <div class="addr-spinner" id="spinner"></div>
+        <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida">☆</button>
+      </div>
+      <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
+        <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering">🛡️<span class="blocker-badge" id="blockerBadge"></span></button>
+        <div class="blocker-popup" id="blockerPopup">
+          <div class="blocker-popup-title">🛡️ SEOZ Shield</div>
+          <div class="blocker-stat" id="blockerStatNum">0</div>
+          <div class="blocker-stat-label">annonser & trackers blockerade denna session</div>
+          <div class="blocker-toggle">
+            <label>Aktiverad</label>
+            <div class="toggle-sw on" id="blockerToggle" onclick="toggleBlockerEnabled()"></div>
+          </div>
+        </div>
+      </div>
+      <div class="seoz-pill" onclick="togglePanel('seo')">
+        <div class="sdot"></div>
+        SEOZ aktiv
+      </div>
+      <button class="chrome-menu-btn" id="chromeMenuBtn" onclick="toggleChromeMenu()" title="Inställningar">⋮</button>
+    </div>
+
+    <!-- Find bar -->
+    <div class="find-bar" id="findBar">
+      <input class="find-input" id="findInput" placeholder="Sök på sidan..." oninput="doFind(this.value)" onkeydown="findKeyHandler(event)">
+      <span class="find-count" id="findCount"></span>
+      <button class="find-btn" onclick="doFindNav('back')" title="Föregående">▲</button>
+      <button class="find-btn" onclick="doFindNav('fwd')" title="Nästa">▼</button>
+      <button class="find-btn" onclick="closeFindBar()" title="Stäng">✕</button>
+    </div>
+
+    <!-- Update banner -->
+    <div class="update-banner" id="updateBanner">
+      <span class="ub-msg" id="updateMsg">En ny version finns tillgänglig!</span>
+      <div class="update-progress" id="updateProgress" style="display:none"><div class="update-progress-fill" id="updateProgressFill" style="width:0%"></div></div>
+      <button class="ub-btn primary" id="updateBtn" onclick="handleUpdateAction()">Ladda ner</button>
+      <button class="ub-btn secondary" onclick="document.getElementById('updateBanner').classList.remove('show')">Senare</button>
+    </div>
+
+    <!-- Bookmark bar -->
+    <div class="bmbar" id="bmbar"></div>
+  </div>
+
+  <!-- Bookmark edit modal -->
+  <div class="bm-modal-bg" id="bmModal">
+    <div class="bm-modal">
+      <div class="bm-modal-hdr">
+        <h3 id="bmModalTitle">Redigera bokmärke</h3>
+        <button class="ph-cls" onclick="closeBmModal()">✕</button>
+      </div>
+      <div class="bm-modal-body">
+        <label>Namn</label>
+        <input id="bmNameInput" placeholder="Namn på bokmärke">
+        <label>URL</label>
+        <input id="bmUrlInput" placeholder="https://...">
+        <label>Mapp</label>
+        <select id="bmFolderSelect"></select>
+      </div>
+      <div class="bm-modal-foot">
+        <button class="bm-del" id="bmDelBtn" onclick="deleteBookmark()">Ta bort</button>
+        <div style="flex:1"></div>
+        <button class="bm-cancel" onclick="closeBmModal()">Avbryt</button>
+        <button class="bm-save" onclick="saveBmModal()">Spara</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Prompt modal (replaces native prompt() which Electron blocks) -->
+  <div class="bm-modal-bg" id="promptModal">
+    <div class="bm-modal" style="width:300px">
+      <div class="bm-modal-hdr">
+        <h3 id="promptTitle">Namn</h3>
+        <button class="ph-cls" onclick="resolvePrompt(null)">✕</button>
+      </div>
+      <div class="bm-modal-body">
+        <input id="promptInput" placeholder="" onkeydown="if(event.key==='Enter')resolvePrompt(this.value)">
+      </div>
+      <div class="bm-modal-foot">
+        <div style="flex:1"></div>
+        <button class="bm-cancel" onclick="resolvePrompt(null)">Avbryt</button>
+        <button class="bm-save" onclick="resolvePrompt(document.getElementById('promptInput').value)">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- BODY -->
+  <div class="body-row">
+    <!-- Webview container (holds webview + inspector drawer) -->
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative">
+      <webview id="wv" src="https://www.google.com"
+               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+               allowpopups style="flex:1;min-height:0;border:none;outline:none">
+      </webview>
+      <!-- SEOZ Inspector drawer -->
+      <div class="inspector-drawer" id="inspectorDrawer">
+        <div class="inspector-hdr" id="inspectorHdr">
+          <div class="inspector-hdr-title">🔬 SEOZ Inspector</div>
+          <div class="inspector-tabs" id="inspectorTabs">
+            <div class="inspector-tab active" data-tab="overview" onclick="inspectorSwitchTab('overview')">Översikt</div>
+            <div class="inspector-tab" data-tab="meta" onclick="inspectorSwitchTab('meta')">Meta</div>
+            <div class="inspector-tab" data-tab="headings" onclick="inspectorSwitchTab('headings')">Rubriker</div>
+            <div class="inspector-tab" data-tab="links" onclick="inspectorSwitchTab('links')">Länkar</div>
+            <div class="inspector-tab" data-tab="images" onclick="inspectorSwitchTab('images')">Bilder</div>
+            <div class="inspector-tab" data-tab="schema" onclick="inspectorSwitchTab('schema')">Schema</div>
+            <div class="inspector-tab" data-tab="perf" onclick="inspectorSwitchTab('perf')">Prestanda</div>
+            <div class="inspector-tab" data-tab="console" onclick="inspectorSwitchTab('console')">Konsol</div>
+            <div class="inspector-tab" data-tab="network" onclick="inspectorSwitchTab('network')">Nätverk</div>
+            <div class="inspector-tab" data-tab="elements" onclick="inspectorSwitchTab('elements')">Element</div>
+            <div class="inspector-tab" data-tab="raw" onclick="inspectorSwitchTab('raw')">Rådata</div>
+          </div>
+          <div class="inspector-hdr-spacer"></div>
+          <button class="inspector-btn" id="elemPickerBtn" onclick="toggleElementPicker()" title="Välj element" style="font-size:14px;display:none">⊹</button>
+          <button class="inspector-btn" onclick="runInspector()" title="Uppdatera analys">↻</button>
+          <button class="inspector-btn" onclick="copyInspectorData()" title="Kopiera JSON">📋</button>
+          <button class="inspector-btn" onclick="closeInspector()" title="Stäng">✕</button>
+        </div>
+        <div class="inspector-body" id="inspectorBody">
+          <div style="text-align:center;padding:30px;color:var(--muted)">Tryck ↻ eller F12 för att analysera sidan</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- SEOZ Panel -->
+    <div class="seoz-panel" id="seozPanel">
+      <div class="panel-hdr">
+        <div class="ph-mark" id="phIcon">🔍</div>
+        <div class="ph-tit" id="panelTitle">SEOZ</div>
+        <button class="ph-cls" onclick="closePanel()">✕</button>
+      </div>
+      <div class="panel-body" id="panelBody"></div>
+    </div>
+
+    <!-- DOCK -->
+    <div class="dock">
+      <div class="di" id="di-seo" onclick="togglePanel('seo')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <div class="dtt">SEO-analys</div>
+      </div>
+      <div class="di" id="di-kw" onclick="togglePanel('kw')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
+        <div class="dtt">Keywords</div>
+      </div>
+      <div class="di" id="di-ai" onclick="togglePanel('ai')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
+        <div class="dtt">AI-synlighet</div>
+      </div>
+      <div class="dock-sep"></div>
+      <div class="di" id="di-clients" onclick="togglePanel('clients')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M17 21v-2a4 4 0 00-4-4H5a4 4 0 00-4-4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 00-3-3.87M16 3.13a4 4 0 010 7.75"/></svg>
+        <div class="dtt">Klienter</div>
+      </div>
+      <div class="dock-spacer"></div>
+      <div class="di" id="di-settings" onclick="togglePanel('settings')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
+        <div class="dtt">Inställningar</div>
+      </div>
+    </div>
+  </div>
+
+  <!-- STATUS BAR -->
+  <div class="statusbar">
+    <div class="sb"><div class="sb-dot" id="sbDot"></div><span id="sbSync">Ej synkad</span></div>
+    <div style="flex:1"></div>
+    <div class="sb" id="sbDomain">—</div>
+    <div class="sb" id="sbClient">—</div>
+    <div class="sb" id="sbVersion" style="opacity:.5">v—</div>
+  </div>
+</div>
+
+<!-- CHROME DROPDOWN MENU -->
+<div class="chrome-dd" id="chromeDd"></div>
+
+<!-- HISTORY OVERLAY -->
+<div class="history-overlay" id="historyOverlay" onclick="if(event.target===this)closeHistory()">
+  <div class="history-box">
+    <div class="history-hdr">
+      <h3>🕒 Historik</h3>
+      <input class="history-search" id="historySearch" placeholder="Sök i historik..." oninput="renderHistory(this.value)">
+      <button class="ph-cls" onclick="closeHistory()">✕</button>
+    </div>
+    <div class="history-list" id="historyList"></div>
+    <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
+      <button class="bm-cancel" style="font-size:11px;height:28px;padding:0 12px" onclick="clearHistory()">Rensa historik</button>
+      <div style="flex:1"></div>
+    </div>
+  </div>
+</div>
+
+<!-- CONTEXT MENU -->
+<div class="ctx-menu" id="ctxMenu"></div>
+
+<!-- TOAST -->
+<div id="toast"><div class="td" id="toastDot"></div><span id="toastMsg"></span></div>
+
+<script>
+'use strict'
+
+const SE = window.seoz || {
+  minimize:()=>{}, maximize:()=>{}, close:()=>{},
+  fullscreen:()=>{}, isFullscreen:async()=>false,
+  toggleDevTools:()=>{},
+  blockerGetEnabled:async()=>true, blockerSetEnabled:async()=>true, blockerGetStats:async()=>({blocked:0,session:0}), blockerResetStats:()=>{},
+  updaterCheck:()=>{}, updaterDownload:()=>{}, updaterInstall:()=>{}, updaterGetVersion:async()=>'1.0.0',
+  getTheme:async()=>'dark', setTheme:()=>{},
+  getApiKey:async()=>null, setApiKey:async()=>true, delApiKey:async()=>true,
+  triggerSync:async()=>({ok:false}), fetchApi:async()=>({ok:false}),
+  notify:()=>{}, openExternal:()=>{}, storeGet:async()=>null, storeSet:async()=>true,
+  on:()=>{}, off:()=>{},
+  isWindows:true, isMac:false,
+}
+
+// ══════════════════════════════════════════════════════
+//  SYNCED DATA STORE
+// ══════════════════════════════════════════════════════
+const synced = {
+  user: null,
+  workspace: null,
+  clients: [],
+  activeClientId: null,
+  keywords: null,
+  aiVisibility: null,
+}
+
+// ══════════════════════════════════════════════════════
+//  WEBVIEW
+// ══════════════════════════════════════════════════════
+const wv = document.getElementById('wv')
+
+wv.addEventListener('did-navigate', e => updateURL(e.url))
+wv.addEventListener('did-navigate-in-page', e => updateURL(e.url))
+wv.addEventListener('did-start-loading', () => {
+  document.getElementById('spinner').classList.add('on')
+  document.getElementById('relBtn').textContent = '✕'
+  const tab = getActive(); if (tab) { tab.loading = true; renderTabs() }
+})
+wv.addEventListener('did-stop-loading', () => {
+  document.getElementById('spinner').classList.remove('on')
+  document.getElementById('relBtn').textContent = '↻'
+  const tab = getActive(); if (tab) { tab.loading = false; renderTabs() }
+})
+wv.addEventListener('page-title-updated', e => {
+  const tab = getActive()
+  if (tab) { tab.title = e.title; renderTabs() }
+})
+wv.addEventListener('page-favicon-updated', e => {
+  const tab = getActive()
+  if (tab && e.favicons && e.favicons.length > 0) {
+    tab.favicon = e.favicons[0]
+    renderTabs()
+    // Also update URL bar favicon
+    setUrlFavicon(e.favicons[0])
+  }
+})
+wv.addEventListener('new-window', e => newTab(e.url))
+
+function updateURL(url) {
+  document.getElementById('urlInput').value = url
+  // Update status bar domain
+  try { document.getElementById('sbDomain').textContent = new URL(url).hostname } catch(_){}
+  // Set favicon from Google's service (instant, reliable)
+  try {
+    const host = new URL(url).hostname
+    if (host) {
+      const gUrl = 'https://www.google.com/s2/favicons?domain=' + host + '&sz=32'
+      setUrlFavicon(gUrl)
+    }
+  } catch(_){}
+  const tab = getActive()
+  if (tab) {
+    tab.url = url
+    // Set tab favicon from Google's service
+    try {
+      const host = new URL(url).hostname
+      if (host) tab.favicon = 'https://www.google.com/s2/favicons?domain=' + host + '&sz=32'
+    } catch(_){}
+    if (!tab.title || tab.title === 'Ny flik') {
+      try { tab.title = new URL(url).hostname } catch(_) {}
+    }
+    renderTabs()
+  }
+}
+
+function setUrlFavicon(src) {
+  const img = document.getElementById('urlFav')
+  const lock = document.getElementById('urlLock')
+  if (img && src) {
+    img.src = src
+    // onload/onerror handlers in HTML handle display
+    if (lock) lock.style.display = 'none'
+  }
+}
+
+function doNav(raw) {
+  if (!raw) return
+  let u = raw.trim()
+  if (!/^https?:\/\//i.test(u) && !u.includes(' ') && u.includes('.')) u = 'https://' + u
+  else if (u.includes(' ') || !u.includes('.')) u = 'https://www.google.com/search?q=' + encodeURIComponent(u)
+  wv.loadURL(u)
+}
+
+function wvBack()   { wv.goBack() }
+function wvFwd()    { wv.goForward() }
+function wvReload() {
+  if (document.getElementById('relBtn').textContent === '✕') wv.stop()
+  else wv.reload()
+}
+
+// ══════════════════════════════════════════════════════
+//  TABS
+// ══════════════════════════════════════════════════════
+let tabs = [{ id:1, title:'Google', url:'https://www.google.com', loading:false, favicon:null }]
+let activeId = 1
+let nextId = 2
+
+const getActive = () => tabs.find(t => t.id === activeId)
+
+function renderTabs() {
+  const bar = document.getElementById('tabbar')
+  bar.querySelectorAll('.tab').forEach(el => el.remove())
+  const ntBtn = document.getElementById('newtabBtn')
+
+  tabs.forEach(tab => {
+    const el = document.createElement('div')
+    el.className = 'tab' + (tab.id === activeId ? ' active' : '')
+
+    let icoHtml
+    if (tab.loading) {
+      icoHtml = '<div class="tab-spin"></div>'
+    } else if (tab.favicon) {
+      icoHtml = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.textContent='🌐';this.style.fontSize='11px'">`
+    } else {
+      icoHtml = '<span class="tab-ico" style="font-size:11px">🌐</span>'
+    }
+
+    el.innerHTML = `
+      ${icoHtml}
+      <div class="tab-title">${esc(tab.title)}</div>
+      <div class="tab-x" onclick="closeTab(event,${tab.id})">✕</div>
+      <div class="tab-tip">
+        <div class="tab-tip-title">${esc(tab.title)}</div>
+        <div class="tab-tip-url">${esc(tab.url)}</div>
+      </div>
+    `
+    el.addEventListener('click', () => switchTab(tab.id))
+    bar.insertBefore(el, ntBtn)
+  })
+}
+
+function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
+
+function newTab(url = 'https://www.google.com') {
+  const id = nextId++
+  tabs.push({ id, title:'Ny flik', url, loading:false, favicon:null })
+  switchTab(id)
+}
+
+function switchTab(id) {
+  activeId = id
+  const tab = getActive()
+  if (tab) {
+    wv.loadURL(tab.url)
+    document.getElementById('urlInput').value = tab.url
+    if (tab.favicon) setUrlFavicon(tab.favicon)
+  }
+  renderTabs()
+}
+
+function closeTab(e, id) {
+  e.stopPropagation()
+  if (tabs.length === 1) return
+  const idx = tabs.findIndex(t => t.id === id)
+  tabs = tabs.filter(t => t.id !== id)
+  if (activeId === id) switchTab(tabs[Math.min(idx, tabs.length-1)].id)
+  else renderTabs()
+}
+
+// ══════════════════════════════════════════════════════
+//  PANEL SYSTEM (dock)
+// ══════════════════════════════════════════════════════
+let currentPanel = null
+
+function togglePanel(name) {
+  if (currentPanel === name) { closePanel(); return }
+  openPanel(name)
+}
+
+function openPanel(name) {
+  currentPanel = name
+  document.getElementById('seozPanel').classList.add('open')
+  // Highlight active dock icon
+  document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
+  const diEl = document.getElementById('di-' + name)
+  if (diEl) diEl.classList.add('active')
+  renderPanelContent(name)
+}
+
+function closePanel() {
+  currentPanel = null
+  document.getElementById('seozPanel').classList.remove('open')
+  document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
+}
+
+async function renderPanelContent(name) {
+  const icon = document.getElementById('phIcon')
+  const title = document.getElementById('panelTitle')
+  const body = document.getElementById('panelBody')
+
+  if (name === 'seo') {
+    icon.textContent = '🔍'; title.textContent = 'SEO-analys'
+    body.innerHTML = `
+      <div class="sh">On-page</div>
+      <div class="mr"><span class="mrl"><span class="md dg"></span>Title tag</span><span class="bdg bg">OK</span></div>
+      <div class="mr"><span class="mrl"><span class="md dg"></span>Meta description</span><span class="bdg bg">OK</span></div>
+      <div class="mr"><span class="mrl"><span class="md do"></span>H1-struktur</span><span class="bdg bw">Se över</span></div>
+      <div class="mr"><span class="mrl"><span class="md dr"></span>Alt-texter</span><span class="bdg bb">Saknas</span></div>
+      <p style="font-size:11px;color:var(--muted);margin-top:14px">Analyserar aktuell sida. Anslut ditt SEOZ-konto för djupare data.</p>
+    `
+  } else if (name === 'kw') {
+    icon.textContent = '📊'; title.textContent = 'Keywords'
+    if (synced.keywords && synced.keywords.length) {
+      let html = '<div class="sh">SPÅRADE KEYWORDS</div>'
+      synced.keywords.forEach(k => {
+        const pos = k.position || '—'
+        const cls = pos <= 3 ? 'kpt' : pos <= 10 ? 'kpm' : 'kpl'
+        const trend = k.trend > 0 ? `<span class="kw-d up">▲${k.trend}</span>` : k.trend < 0 ? `<span class="kw-d dn">▼${Math.abs(k.trend)}</span>` : '<span class="kw-d">—</span>'
+        html += `<div class="kw"><div class="kp ${cls}">${pos}</div><span class="kw-w">${esc(k.keyword)}</span><span class="kw-v">${fmtNum(k.clicks)}</span>${trend}</div>`
+      })
+      body.innerHTML = html
+    } else {
+      body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se keywords.</p>'
+    }
+  } else if (name === 'ai') {
+    icon.textContent = '🤖'; title.textContent = 'AI-synlighet'
+    if (synced.aiVisibility) {
+      const ai = synced.aiVisibility
+      const score = Math.round(ai.overallScore || 0)
+      const col = score >= 70 ? 'var(--g)' : score >= 40 ? 'var(--w)' : 'var(--r)'
+      let html = `
+        <div style="display:flex;align-items:center;gap:12px;margin:8px 0 16px">
+          <div class="score-ring">
+            <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.26} 126" stroke-linecap="round"/></svg>
+            <div class="score-num" style="color:${col}">${score}</div>
+          </div>
+          <div><div style="font-size:14px;font-weight:800;color:var(--head)">${score}%</div><div style="font-size:10px;color:var(--muted)">AI-synlighet</div></div>
+        </div>
+      `
+      if (ai.models && ai.models.length) {
+        html += '<div class="sh">PER MODELL</div>'
+        ai.models.forEach(m => {
+          const s = Math.round(m.score || 0)
+          const c = s >= 70 ? 'bg' : s >= 40 ? 'bw' : 'bb'
+          html += `<div class="mr"><span class="mrl"><span class="md db"></span>${esc(m.model)}</span><span class="bdg ${c}">${s}%</span></div>`
+        })
+      }
+      body.innerHTML = html
+    } else {
+      body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se AI-synlighet.</p>'
+    }
+  } else if (name === 'clients') {
+    icon.textContent = '👥'; title.textContent = 'Klienter'
+    if (synced.clients.length) {
+      const colors = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
+      let html = '<div class="sh">DINA KLIENTER</div>'
+      synced.clients.forEach((c, i) => {
+        const sel = c.id === synced.activeClientId ? ' sel' : ''
+        const score = c.seoScore != null ? Math.round(c.seoScore) : '—'
+        const col = colors[i % colors.length]
+        html += `<div class="client-row${sel}" onclick="selectClient('${c.id}')"><div class="cl-dot" style="background:${col}"></div><div class="cl-name">${esc(c.name)}</div><span class="cl-score" style="color:${col}">${score}</span></div>`
+      })
+      body.innerHTML = html
+    } else {
+      body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Inga klienter hittade. Synka ditt konto.</p>'
+    }
+  } else if (name === 'settings') {
+    icon.textContent = '⚙️'; title.textContent = 'Inställningar'
+    const key = await SE.getApiKey()
+    const masked = key ? key.slice(0,10) + '••••••••' : 'Ej ansluten'
+    body.innerHTML = `
+      <div class="sh">KONTO</div>
+      <div class="mr"><span class="mrl">API-nyckel</span><span class="mrv" style="font-size:10px;font-family:monospace">${esc(masked)}</span></div>
+      <div class="mr"><span class="mrl">Workspace</span><span class="mrv">${synced.workspace ? esc(synced.workspace.name || '—') : '—'}</span></div>
+      <button class="act-btn" style="margin-top:8px" onclick="openApiKeyPage()">🔑 Hantera nycklar på seoz.se</button>
+      <button class="act-btn" style="margin-top:6px;color:var(--r)" onclick="doDisconnect()">Koppla från</button>
+      <div class="sh" style="margin-top:18px">SYNK</div>
+      <div class="mr"><span class="mrl">Auto-synk</span><span class="mrv">Var 30:e sekund</span></div>
+      <button class="act-btn" style="margin-top:8px" onclick="syncNow()">⚡ Synka nu</button>
+      <div class="sh" style="margin-top:18px">UPPDATERINGAR</div>
+      <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
+      <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">🔄 Sök efter uppdateringar</button>
+    `
+    SE.updaterGetVersion().then(v => {
+      const el = document.getElementById('settingsVersion')
+      if (el) el.textContent = 'v' + v
+    })
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  CLIENT SELECTION & DATA FETCHING
+// ══════════════════════════════════════════════════════
+async function selectClient(clientId) {
+  synced.activeClientId = clientId
+  await SE.storeSet('activeClientId', clientId)
+  // Update status bar
+  const cl = synced.clients.find(c => c.id === clientId)
+  if (cl) document.getElementById('sbClient').textContent = cl.name
+  // Fetch client-specific data
+  await fetchClientData(clientId)
+  // Re-render current panel
+  if (currentPanel) renderPanelContent(currentPanel)
+  toast('Klient vald: ' + (cl?.name || ''), '#4680ff')
+}
+
+async function fetchClientData(clientId) {
+  const apiKey = await SE.getApiKey()
+  if (!apiKey || !clientId) return
+
+  try {
+    const [kwRes, aiRes] = await Promise.all([
+      SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
+      SE.fetchApi({ endpoint: '/ai-visibility', apiKey, params: { clientId } }),
+    ])
+    if (kwRes && kwRes.keywords) synced.keywords = kwRes.keywords
+    if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
+  } catch(e) {
+    console.error('fetchClientData error:', e)
+  }
+}
+
+// ══════════════════════════════════════════════════════
+//  AUTH & SYNC
+// ══════════════════════════════════════════════════════
+async function init() {
+  const key = await SE.getApiKey()
+  if (key) {
+    document.getElementById('auth').classList.add('gone')
+    // Auto-sync on startup
+    await syncNow()
+  }
+  renderTabs()
+}
+
+async function doConnect(mode) {
+  const errEl = document.getElementById('authErr')
+  const okEl = document.getElementById('authOk')
+  errEl.classList.remove('show')
+  okEl.classList.remove('show')
+
+  const key = mode === 'demo' ? 'demo_123' : document.getElementById('apiKeyInput').value.trim()
+  if (!key) return
+
+  if (mode === 'demo') {
+    await SE.setApiKey(key)
+    document.getElementById('auth').classList.add('gone')
+    toast('Demokonto anslutet!', '#2ca87f')
+    return
+  }
+
+  // Real connection — validate via API
+  try {
+    const res = await SE.triggerSync(key)
+    if (res.ok) {
+      await SE.setApiKey(key)
+      synced.user = res.user
+      synced.workspace = res.workspace
+      synced.clients = res.clients || []
+      okEl.classList.add('show')
+      setTimeout(() => {
+        document.getElementById('auth').classList.add('gone')
+        updateSyncUI()
+        toast('Ansluten till SEOZ!', '#2ca87f')
+      }, 800)
+    } else {
+      errEl.textContent = '⚠️ ' + (res.error || 'Ogiltig nyckel')
+      errEl.classList.add('show')
+    }
+  } catch (e) {
+    errEl.textContent = '⚠️ Anslutningsfel: ' + e.message
+    errEl.classList.add('show')
+  }
+}
+
+async function doDisconnect() {
+  await SE.delApiKey()
+  synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.activeClientId = null
+  document.getElementById('auth').classList.remove('gone')
+  document.getElementById('sbSync').textContent = 'Ej synkad'
+  document.getElementById('sbClient').textContent = '—'
+  closePanel()
+  toast('Konto frånkopplat', '#e58a00')
+}
+
+async function syncNow() {
+  const key = await SE.getApiKey()
+  if (!key) return
+  document.getElementById('sbSync').textContent = 'Synkar...'
+  try {
+    const res = await SE.triggerSync(key)
+    if (res.ok) {
+      synced.user = res.user
+      synced.workspace = res.workspace
+      synced.clients = res.clients || []
+      updateSyncUI()
+      // Restore active client
+      const saved = await SE.storeGet('activeClientId')
+      if (saved && synced.clients.find(c => c.id === saved)) {
+        synced.activeClientId = saved
+        const cl = synced.clients.find(c => c.id === saved)
+        if (cl) document.getElementById('sbClient').textContent = cl.name
+        await fetchClientData(saved)
+      } else if (synced.clients.length) {
+        await selectClient(synced.clients[0].id)
+      }
+      if (currentPanel) renderPanelContent(currentPanel)
+    } else {
+      document.getElementById('sbSync').textContent = 'Synk misslyckades'
+    }
+  } catch(e) {
+    document.getElementById('sbSync').textContent = 'Synk-fel'
+  }
+}
+
+function updateSyncUI() {
+  const now = new Date()
+  document.getElementById('sbSync').textContent = `Synkad ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`
+  document.getElementById('sbDot').style.background = 'var(--g)'
+}
+
+function openApiKeyPage() {
+  wv.loadURL('https://flow.seoz.se/dashboard/verktyg/api')
+  document.getElementById('auth').classList.add('gone')
+}
+
+// Listen for sync-data from main process (auto-sync)
+SE.on('sync-data', data => {
+  if (!data || !data.ok) return
+  synced.user = data.user
+  synced.workspace = data.workspace
+  synced.clients = data.clients || []
+  updateSyncUI()
+  if (currentPanel) renderPanelContent(currentPanel)
+})
+
+// ══════════════════════════════════════════════════════
+//  HELPERS
+// ══════════════════════════════════════════════════════
+function fmtNum(n) {
+  if (n == null) return '—'
+  if (n >= 1000000) return (n/1000000).toFixed(1) + 'M'
+  if (n >= 1000) return (n/1000).toFixed(1) + 'k'
+  return String(n)
+}
+
+function toast(msg, color='#2ca87f') {
+  const el = document.getElementById('toast')
+  document.getElementById('toastMsg').textContent = msg
+  document.getElementById('toastDot').style.background = color
+  el.classList.add('on')
+  clearTimeout(el._t)
+  el._t = setTimeout(() => el.classList.remove('on'), 2600)
+}
+
+// ══════════════════════════════════════════════════════
+//  BOOKMARKS — with drag & drop, folders, context menus
+// ══════════════════════════════════════════════════════
+let bookmarks = []   // [{id, title, url, folder, favicon}]
+let bmFolders = []   // folder order
+let bmEditId = null
+let bmNextId = 1
+let bmDragId = null  // id of bookmark being dragged
+
+async function loadBookmarks() {
+  const saved = await SE.storeGet('bookmarks', '[]')
+  try { bookmarks = typeof saved === 'string' ? JSON.parse(saved) : (saved || []) } catch(e) { bookmarks = [] }
+  const savedF = await SE.storeGet('bmFolders', '[]')
+  try { bmFolders = typeof savedF === 'string' ? JSON.parse(savedF) : (savedF || []) } catch(e) { bmFolders = [] }
+  bmNextId = bookmarks.reduce((max, b) => Math.max(max, b.id || 0), 0) + 1
+  renderBmBar()
+}
+
+async function saveBookmarks() {
+  await SE.storeSet('bookmarks', JSON.stringify(bookmarks))
+  await SE.storeSet('bmFolders', JSON.stringify(bmFolders))
+}
+
+function getAllFolders() {
+  return [...new Set([...bmFolders, ...bookmarks.map(b => b.folder).filter(Boolean)])]
+}
+
+// ── Render bookmark bar ──
+function renderBmBar() {
+  const bar = document.getElementById('bmbar')
+  bar.innerHTML = ''
+
+  // If empty, show hint
+  if (!bookmarks.length && !getAllFolders().length) {
+    bar.innerHTML = '<div class="bm-empty">Klicka ☆ i adressfältet eller högerklicka här</div>'
+    updateBmStar()
+    return
+  }
+
+  // Loose bookmarks (no folder)
+  bookmarks.filter(b => !b.folder).forEach(b => bar.appendChild(makeBmEl(b)))
+
+  // Folders
+  getAllFolders().forEach(fname => {
+    const wrap = document.createElement('div')
+    wrap.style.cssText = 'position:relative;flex-shrink:0'
+    wrap.dataset.folder = fname
+
+    const btn = document.createElement('div')
+    btn.className = 'bm-item bm-folder-item'
+    btn.innerHTML = `📁 <span>${esc(fname)}</span><span class="bm-folder-arrow">▾</span>`
+    btn.onclick = () => toggleFolderDrop(wrap)
+    btn.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, folderCtxItems(fname)) }
+    // Drop target: drag bookmark onto folder
+    btn.addEventListener('dragover', e => { e.preventDefault(); e.dataTransfer.dropEffect = 'move'; btn.classList.add('drag-over') })
+    btn.addEventListener('dragleave', () => btn.classList.remove('drag-over'))
+    btn.addEventListener('drop', e => {
+      e.preventDefault(); btn.classList.remove('drag-over')
+      if (bmDragId != null) { moveBmToFolder(bmDragId, fname) }
+    })
+    wrap.appendChild(btn)
+
+    // Dropdown
+    const drop = document.createElement('div')
+    drop.className = 'bm-drop'
+    const inFolder = bookmarks.filter(b => b.folder === fname)
+    inFolder.forEach(b => {
+      const item = document.createElement('div')
+      item.className = 'bm-drop-item'
+      item.draggable = true
+      item.dataset.bmid = b.id
+      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<span class="bm-ico" style="font-size:11px">🌐</span>'
+      item.innerHTML = fav + `<span>${esc(b.title)}</span>`
+      item.onclick = (e) => { e.stopPropagation(); wv.loadURL(b.url); closeAllDrops() }
+      item.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, bmCtxItems(b)) }
+      item.addEventListener('dragstart', e => { bmDragId = b.id; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move' })
+      item.addEventListener('dragend', () => { bmDragId = null; item.classList.remove('dragging') })
+      item.addEventListener('dragover', e => { e.preventDefault(); item.classList.add('drag-over') })
+      item.addEventListener('dragleave', () => item.classList.remove('drag-over'))
+      item.addEventListener('drop', e => {
+        e.preventDefault(); e.stopPropagation(); item.classList.remove('drag-over')
+        if (bmDragId != null && bmDragId !== b.id) reorderBm(bmDragId, b.id)
+      })
+      drop.appendChild(item)
+    })
+    if (!inFolder.length) {
+      const empty = document.createElement('div')
+      empty.className = 'bm-drop-item muted'
+      empty.textContent = 'Tom mapp — dra hit bokmärken'
+      // Accept drops on empty folder
+      empty.addEventListener('dragover', e => { e.preventDefault(); empty.classList.add('drag-over') })
+      empty.addEventListener('dragleave', () => empty.classList.remove('drag-over'))
+      empty.addEventListener('drop', e => {
+        e.preventDefault(); empty.classList.remove('drag-over')
+        if (bmDragId != null) moveBmToFolder(bmDragId, fname)
+      })
+      drop.appendChild(empty)
+    }
+    wrap.appendChild(drop)
+    bar.appendChild(wrap)
+  })
+
+  updateBmStar()
+}
+
+function makeBmEl(b) {
+  const el = document.createElement('div')
+  el.className = 'bm-item'
+  el.draggable = true
+  el.dataset.bmid = b.id
+  const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<span class="bm-ico" style="font-size:11px">🌐</span>'
+  el.innerHTML = fav + `<span>${esc(b.title)}</span>`
+  el.onclick = () => wv.loadURL(b.url)
+  el.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, bmCtxItems(b)) }
+  // Drag
+  el.addEventListener('dragstart', e => { bmDragId = b.id; el.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move' })
+  el.addEventListener('dragend', () => { bmDragId = null; el.classList.remove('dragging') })
+  // Drop (reorder)
+  el.addEventListener('dragover', e => {
+    e.preventDefault()
+    const rect = el.getBoundingClientRect()
+    const half = rect.left + rect.width / 2
+    el.classList.toggle('drag-over-left', e.clientX < half)
+    el.classList.toggle('drag-over-right', e.clientX >= half)
+  })
+  el.addEventListener('dragleave', () => { el.classList.remove('drag-over-left','drag-over-right') })
+  el.addEventListener('drop', e => {
+    e.preventDefault(); e.stopPropagation()
+    el.classList.remove('drag-over-left','drag-over-right')
+    if (bmDragId != null && bmDragId !== b.id) {
+      const rect = el.getBoundingClientRect()
+      const before = e.clientX < rect.left + rect.width / 2
+      reorderBm(bmDragId, b.id, before)
+    }
+  })
+  return el
+}
+
+// ── Drag operations ──
+function moveBmToFolder(id, folder) {
+  const bm = bookmarks.find(b => b.id === id)
+  if (!bm) return
+  bm.folder = folder
+  saveBookmarks(); renderBmBar()
+  toast(folder ? `Flyttad till ${folder}` : 'Flyttad till bokmärkesfältet', '#4680ff')
+}
+
+function reorderBm(dragId, targetId, before = true) {
+  const dragBm = bookmarks.find(b => b.id === dragId)
+  const targetBm = bookmarks.find(b => b.id === targetId)
+  if (!dragBm || !targetBm) return
+  // Move dragged bm to same folder as target
+  dragBm.folder = targetBm.folder
+  // Reorder in array
+  bookmarks = bookmarks.filter(b => b.id !== dragId)
+  const idx = bookmarks.findIndex(b => b.id === targetId)
+  bookmarks.splice(before ? idx : idx + 1, 0, dragBm)
+  saveBookmarks(); renderBmBar()
+}
+
+// ── Folder dropdown ──
+function toggleFolderDrop(wrap) {
+  const drop = wrap.querySelector('.bm-drop')
+  const isOpen = drop.classList.contains('open')
+  closeAllDrops()
+  if (!isOpen) drop.classList.add('open')
+}
+function closeAllDrops() { document.querySelectorAll('.bm-drop').forEach(d => d.classList.remove('open')) }
+
+// ── Context menu ──
+function showCtx(e, items) {
+  closeAllDrops()
+  const menu = document.getElementById('ctxMenu')
+  menu.innerHTML = ''
+  items.forEach(item => {
+    if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
+    const el = document.createElement('div')
+    el.className = 'ctx-item' + (item.danger ? ' danger' : '')
+    el.textContent = item.label
+    el.onclick = () => { hideCtx(); item.action() }
+    menu.appendChild(el)
+  })
+  // Position
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px'
+  menu.style.top = Math.min(e.clientY, window.innerHeight - items.length * 30) + 'px'
+  menu.classList.add('open')
+}
+function hideCtx() { document.getElementById('ctxMenu').classList.remove('open') }
+
+function bmCtxItems(bm) {
+  const folders = getAllFolders()
+  const moveItems = folders.filter(f => f !== bm.folder).map(f => ({
+    label: '  → ' + f,
+    action: () => moveBmToFolder(bm.id, f)
+  }))
+  return [
+    { label: '🔗 Öppna', action: () => wv.loadURL(bm.url) },
+    { label: '🔗 Öppna i ny flik', action: () => newTab(bm.url) },
+    '---',
+    { label: '✏️ Redigera', action: () => openBmEdit(bm.id) },
+    ...(moveItems.length ? [{ label: '📁 Flytta till mapp:', action: () => {} }, ...moveItems] : []),
+    ...(bm.folder ? [{ label: '📤 Flytta till fältet', action: () => moveBmToFolder(bm.id, null) }] : []),
+    { label: '📁 Ny mapp & flytta', action: async () => {
+      const name = await seozPrompt('Namn på ny mapp')
+      if (name) {
+        if (!bmFolders.includes(name)) bmFolders.push(name)
+        moveBmToFolder(bm.id, name)
+      }
+    }},
+    '---',
+    { label: '🗑 Ta bort', danger: true, action: () => { bookmarks = bookmarks.filter(b => b.id !== bm.id); saveBookmarks(); renderBmBar(); toast('Bokmärke borttaget','#e58a00') } },
+  ]
+}
+
+function folderCtxItems(fname) {
+  return [
+    { label: '✏️ Byt namn', action: async () => {
+      const newName = await seozPrompt('Nytt namn på mapp', fname)
+      if (newName && newName !== fname) {
+        bookmarks.forEach(b => { if (b.folder === fname) b.folder = newName })
+        const idx = bmFolders.indexOf(fname)
+        if (idx >= 0) bmFolders[idx] = newName; else bmFolders.push(newName)
+        saveBookmarks(); renderBmBar(); toast('Mapp omdöpt','#4680ff')
+      }
+    }},
+    { label: '📂 Öppna alla', action: () => {
+      const inF = bookmarks.filter(b => b.folder === fname)
+      inF.forEach(b => newTab(b.url))
+    }},
+    '---',
+    { label: '🗑 Ta bort mapp', danger: true, action: () => {
+      // Move contents to root, delete folder
+      bookmarks.forEach(b => { if (b.folder === fname) b.folder = null })
+      bmFolders = bmFolders.filter(f => f !== fname)
+      saveBookmarks(); renderBmBar(); toast('Mapp borttagen — bokmärken flyttade','#e58a00')
+    }},
+    { label: '🗑 Ta bort mapp + innehåll', danger: true, action: () => {
+      bookmarks = bookmarks.filter(b => b.folder !== fname)
+      bmFolders = bmFolders.filter(f => f !== fname)
+      saveBookmarks(); renderBmBar(); toast('Mapp och innehåll borttaget','#e58a00')
+    }},
+  ]
+}
+
+// ── Star button & edit modal ──
+function toggleBookmark() {
+  const url = document.getElementById('urlInput').value
+  if (!url) return
+  const existing = bookmarks.find(b => b.url === url)
+  if (existing) {
+    openBmEdit(existing.id)
+  } else {
+    const tab = getActive()
+    const title = tab?.title || url
+    let favicon = null
+    try { favicon = 'https://www.google.com/s2/favicons?domain=' + new URL(url).hostname + '&sz=32' } catch(_){}
+    bookmarks.push({ id: bmNextId++, title, url, folder: null, favicon })
+    saveBookmarks(); renderBmBar()
+    toast('Bokmärke tillagt!', '#2ca87f')
+  }
+}
+
+function openBmEdit(id) {
+  bmEditId = id; closeAllDrops(); hideCtx()
+  const bm = bookmarks.find(b => b.id === id)
+  if (!bm) return
+  document.getElementById('bmNameInput').value = bm.title
+  document.getElementById('bmUrlInput').value = bm.url
+  const sel = document.getElementById('bmFolderSelect')
+  sel.innerHTML = '<option value="">Ingen mapp</option>'
+  getAllFolders().forEach(f => {
+    const opt = document.createElement('option')
+    opt.value = f; opt.textContent = f
+    if (bm.folder === f) opt.selected = true
+    sel.appendChild(opt)
+  })
+  sel.innerHTML += '<option value="__new__">+ Ny mapp...</option>'
+  document.getElementById('bmDelBtn').style.display = ''
+  document.getElementById('bmModal').classList.add('open')
+}
+
+function closeBmModal() { document.getElementById('bmModal').classList.remove('open'); bmEditId = null }
+
+async function saveBmModal() {
+  const bm = bookmarks.find(b => b.id === bmEditId)
+  if (!bm) { closeBmModal(); return }
+  bm.title = document.getElementById('bmNameInput').value.trim() || bm.title
+  bm.url = document.getElementById('bmUrlInput').value.trim() || bm.url
+  let folder = document.getElementById('bmFolderSelect').value
+  if (folder === '__new__') {
+    closeBmModal()
+    folder = await seozPrompt('Namn på ny mapp')
+    if (folder) { if (!bmFolders.includes(folder)) bmFolders.push(folder) }
+    else folder = null
+  }
+  bm.folder = folder || null
+  saveBookmarks(); renderBmBar(); closeBmModal()
+  toast('Bokmärke uppdaterat', '#4680ff')
+}
+
+function deleteBookmark() {
+  bookmarks = bookmarks.filter(b => b.id !== bmEditId)
+  saveBookmarks(); renderBmBar(); closeBmModal()
+  toast('Bokmärke borttaget', '#e58a00')
+}
+
+function updateBmStar() {
+  const url = document.getElementById('urlInput').value
+  const star = document.getElementById('bmStar')
+  const exists = bookmarks.some(b => b.url === url)
+  star.textContent = exists ? '★' : '☆'
+  star.classList.toggle('saved', exists)
+}
+
+// Close menus on click outside
+document.addEventListener('click', e => {
+  if (!e.target.closest('.bm-folder-item') && !e.target.closest('.bm-drop')) closeAllDrops()
+  if (!e.target.closest('.ctx-menu')) hideCtx()
+})
+
+// Update star when URL changes
+const origUpdateURL = updateURL
+updateURL = function(url) { origUpdateURL(url); updateBmStar() }
+
+// ── Custom prompt (Electron blocks native prompt) ──
+let _promptResolve = null
+function seozPrompt(title, defaultVal = '') {
+  return new Promise(resolve => {
+    _promptResolve = resolve
+    document.getElementById('promptTitle').textContent = title
+    const inp = document.getElementById('promptInput')
+    inp.value = defaultVal
+    inp.placeholder = title
+    document.getElementById('promptModal').classList.add('open')
+    setTimeout(() => { inp.focus(); inp.select() }, 50)
+  })
+}
+function resolvePrompt(val) {
+  document.getElementById('promptModal').classList.remove('open')
+  if (_promptResolve) { _promptResolve(val && val.trim() ? val.trim() : null); _promptResolve = null }
+}
+
+// ── Setup bookmark bar events (once) ──
+;(function() {
+  const bar = document.getElementById('bmbar')
+  // Drop zone — drag bookmark to bar root
+  bar.addEventListener('dragover', e => e.preventDefault())
+  bar.addEventListener('drop', e => {
+    e.preventDefault()
+    if (bmDragId != null) moveBmToFolder(bmDragId, null)
+  })
+  // Right-click on empty area or bar background
+  bar.addEventListener('contextmenu', e => {
+    if (e.target.closest('.bm-item') || e.target.closest('.bm-drop-item')) return
+    e.preventDefault()
+    showCtx(e, [
+      { label: '⭐ Bokmärk aktuell sida', action: () => toggleBookmark() },
+      { label: '📁 Ny mapp', action: async () => {
+        const name = await seozPrompt('Namn på ny mapp')
+        if (name) {
+          if (!bmFolders.includes(name)) bmFolders.push(name)
+          saveBookmarks(); renderBmBar(); toast('Mapp skapad: ' + name, '#4680ff')
+        }
+      }},
+    ])
+  })
+})()
+
+// ══════════════════════════════════════════════════════
+//  SEOZ SHIELD — content blocker UI
+// ══════════════════════════════════════════════════════
+let blockerOn = true
+let blockerCount = 0
+
+async function initBlocker() {
+  blockerOn = await SE.blockerGetEnabled()
+  const stats = await SE.blockerGetStats()
+  blockerCount = stats.session || 0
+  updateBlockerUI()
+}
+
+function updateBlockerUI() {
+  const shield = document.getElementById('blockerShield')
+  const badge = document.getElementById('blockerBadge')
+  const toggle = document.getElementById('blockerToggle')
+  const stat = document.getElementById('blockerStatNum')
+
+  shield.classList.toggle('off', !blockerOn)
+  badge.textContent = blockerCount > 0 ? (blockerCount > 999 ? '999+' : blockerCount) : ''
+  if (toggle) toggle.classList.toggle('on', blockerOn)
+  if (stat) stat.textContent = blockerCount
+}
+
+function toggleBlockerPopup() {
+  const popup = document.getElementById('blockerPopup')
+  popup.classList.toggle('open')
+}
+
+async function toggleBlockerEnabled() {
+  blockerOn = !blockerOn
+  await SE.blockerSetEnabled(blockerOn)
+  updateBlockerUI()
+  toast(blockerOn ? 'Shield aktiverad' : 'Shield avstängd', blockerOn ? '#2ca87f' : '#e58a00')
+}
+
+// Listen for block count updates from main process
+SE.on('blocker-count', count => {
+  blockerCount = count
+  updateBlockerUI()
+})
+
+// Close popup on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('#blockerWrap')) {
+    document.getElementById('blockerPopup').classList.remove('open')
+  }
+})
+
+// ══════════════════════════════════════════════════════
+//  CHROME MENU (three-dot dropdown)
+// ══════════════════════════════════════════════════════
+let zoomLevel = 100
+
+function toggleChromeMenu() {
+  const dd = document.getElementById('chromeDd')
+  if (dd.classList.contains('open')) { closeChromeMenu(); return }
+  buildChromeMenu()
+  // Position below the button
+  const btn = document.getElementById('chromeMenuBtn')
+  const r = btn.getBoundingClientRect()
+  dd.style.top = (r.bottom + 4) + 'px'
+  dd.style.right = (window.innerWidth - r.right) + 'px'
+  dd.style.left = 'auto'
+  dd.classList.add('open')
+}
+function closeChromeMenu() { document.getElementById('chromeDd').classList.remove('open') }
+
+function buildChromeMenu() {
+  const dd = document.getElementById('chromeDd')
+  dd.innerHTML = ''
+  const items = [
+    { icon:'➕', label:'Ny flik', shortcut:'Ctrl+T', action: () => newTab() },
+    { icon:'🔗', label:'Ny flik med URL', shortcut:'', action: () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) } },
+    '---',
+    { icon:'📋', label:'Kopiera URL', shortcut:'', action: () => copyUrl() },
+    { icon:'📤', label:'Öppna i extern webbläsare', shortcut:'', action: () => SE.openExternal(document.getElementById('urlInput').value) },
+    '---',
+    'zoom',
+    '---',
+    { icon:'🔍', label:'Sök på sidan', shortcut:'Ctrl+F', action: () => openFindBar() },
+    { icon:'🖨️', label:'Skriv ut', shortcut:'Ctrl+P', action: () => doPrint() },
+    '---',
+    { icon:'🕒', label:'Historik', shortcut:'Ctrl+H', action: () => openHistory() },
+    { icon:'⬇️', label:'Nedladdningar', shortcut:'Ctrl+J', action: () => openDownloads() },
+    { icon:'⭐', label:'Bokmärken', shortcut:'Ctrl+D', action: () => toggleBookmark() },
+    '---',
+    { icon:'🛡️', label: blockerOn ? 'Shield aktiv (' + blockerCount + ' blockerade)' : 'Shield avstängd', shortcut:'', action: () => { toggleBlockerEnabled() } },
+    { icon:'🔬', label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
+    { icon:'⛶', label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
+    '---',
+    { icon:'🌙', label: document.documentElement.dataset.theme === 'dark' ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
+    { icon:'⚙️', label:'Inställningar', shortcut:'', action: () => togglePanel('settings') },
+  ]
+  items.forEach(item => {
+    if (item === '---') {
+      const sep = document.createElement('div'); sep.className = 'chrome-dd-sep'; dd.appendChild(sep); return
+    }
+    if (item === 'zoom') {
+      // Zoom control row
+      const row = document.createElement('div'); row.className = 'zoom-row'
+      row.innerHTML = `
+        <span class="cdi-icon" style="width:20px;text-align:center;font-size:13px;flex-shrink:0">🔎</span>
+        <button class="zoom-btn" onclick="event.stopPropagation();doZoom(-10)">−</button>
+        <span class="zoom-label" id="zoomLabel">${zoomLevel}%</span>
+        <button class="zoom-btn" onclick="event.stopPropagation();doZoom(10)">+</button>
+        <button class="zoom-btn" style="margin-left:4px;font-size:10px;width:auto;padding:0 6px" onclick="event.stopPropagation();doZoom(0)">⟲</button>
+      `
+      dd.appendChild(row); return
+    }
+    const el = document.createElement('div')
+    el.className = 'chrome-dd-item'
+    el.innerHTML = `<span class="cdi-icon">${item.icon}</span><span class="cdi-label">${item.label}</span>${item.shortcut ? `<span class="cdi-shortcut">${item.shortcut}</span>` : ''}`
+    el.onclick = () => { closeChromeMenu(); item.action() }
+    dd.appendChild(el)
+  })
+}
+
+// ══════════════════════════════════════════════════════
+//  ZOOM
+// ══════════════════════════════════════════════════════
+function doZoom(delta) {
+  if (delta === 0) zoomLevel = 100
+  else zoomLevel = Math.max(25, Math.min(500, zoomLevel + delta))
+  wv.setZoomFactor(zoomLevel / 100)
+  const label = document.getElementById('zoomLabel')
+  if (label) label.textContent = zoomLevel + '%'
+  // Update status bar
+  document.getElementById('sbDomain').textContent = (zoomLevel !== 100 ? zoomLevel + '% · ' : '') + getCurrentHost()
+}
+function getCurrentHost() {
+  try { return new URL(document.getElementById('urlInput').value).hostname } catch(_) { return '—' }
+}
+
+// ══════════════════════════════════════════════════════
+//  FIND IN PAGE
+// ══════════════════════════════════════════════════════
+let findActive = false
+
+function openFindBar() {
+  const bar = document.getElementById('findBar')
+  bar.classList.add('open')
+  findActive = true
+  setTimeout(() => {
+    const inp = document.getElementById('findInput')
+    inp.focus(); inp.select()
+  }, 100)
+}
+function closeFindBar() {
+  document.getElementById('findBar').classList.remove('open')
+  findActive = false
+  wv.stopFindInPage('clearSelection')
+  document.getElementById('findCount').textContent = ''
+  document.getElementById('findInput').value = ''
+}
+function doFind(text) {
+  if (!text) { wv.stopFindInPage('clearSelection'); document.getElementById('findCount').textContent = ''; return }
+  wv.findInPage(text)
+}
+function doFindNav(dir) {
+  const text = document.getElementById('findInput').value
+  if (!text) return
+  wv.findInPage(text, { forward: dir === 'fwd', findNext: true })
+}
+function findKeyHandler(e) {
+  if (e.key === 'Escape') closeFindBar()
+  else if (e.key === 'Enter') doFindNav(e.shiftKey ? 'back' : 'fwd')
+}
+// Listen for find-in-page results
+wv.addEventListener('found-in-page', e => {
+  const r = e.result
+  if (r) document.getElementById('findCount').textContent = `${r.activeMatchOrdinal}/${r.matches}`
+})
+
+// ══════════════════════════════════════════════════════
+//  HISTORY
+// ══════════════════════════════════════════════════════
+let browsingHistory = [] // [{title, url, favicon, time}]
+
+function addToHistory(url, title) {
+  if (!url || url === 'about:blank') return
+  const now = Date.now()
+  // Don't add duplicate if last entry is same URL within 2s
+  if (browsingHistory.length && browsingHistory[0].url === url && now - browsingHistory[0].time < 2000) return
+  let favicon = ''
+  try { favicon = 'https://www.google.com/s2/favicons?domain=' + new URL(url).hostname + '&sz=16' } catch(_){}
+  browsingHistory.unshift({ title: title || url, url, favicon, time: now })
+  if (browsingHistory.length > 500) browsingHistory.length = 500
+  // Persist
+  SE.storeSet('browsingHistory', JSON.stringify(browsingHistory))
+}
+
+async function loadHistory() {
+  const saved = await SE.storeGet('browsingHistory', '[]')
+  try { browsingHistory = typeof saved === 'string' ? JSON.parse(saved) : (saved || []) } catch(e) { browsingHistory = [] }
+}
+
+function openHistory() {
+  document.getElementById('historyOverlay').classList.add('open')
+  document.getElementById('historySearch').value = ''
+  renderHistory()
+  setTimeout(() => document.getElementById('historySearch').focus(), 100)
+}
+function closeHistory() { document.getElementById('historyOverlay').classList.remove('open') }
+
+function renderHistory(filter = '') {
+  const list = document.getElementById('historyList')
+  const lower = filter.toLowerCase()
+  const filtered = lower ? browsingHistory.filter(h => h.title.toLowerCase().includes(lower) || h.url.toLowerCase().includes(lower)) : browsingHistory
+  if (!filtered.length) { list.innerHTML = '<div class="history-empty">Ingen historik hittades</div>'; return }
+  let html = ''
+  let lastDate = ''
+  filtered.slice(0, 200).forEach(h => {
+    const d = new Date(h.time)
+    const dateStr = d.toLocaleDateString('sv-SE')
+    if (dateStr !== lastDate) {
+      lastDate = dateStr
+      html += `<div style="padding:6px 16px 2px;font-size:10px;font-weight:700;color:var(--muted);text-transform:uppercase">${dateStr === new Date().toLocaleDateString('sv-SE') ? 'Idag' : dateStr}</div>`
+    }
+    const timeStr = d.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' })
+    html += `<div class="history-item" onclick="closeHistory();doNav('${esc(h.url)}')" title="${esc(h.url)}">
+      <img src="${esc(h.favicon)}" onerror="this.style.display='none'">
+      <div class="history-item-info">
+        <div class="history-item-title">${esc(h.title)}</div>
+        <div class="history-item-url">${esc(h.url)}</div>
+      </div>
+      <span class="history-item-time">${timeStr}</span>
+    </div>`
+  })
+  list.innerHTML = html
+}
+
+function clearHistory() {
+  browsingHistory = []
+  SE.storeSet('browsingHistory', '[]')
+  renderHistory()
+  toast('Historik rensad', '#e58a00')
+}
+
+// ══════════════════════════════════════════════════════
+//  DOWNLOADS
+// ══════════════════════════════════════════════════════
+let downloads = [] // [{filename, url, time}]
+
+async function loadDownloads() {
+  const saved = await SE.storeGet('downloads', '[]')
+  try { downloads = typeof saved === 'string' ? JSON.parse(saved) : (saved || []) } catch(e) { downloads = [] }
+}
+
+function openDownloads() {
+  let html = '<div class="sh" style="margin-top:0">NEDLADDNINGAR</div>'
+  if (!downloads.length) {
+    html += '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Inga nedladdningar ännu</p>'
+  } else {
+    downloads.slice(0, 50).forEach(d => {
+      const t = new Date(d.time).toLocaleString('sv-SE')
+      html += `<div class="mr"><span class="mrl" style="gap:5px"><span style="font-size:13px">📄</span>${esc(d.filename)}</span><span class="mrv" style="font-size:9px;color:var(--muted)">${t}</span></div>`
+    })
+  }
+  html += '<button class="act-btn" style="margin-top:10px;color:var(--r)" onclick="clearDownloads()">Rensa nedladdningar</button>'
+  // Render in SEOZ panel (manually to avoid renderPanelContent overwriting)
+  currentPanel = '_downloads'
+  document.getElementById('phIcon').textContent = '⬇️'
+  document.getElementById('panelTitle').textContent = 'Nedladdningar'
+  document.getElementById('panelBody').innerHTML = html
+  document.getElementById('seozPanel').classList.add('open')
+  document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
+}
+
+function clearDownloads() {
+  downloads = []
+  SE.storeSet('downloads', '[]')
+  openDownloads()
+  toast('Nedladdningar rensade', '#e58a00')
+}
+
+// ══════════════════════════════════════════════════════
+//  PRINT
+// ══════════════════════════════════════════════════════
+function doPrint() {
+  wv.print()
+}
+
+// ══════════════════════════════════════════════════════
+//  COPY URL
+// ══════════════════════════════════════════════════════
+function copyUrl() {
+  const url = document.getElementById('urlInput').value
+  navigator.clipboard.writeText(url).then(() => {
+    toast('URL kopierad!', '#2ca87f')
+  }).catch(() => {
+    // Fallback
+    const inp = document.getElementById('urlInput')
+    inp.select()
+    document.execCommand('copy')
+    toast('URL kopierad!', '#2ca87f')
+  })
+}
+
+// ══════════════════════════════════════════════════════
+//  THEME TOGGLE
+// ══════════════════════════════════════════════════════
+function toggleTheme() {
+  const current = document.documentElement.dataset.theme
+  const next = current === 'dark' ? 'light' : 'dark'
+  document.documentElement.dataset.theme = next
+  SE.setTheme(next)
+  toast(next === 'dark' ? 'Mörkt tema' : 'Ljust tema', '#4680ff')
+}
+
+// ══════════════════════════════════════════════════════
+//  SEOZ INSPECTOR — full page SEO analysis
+// ══════════════════════════════════════════════════════
+let inspectorData = null
+let inspectorTab = 'overview'
+
+function openInspector() {
+  document.getElementById('inspectorDrawer').classList.add('open')
+  runInspector()
+}
+function closeInspector() {
+  document.getElementById('inspectorDrawer').classList.remove('open')
+}
+function toggleInspector() {
+  const d = document.getElementById('inspectorDrawer')
+  if (d.classList.contains('open')) closeInspector()
+  else openInspector()
+}
+
+function inspectorSwitchTab(tab) {
+  inspectorTab = tab
+  document.querySelectorAll('.inspector-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab))
+  renderInspector()
+}
+
+async function runInspector() {
+  const body = document.getElementById('inspectorBody')
+  body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar sida...</div>'
+
+  try {
+    const data = await wv.executeJavaScript(`(function(){
+      const d = document;
+      const url = location.href;
+      const canonical = d.querySelector('link[rel="canonical"]');
+      const title = d.title || '';
+      const metaDesc = d.querySelector('meta[name="description"]')?.content || '';
+      const metaKw = d.querySelector('meta[name="keywords"]')?.content || '';
+      const robots = d.querySelector('meta[name="robots"]')?.content || '';
+      const ogTitle = d.querySelector('meta[property="og:title"]')?.content || '';
+      const ogDesc = d.querySelector('meta[property="og:description"]')?.content || '';
+      const ogImage = d.querySelector('meta[property="og:image"]')?.content || '';
+      const ogType = d.querySelector('meta[property="og:type"]')?.content || '';
+      const ogUrl = d.querySelector('meta[property="og:url"]')?.content || '';
+      const ogSiteName = d.querySelector('meta[property="og:site_name"]')?.content || '';
+      const twCard = d.querySelector('meta[name="twitter:card"]')?.content || '';
+      const twTitle = d.querySelector('meta[name="twitter:title"]')?.content || '';
+      const twDesc = d.querySelector('meta[name="twitter:description"]')?.content || '';
+      const twImage = d.querySelector('meta[name="twitter:image"]')?.content || '';
+      const viewport = d.querySelector('meta[name="viewport"]')?.content || '';
+      const charset = d.characterSet || '';
+      const lang = d.documentElement.lang || '';
+      const generator = d.querySelector('meta[name="generator"]')?.content || '';
+
+      // Headings
+      const headings = [];
+      d.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+        headings.push({ level: parseInt(h.tagName[1]), text: h.textContent.trim().substring(0,200) });
+      });
+
+      // Links
+      const links = [];
+      const intLinks = new Set();
+      const extLinks = new Set();
+      d.querySelectorAll('a[href]').forEach(a => {
+        const href = a.href;
+        const text = a.textContent.trim().substring(0,100);
+        const rel = a.getAttribute('rel') || '';
+        const isExt = href && !href.startsWith(location.origin) && href.startsWith('http');
+        if (isExt) extLinks.add(href); else if (href.startsWith(location.origin)) intLinks.add(href);
+        if (links.length < 200) links.push({ href, text, rel, external: isExt, nofollow: rel.includes('nofollow') });
+      });
+
+      // Images
+      const images = [];
+      d.querySelectorAll('img').forEach(img => {
+        images.push({
+          src: img.src?.substring(0,300) || '',
+          alt: img.alt || '',
+          width: img.naturalWidth || img.width || 0,
+          height: img.naturalHeight || img.height || 0,
+          loading: img.loading || '',
+          hasAlt: !!img.alt,
+        });
+      });
+      const imagesNoAlt = images.filter(i => !i.hasAlt).length;
+
+      // Schema.org (JSON-LD)
+      const schemas = [];
+      d.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
+        try { schemas.push(JSON.parse(s.textContent)); } catch(_) { schemas.push({_error:'Parse error', raw:s.textContent.substring(0,500)}); }
+      });
+
+      // Performance
+      const perf = performance.getEntriesByType('navigation')[0] || {};
+      const resources = performance.getEntriesByType('resource');
+      const totalSize = resources.reduce((s,r) => s + (r.transferSize || 0), 0);
+      const jsResources = resources.filter(r => r.initiatorType === 'script' || r.name.includes('.js'));
+      const cssResources = resources.filter(r => r.initiatorType === 'css' || r.name.includes('.css'));
+      const imgResources = resources.filter(r => r.initiatorType === 'img' || r.name.match(/\\.(png|jpg|jpeg|gif|webp|svg|avif)/i));
+
+      // Word count
+      const bodyText = d.body?.innerText || '';
+      const wordCount = bodyText.split(/\\s+/).filter(w => w.length > 0).length;
+
+      // Hreflang
+      const hreflangs = [];
+      d.querySelectorAll('link[rel="alternate"][hreflang]').forEach(l => {
+        hreflangs.push({ lang: l.hreflang, href: l.href });
+      });
+
+      // Favicon
+      const favicon = d.querySelector('link[rel="icon"]')?.href || d.querySelector('link[rel="shortcut icon"]')?.href || '';
+
+      // Status indicators
+      const hasH1 = headings.some(h => h.level === 1);
+      const h1Count = headings.filter(h => h.level === 1).length;
+
+      return {
+        url, canonical: canonical?.href || '', title, titleLen: title.length,
+        metaDesc, metaDescLen: metaDesc.length, metaKw, robots,
+        og: { title:ogTitle, desc:ogDesc, image:ogImage, type:ogType, url:ogUrl, siteName:ogSiteName },
+        tw: { card:twCard, title:twTitle, desc:twDesc, image:twImage },
+        viewport, charset, lang, generator, favicon,
+        headings, h1Count, hasH1,
+        links, intLinkCount: intLinks.size, extLinkCount: extLinks.size, totalLinks: links.length,
+        images, imagesNoAlt, imageCount: images.length,
+        schemas,
+        hreflangs,
+        wordCount,
+        perf: {
+          domContentLoaded: Math.round(perf.domContentLoadedEventEnd - perf.startTime || 0),
+          loadComplete: Math.round(perf.loadEventEnd - perf.startTime || 0),
+          ttfb: Math.round(perf.responseStart - perf.startTime || 0),
+          domInteractive: Math.round(perf.domInteractive - perf.startTime || 0),
+          resourceCount: resources.length,
+          totalTransferSize: totalSize,
+          jsCount: jsResources.length,
+          cssCount: cssResources.length,
+          imgCount: imgResources.length,
+          jsSize: jsResources.reduce((s,r) => s + (r.transferSize||0), 0),
+          cssSize: cssResources.reduce((s,r) => s + (r.transferSize||0), 0),
+          imgSize: imgResources.reduce((s,r) => s + (r.transferSize||0), 0),
+        },
+      };
+    })()`)
+
+    inspectorData = data
+    renderInspector()
+  } catch(err) {
+    body.innerHTML = '<div style="padding:20px;color:var(--r)">Kunde inte analysera sidan: ' + esc(err.message) + '</div>'
+  }
+}
+
+function renderInspector() {
+  const body = document.getElementById('inspectorBody')
+  const d = inspectorData
+  if (!d) { body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Ingen data — tryck ↻</div>'; return }
+
+  let html = ''
+  // Show/hide element picker button
+  document.getElementById('elemPickerBtn').style.display = inspectorTab === 'elements' ? '' : 'none'
+
+  // Tabs that don't need SEO data
+  if (inspectorTab === 'console') { body.innerHTML = renderInspConsole(); return }
+  if (inspectorTab === 'network') { body.innerHTML = renderInspNetwork(); return }
+  if (inspectorTab === 'elements') { body.innerHTML = renderInspElements(); return }
+
+  if (inspectorTab === 'overview') {
+    html = renderInspOverview(d)
+  } else if (inspectorTab === 'meta') {
+    html = renderInspMeta(d)
+  } else if (inspectorTab === 'headings') {
+    html = renderInspHeadings(d)
+  } else if (inspectorTab === 'links') {
+    html = renderInspLinks(d)
+  } else if (inspectorTab === 'images') {
+    html = renderInspImages(d)
+  } else if (inspectorTab === 'schema') {
+    html = renderInspSchema(d)
+  } else if (inspectorTab === 'perf') {
+    html = renderInspPerf(d)
+  } else if (inspectorTab === 'raw') {
+    html = renderInspRaw(d)
+  }
+  body.innerHTML = html
+}
+
+function inspBadge(ok, okText, failText) {
+  return ok ? `<span class="insp-tag green">${okText || 'OK'}</span>` : `<span class="insp-tag red">${failText || 'Saknas'}</span>`
+}
+function inspWarnBadge(text) { return `<span class="insp-tag yellow">${text}</span>` }
+function fmtBytes(b) { if (b > 1048576) return (b/1048576).toFixed(1)+' MB'; if (b > 1024) return (b/1024).toFixed(1)+' KB'; return b+' B' }
+
+function renderInspOverview(d) {
+  // Score calculation
+  let score = 100
+  const issues = []
+  if (!d.title) { score -= 15; issues.push('Titel saknas') }
+  else if (d.titleLen < 30) { score -= 5; issues.push('Titel för kort (' + d.titleLen + ' tecken)') }
+  else if (d.titleLen > 60) { score -= 5; issues.push('Titel för lång (' + d.titleLen + ' tecken)') }
+  if (!d.metaDesc) { score -= 15; issues.push('Meta description saknas') }
+  else if (d.metaDescLen < 70) { score -= 5; issues.push('Meta description för kort') }
+  else if (d.metaDescLen > 160) { score -= 5; issues.push('Meta description för lång (' + d.metaDescLen + ' tecken)') }
+  if (!d.hasH1) { score -= 10; issues.push('Ingen H1 hittad') }
+  if (d.h1Count > 1) { score -= 5; issues.push('Flera H1 (' + d.h1Count + ' st)') }
+  if (d.imagesNoAlt > 0) { score -= Math.min(10, d.imagesNoAlt * 2); issues.push(d.imagesNoAlt + ' bilder utan alt-text') }
+  if (!d.canonical) { score -= 5; issues.push('Canonical-tagg saknas') }
+  if (!d.og.title) { score -= 3; issues.push('Open Graph title saknas') }
+  if (!d.og.image) { score -= 3; issues.push('Open Graph image saknas') }
+  if (!d.lang) { score -= 5; issues.push('lang-attribut saknas på <html>') }
+  if (!d.viewport) { score -= 5; issues.push('Viewport meta saknas') }
+  if (d.schemas.length === 0) { score -= 5; issues.push('Ingen strukturerad data (Schema.org)') }
+  if (d.wordCount < 300) { score -= 5; issues.push('Lite textinnehåll (' + d.wordCount + ' ord)') }
+  if (d.perf.ttfb > 600) { score -= 5; issues.push('Hög TTFB (' + d.perf.ttfb + 'ms)') }
+  score = Math.max(0, score)
+
+  const col = score >= 80 ? 'var(--g)' : score >= 50 ? 'var(--w)' : 'var(--r)'
+  const colClass = score >= 80 ? 'green' : score >= 50 ? 'yellow' : 'red'
+
+  let html = `<div style="display:flex;gap:16px;align-items:center;margin-bottom:14px">
+    <div style="position:relative;width:60px;height:60px;flex-shrink:0">
+      <svg width="60" height="60"><circle cx="30" cy="30" r="26" fill="none" stroke="var(--border)" stroke-width="4"/>
+      <circle cx="30" cy="30" r="26" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.63} 163" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:center"/></svg>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${col}">${score}</div>
+    </div>
+    <div>
+      <div style="font-size:14px;font-weight:800;color:var(--head)">SEO-poäng: <span style="color:${col}">${score}/100</span></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">${d.url}</div>
+    </div>
+  </div>`
+
+  // Quick stats
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
+    <div class="kpi"><div class="kpi-l">Ord</div><div class="kpi-v">${d.wordCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Länkar</div><div class="kpi-v">${d.intLinkCount}/${d.extLinkCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Bilder</div><div class="kpi-v">${d.imageCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Schema</div><div class="kpi-v">${d.schemas.length}</div></div>
+  </div>`
+
+  // Checklist
+  html += '<div class="insp-section"><div class="insp-section-title">Snabbkontroll</div>'
+  html += `<div class="insp-row"><div class="insp-label">Title</div><div class="insp-value">${inspBadge(d.title)} ${d.titleLen ? d.titleLen + ' tecken' : ''}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Meta desc</div><div class="insp-value">${inspBadge(d.metaDesc)} ${d.metaDescLen ? d.metaDescLen + ' tecken' : ''}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">H1</div><div class="insp-value">${inspBadge(d.hasH1)} ${d.h1Count > 1 ? inspWarnBadge(d.h1Count + ' st') : ''}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Canonical</div><div class="insp-value">${inspBadge(d.canonical)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Open Graph</div><div class="insp-value">${inspBadge(d.og.title, 'Title')} ${inspBadge(d.og.image, 'Image')}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Schema.org</div><div class="insp-value">${inspBadge(d.schemas.length > 0, d.schemas.length + ' st')}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Bilder alt-text</div><div class="insp-value">${d.imagesNoAlt === 0 ? inspBadge(true, 'Alla har alt') : '<span class="insp-tag red">' + d.imagesNoAlt + ' saknar alt</span>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Språk</div><div class="insp-value">${inspBadge(d.lang)} ${d.lang || ''}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Viewport</div><div class="insp-value">${inspBadge(d.viewport)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">TTFB</div><div class="insp-value">${d.perf.ttfb <= 300 ? inspBadge(true, d.perf.ttfb+'ms') : d.perf.ttfb <= 600 ? inspWarnBadge(d.perf.ttfb+'ms') : '<span class="insp-tag red">'+d.perf.ttfb+'ms</span>'}</div></div>`
+  html += '</div>'
+
+  // Issues
+  if (issues.length) {
+    html += '<div class="insp-section"><div class="insp-section-title">Problem att åtgärda</div>'
+    issues.forEach(i => { html += `<div style="padding:2px 0;color:var(--r);font-size:11px">⚠ ${esc(i)}</div>` })
+    html += '</div>'
+  }
+  return html
+}
+
+function renderInspMeta(d) {
+  let html = '<div class="insp-section"><div class="insp-section-title">Grundläggande</div>'
+  html += `<div class="insp-row"><div class="insp-label">Title</div><div class="insp-value">${esc(d.title) || '<em style="color:var(--r)">Saknas</em>'} <span class="insp-tag blue">${d.titleLen} tecken</span></div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Meta description</div><div class="insp-value">${esc(d.metaDesc) || '<em style="color:var(--r)">Saknas</em>'} <span class="insp-tag blue">${d.metaDescLen} tecken</span></div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Meta keywords</div><div class="insp-value">${esc(d.metaKw) || '<em style="color:var(--muted)">Ej satt</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Robots</div><div class="insp-value">${esc(d.robots) || '<em style="color:var(--muted)">Ej satt (standard: index,follow)</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Canonical</div><div class="insp-value">${esc(d.canonical) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Språk</div><div class="insp-value">${esc(d.lang) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Charset</div><div class="insp-value">${esc(d.charset)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Viewport</div><div class="insp-value">${esc(d.viewport) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Generator</div><div class="insp-value">${esc(d.generator) || '—'}</div></div>`
+  html += '</div>'
+
+  html += '<div class="insp-section"><div class="insp-section-title">Open Graph</div>'
+  html += `<div class="insp-row"><div class="insp-label">og:title</div><div class="insp-value">${esc(d.og.title) || '<em style="color:var(--w)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">og:description</div><div class="insp-value">${esc(d.og.desc) || '<em style="color:var(--w)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">og:image</div><div class="insp-value">${d.og.image ? '<img src="'+esc(d.og.image)+'" style="max-width:120px;max-height:60px;border-radius:4px;vertical-align:middle"> ' + esc(d.og.image) : '<em style="color:var(--w)">Saknas</em>'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">og:type</div><div class="insp-value">${esc(d.og.type) || '—'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">og:url</div><div class="insp-value">${esc(d.og.url) || '—'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">og:site_name</div><div class="insp-value">${esc(d.og.siteName) || '—'}</div></div>`
+  html += '</div>'
+
+  html += '<div class="insp-section"><div class="insp-section-title">Twitter Card</div>'
+  html += `<div class="insp-row"><div class="insp-label">twitter:card</div><div class="insp-value">${esc(d.tw.card) || '—'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">twitter:title</div><div class="insp-value">${esc(d.tw.title) || '—'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">twitter:description</div><div class="insp-value">${esc(d.tw.desc) || '—'}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">twitter:image</div><div class="insp-value">${esc(d.tw.image) || '—'}</div></div>`
+  html += '</div>'
+
+  if (d.hreflangs.length) {
+    html += '<div class="insp-section"><div class="insp-section-title">Hreflang</div>'
+    d.hreflangs.forEach(h => {
+      html += `<div class="insp-row"><div class="insp-label">${esc(h.lang)}</div><div class="insp-value" style="font-size:10px">${esc(h.href)}</div></div>`
+    })
+    html += '</div>'
+  }
+  return html
+}
+
+function renderInspHeadings(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Rubrikstruktur (${d.headings.length} rubriker)</div>`
+  if (!d.headings.length) { return html + '<div style="color:var(--muted);padding:8px 0">Inga rubriker hittades på sidan</div></div>' }
+  html += '<div class="insp-heading-tree">'
+  d.headings.forEach(h => {
+    const indent = (h.level - 1)
+    const col = h.level === 1 ? 'var(--p)' : h.level === 2 ? 'var(--g)' : h.level === 3 ? 'var(--w)' : 'var(--muted)'
+    html += `<div>${'<span class="insp-h-indent"></span>'.repeat(indent)}<span class="insp-tag blue">H${h.level}</span> <span style="color:${col}">${esc(h.text)}</span></div>`
+  })
+  html += '</div></div>'
+
+  // Heading distribution
+  const counts = {}
+  d.headings.forEach(h => { counts['H'+h.level] = (counts['H'+h.level]||0)+1 })
+  html += '<div class="insp-section"><div class="insp-section-title">Fördelning</div>'
+  for (let i = 1; i <= 6; i++) {
+    const c = counts['H'+i] || 0
+    if (c > 0) {
+      const pct = Math.round(c / d.headings.length * 100)
+      html += `<div class="insp-row"><div class="insp-label">H${i}</div><div class="insp-value">${c} st <div class="insp-meter"><div class="insp-meter-fill" style="width:${pct}%;background:var(--p)"></div></div></div></div>`
+    }
+  }
+  html += '</div>'
+  return html
+}
+
+function renderInspLinks(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Länköversikt</div>`
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">Totalt</div><div class="kpi-v">${d.totalLinks}</div></div>
+    <div class="kpi"><div class="kpi-l">Interna</div><div class="kpi-v" style="color:var(--g)">${d.intLinkCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Externa</div><div class="kpi-v" style="color:var(--p)">${d.extLinkCount}</div></div>
+  </div></div>`
+
+  const nofollow = d.links.filter(l => l.nofollow)
+  if (nofollow.length) {
+    html += `<div class="insp-section"><div class="insp-section-title">Nofollow-länkar (${nofollow.length})</div>`
+    nofollow.slice(0, 30).forEach(l => {
+      html += `<div class="insp-link-item"><span class="insp-link-status insp-tag yellow">nofollow</span><a href="#">${esc(l.text || l.href)}</a></div>`
+    })
+    html += '</div>'
+  }
+
+  html += `<div class="insp-section"><div class="insp-section-title">Externa länkar (${d.extLinkCount})</div>`
+  const ext = d.links.filter(l => l.external)
+  if (!ext.length) html += '<div style="color:var(--muted)">Inga externa länkar</div>'
+  ext.slice(0, 50).forEach(l => {
+    html += `<div class="insp-link-item"><span class="insp-link-status insp-tag blue">ext</span><a href="#">${esc(l.text || '(ingen text)')}</a> <span style="font-size:9px;color:var(--muted)">${esc(l.href.substring(0,60))}</span></div>`
+  })
+  html += '</div>'
+  return html
+}
+
+function renderInspImages(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Bildöversikt (${d.imageCount} bilder)</div>`
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">Totalt</div><div class="kpi-v">${d.imageCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Saknar alt</div><div class="kpi-v" style="color:${d.imagesNoAlt?'var(--r)':'var(--g)'}">${d.imagesNoAlt}</div></div>
+  </div></div>`
+
+  if (d.imagesNoAlt > 0) {
+    html += '<div class="insp-section"><div class="insp-section-title">Bilder utan alt-text</div>'
+    d.images.filter(i => !i.hasAlt).slice(0, 30).forEach(i => {
+      html += `<div class="insp-link-item"><span class="insp-tag red">saknar alt</span><span style="font-size:10px;color:var(--muted);word-break:break-all">${esc(i.src.substring(0,80))}</span></div>`
+    })
+    html += '</div>'
+  }
+
+  html += '<div class="insp-section"><div class="insp-section-title">Alla bilder</div>'
+  d.images.slice(0, 50).forEach(i => {
+    html += `<div class="insp-row"><div class="insp-label" style="width:60px"><img src="${esc(i.src)}" style="max-width:50px;max-height:30px;border-radius:3px" onerror="this.style.display='none'"></div>
+    <div class="insp-value" style="font-size:10px">${esc(i.alt) || '<em style="color:var(--r)">Ingen alt</em>'} <span style="color:var(--muted)">${i.width}x${i.height}${i.loading ? ' loading='+i.loading : ''}</span></div></div>`
+  })
+  html += '</div>'
+  return html
+}
+
+function renderInspSchema(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Strukturerad data — JSON-LD (${d.schemas.length})</div>`
+  if (!d.schemas.length) {
+    return html + '<div style="color:var(--w);padding:8px 0">Ingen strukturerad data (JSON-LD) hittades. Överväg att lägga till Schema.org-märkning.</div></div>'
+  }
+  d.schemas.forEach((s, i) => {
+    const type = s['@type'] || s._error || 'Okänd'
+    html += `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--head);margin-bottom:3px"><span class="insp-tag blue">Schema ${i+1}</span> ${esc(Array.isArray(type) ? type.join(', ') : type)}</div>`
+    html += `<div class="insp-code">${esc(JSON.stringify(s, null, 2))}</div></div>`
+  })
+  html += '</div>'
+  return html
+}
+
+function renderInspPerf(d) {
+  const p = d.perf
+  let html = '<div class="insp-section"><div class="insp-section-title">Sidladdning</div>'
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">TTFB</div><div class="kpi-v" style="color:${p.ttfb<=300?'var(--g)':p.ttfb<=600?'var(--w)':'var(--r)'}">${p.ttfb}ms</div></div>
+    <div class="kpi"><div class="kpi-l">DOM Ready</div><div class="kpi-v">${p.domContentLoaded}ms</div></div>
+    <div class="kpi"><div class="kpi-l">Interaktiv</div><div class="kpi-v">${p.domInteractive}ms</div></div>
+    <div class="kpi"><div class="kpi-l">Laddad</div><div class="kpi-v">${p.loadComplete}ms</div></div>
+  </div></div>`
+
+  html += '<div class="insp-section"><div class="insp-section-title">Resurser</div>'
+  html += `<div class="insp-row"><div class="insp-label">Totala resurser</div><div class="insp-value">${p.resourceCount} filer — ${fmtBytes(p.totalTransferSize)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">JavaScript</div><div class="insp-value">${p.jsCount} filer — ${fmtBytes(p.jsSize)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">CSS</div><div class="insp-value">${p.cssCount} filer — ${fmtBytes(p.cssSize)}</div></div>`
+  html += `<div class="insp-row"><div class="insp-label">Bilder</div><div class="insp-value">${p.imgCount} filer — ${fmtBytes(p.imgSize)}</div></div>`
+  html += '</div>'
+
+  // Size breakdown bar
+  const total = p.totalTransferSize || 1
+  html += '<div class="insp-section"><div class="insp-section-title">Storleksfördelning</div>'
+  html += `<div style="display:flex;height:14px;border-radius:4px;overflow:hidden;gap:1px">
+    <div style="flex:${p.jsSize};background:#f59e0b" title="JS: ${fmtBytes(p.jsSize)}"></div>
+    <div style="flex:${p.cssSize};background:#4680ff" title="CSS: ${fmtBytes(p.cssSize)}"></div>
+    <div style="flex:${p.imgSize};background:#2ca87f" title="Bilder: ${fmtBytes(p.imgSize)}"></div>
+    <div style="flex:${total-p.jsSize-p.cssSize-p.imgSize};background:var(--border)" title="Övrigt"></div>
+  </div>
+  <div style="display:flex;gap:12px;margin-top:4px;font-size:9px;color:var(--muted)">
+    <span><span style="color:#f59e0b">■</span> JS</span>
+    <span><span style="color:#4680ff">■</span> CSS</span>
+    <span><span style="color:#2ca87f">■</span> Bilder</span>
+    <span><span style="color:var(--border)">■</span> Övrigt</span>
+  </div></div>`
+  return html
+}
+
+function renderInspRaw(d) {
+  return `<div class="insp-section"><div class="insp-section-title">Rådata (JSON) — för crawlern</div>
+  <div style="margin-bottom:6px"><button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyInspectorData()">📋 Kopiera all data</button></div>
+  <div class="insp-code" style="max-height:none">${esc(JSON.stringify(d, null, 2))}</div></div>`
+}
+
+function copyInspectorData() {
+  if (!inspectorData) { toast('Ingen data att kopiera', '#e58a00'); return }
+  navigator.clipboard.writeText(JSON.stringify(inspectorData, null, 2)).then(() => {
+    toast('Inspector-data kopierad!', '#2ca87f')
+  })
+}
+
+// ── Inspector drag-to-resize ──
+;(function() {
+  const hdr = document.getElementById('inspectorHdr')
+  const drawer = document.getElementById('inspectorDrawer')
+  let dragging = false, startY = 0, startH = 0
+
+  hdr.addEventListener('mousedown', e => {
+    if (e.target.closest('.inspector-btn') || e.target.closest('.inspector-tab') || e.target.closest('.elem-picker-btn')) return
+    dragging = true
+    startY = e.clientY
+    startH = drawer.offsetHeight
+    drawer.classList.add('resizing')
+    document.body.style.cursor = 'ns-resize'
+    e.preventDefault()
+  })
+  document.addEventListener('mousemove', e => {
+    if (!dragging) return
+    const delta = startY - e.clientY
+    const newH = Math.max(120, Math.min(window.innerHeight * 0.85, startH + delta))
+    drawer.style.height = newH + 'px'
+  })
+  document.addEventListener('mouseup', () => {
+    if (!dragging) return
+    dragging = false
+    drawer.classList.remove('resizing')
+    document.body.style.cursor = ''
+  })
+})()
+
+// ══════════════════════════════════════════════════════
+//  CONSOLE TAB — captures JS errors from webview
+// ══════════════════════════════════════════════════════
+let consoleMessages = [] // {type, message, source, line, time}
+
+wv.addEventListener('console-message', e => {
+  if (e.message && e.message.startsWith('[SEOZ-PICK]')) return // handled by picker
+  const types = { 0: 'info', 1: 'info', 2: 'warn', 3: 'error' }
+  consoleMessages.push({
+    type: types[e.level] || 'info',
+    message: e.message,
+    source: e.sourceId || '',
+    line: e.lineNumber || 0,
+    time: Date.now()
+  })
+  if (consoleMessages.length > 500) consoleMessages.shift()
+  // Live update if console tab is open
+  if (inspectorTab === 'console' && document.getElementById('inspectorDrawer').classList.contains('open')) {
+    renderInspector()
+  }
+})
+
+function renderInspConsole() {
+  if (!consoleMessages.length) {
+    return '<div style="padding:20px;text-align:center;color:var(--muted)">Konsolen är tom — JS-loggar och fel visas här i realtid</div>'
+  }
+  let html = '<div style="display:flex;gap:6px;margin-bottom:8px">'
+  const errors = consoleMessages.filter(m => m.type === 'error').length
+  const warns = consoleMessages.filter(m => m.type === 'warn').length
+  html += `<span class="insp-tag ${errors ? 'red' : 'green'}">${errors} fel</span>`
+  html += `<span class="insp-tag ${warns ? 'yellow' : 'green'}">${warns} varningar</span>`
+  html += `<span class="insp-tag blue">${consoleMessages.length} totalt</span>`
+  html += `<span style="flex:1"></span>`
+  html += `<button class="inspector-btn" onclick="consoleMessages=[];renderInspector()" title="Rensa" style="font-size:10px">🗑</button>`
+  html += '</div>'
+  // Show messages newest first
+  const msgs = [...consoleMessages].reverse()
+  msgs.forEach(m => {
+    const t = new Date(m.time).toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit', second:'2-digit' })
+    const icon = m.type === 'error' ? '✕' : m.type === 'warn' ? '⚠' : 'ℹ'
+    const src = m.source ? m.source.split('/').pop() + (m.line ? ':' + m.line : '') : ''
+    html += `<div class="console-entry ${m.type}"><span class="con-type">${icon}</span><span class="con-msg">${esc(m.message)}</span><span class="con-src" title="${esc(m.source)}">${esc(src)}</span><span class="con-src">${t}</span></div>`
+  })
+  return html
+}
+
+// ══════════════════════════════════════════════════════
+//  NETWORK TAB — resource timing waterfall
+// ══════════════════════════════════════════════════════
+let networkEntries = []
+
+async function captureNetwork() {
+  try {
+    networkEntries = await wv.executeJavaScript(`(function(){
+      const entries = performance.getEntriesByType('resource');
+      return entries.map(e => ({
+        name: e.name,
+        type: e.initiatorType || 'other',
+        size: e.transferSize || 0,
+        duration: Math.round(e.duration),
+        start: Math.round(e.startTime),
+        status: 200,
+      })).slice(-300);
+    })()`)
+  } catch(_) { networkEntries = [] }
+}
+
+function renderInspNetwork() {
+  if (!networkEntries.length) {
+    return `<div style="padding:12px;text-align:center;color:var(--muted)">
+      <button class="act-btn" style="width:auto;display:inline-flex;padding:0 16px" onclick="captureNetwork().then(()=>renderInspector())">Ladda nätverksdata</button>
+      <div style="margin-top:6px;font-size:10px">Hämtar resursdata från Performance API</div>
+    </div>`
+  }
+  const maxDur = Math.max(...networkEntries.map(e => e.start + e.duration), 1)
+  const total = networkEntries.reduce((s,e) => s + e.size, 0)
+
+  let html = `<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+    <span class="insp-tag blue">${networkEntries.length} resurser</span>
+    <span class="insp-tag blue">${fmtBytes(total)}</span>
+    <span style="flex:1"></span>
+    <button class="inspector-btn" onclick="captureNetwork().then(()=>renderInspector())" title="Uppdatera" style="font-size:10px">↻</button>
+  </div>`
+
+  html += '<table class="net-table"><thead><tr><th style="width:40%">Resurs</th><th>Typ</th><th>Storlek</th><th>Tid</th><th style="width:25%">Tidslinje</th></tr></thead><tbody>'
+  networkEntries.forEach(e => {
+    const fname = e.name.split('/').pop().split('?')[0] || e.name
+    const typeColors = { script:'#f59e0b', css:'#4680ff', img:'#2ca87f', fetch:'#7c3aed', xmlhttprequest:'#7c3aed', link:'#06b6d4' }
+    const col = typeColors[e.type] || 'var(--muted)'
+    const barLeft = (e.start / maxDur * 100).toFixed(1)
+    const barWidth = Math.max(1, (e.duration / maxDur * 100)).toFixed(1)
+    html += `<tr title="${esc(e.name)}">
+      <td style="color:var(--head)">${esc(fname.substring(0,50))}</td>
+      <td><span style="color:${col};font-weight:600">${e.type}</span></td>
+      <td>${e.size ? fmtBytes(e.size) : '—'}</td>
+      <td>${e.duration}ms</td>
+      <td><div class="net-bar"><div class="net-bar-fill" style="left:${barLeft}%;width:${barWidth}%;background:${col}"></div></div></td>
+    </tr>`
+  })
+  html += '</tbody></table>'
+  return html
+}
+
+// ══════════════════════════════════════════════════════
+//  ELEMENTS TAB — DOM tree + element picker
+// ══════════════════════════════════════════════════════
+let elemTree = null
+let elemPickerActive = false
+
+async function captureElements() {
+  try {
+    elemTree = await wv.executeJavaScript(`(function walkDOM(node, depth) {
+      if (depth > 6) return null;
+      if (node.nodeType === 3) {
+        const t = node.textContent.trim();
+        return t ? { type: 'text', text: t.substring(0, 120) } : null;
+      }
+      if (node.nodeType !== 1) return null;
+      const tag = node.tagName.toLowerCase();
+      if (tag === 'script' || tag === 'style' || tag === 'noscript') return null;
+      const attrs = {};
+      ['id','class','href','src','alt','title','role','aria-label','data-testid','name','type','rel'].forEach(a => {
+        const v = node.getAttribute(a);
+        if (v) attrs[a] = v.substring(0,100);
+      });
+      const children = [];
+      for (let i = 0; i < Math.min(node.childNodes.length, 40); i++) {
+        const c = walkDOM(node.childNodes[i], depth + 1);
+        if (c) children.push(c);
+      }
+      return { type: 'el', tag, attrs, children, childCount: node.childNodes.length };
+    })(document.documentElement, 0)`)
+  } catch(e) { elemTree = null }
+}
+
+function renderInspElements() {
+  if (!elemTree) {
+    return `<div style="padding:12px;text-align:center;color:var(--muted)">
+      <button class="act-btn" style="width:auto;display:inline-flex;padding:0 16px" onclick="captureElements().then(()=>renderInspector())">Ladda DOM-träd</button>
+    </div>`
+  }
+  let html = '<div class="elem-tree">'
+  html += renderElemNode(elemTree, 0)
+  html += '</div>'
+  return html
+}
+
+function renderElemNode(node, depth) {
+  if (!node) return ''
+  if (node.type === 'text') {
+    return `<div class="elem-node" style="padding-left:${depth*16}px"><span class="elem-text">"${esc(node.text)}"</span></div>`
+  }
+  const attrs = Object.entries(node.attrs || {}).map(([k,v]) => ` <span class="elem-attr">${k}</span>=<span class="elem-str">"${esc(v.substring(0,60))}"</span>`).join('')
+  const hasChildren = node.children && node.children.length > 0
+  const id = 'el_' + Math.random().toString(36).substr(2,6)
+
+  let html = `<div class="elem-node" style="padding-left:${depth*16}px" onclick="event.stopPropagation();toggleElemChildren('${id}')">`
+  if (hasChildren) html += `<span class="elem-toggle" id="${id}_tog">▸</span>`
+  else html += `<span class="elem-toggle"></span>`
+  html += `&lt;<span class="elem-tag">${node.tag}</span>${attrs}&gt;`
+  if (!hasChildren) html += `&lt;/<span class="elem-tag">${node.tag}</span>&gt;`
+  html += '</div>'
+
+  if (hasChildren) {
+    html += `<div id="${id}" style="display:none">`
+    node.children.forEach(c => { html += renderElemNode(c, depth + 1) })
+    html += `<div class="elem-node" style="padding-left:${depth*16}px">&lt;/<span class="elem-tag">${node.tag}</span>&gt;</div>`
+    html += '</div>'
+  }
+  return html
+}
+
+function toggleElemChildren(id) {
+  const el = document.getElementById(id)
+  const tog = document.getElementById(id + '_tog')
+  if (!el) return
+  const open = el.style.display !== 'none'
+  el.style.display = open ? 'none' : 'block'
+  if (tog) tog.textContent = open ? '▸' : '▾'
+}
+
+// Element picker — highlights hovered element in webview
+function toggleElementPicker() {
+  elemPickerActive = !elemPickerActive
+  const btn = document.getElementById('elemPickerBtn')
+  btn.classList.toggle('active', elemPickerActive)
+  if (elemPickerActive) {
+    wv.executeJavaScript(`
+      if (!window.__seozPicker) {
+        const hl = document.createElement('div');
+        hl.id = '__seozHighlight';
+        hl.style.cssText = 'position:fixed;pointer-events:none;z-index:999999;border:2px solid #4680ff;background:rgba(70,128,255,.1);transition:all 80ms;display:none';
+        document.body.appendChild(hl);
+        window.__seozPickerHandler = function(e) {
+          const r = e.target.getBoundingClientRect();
+          hl.style.display = 'block';
+          hl.style.left = r.left + 'px'; hl.style.top = r.top + 'px';
+          hl.style.width = r.width + 'px'; hl.style.height = r.height + 'px';
+        };
+        window.__seozPickerClick = function(e) {
+          e.preventDefault(); e.stopPropagation();
+          const el = e.target;
+          const tag = el.tagName.toLowerCase();
+          const id = el.id ? '#' + el.id : '';
+          const cls = el.className && typeof el.className === 'string' ? '.' + el.className.trim().split(/\\s+/).join('.') : '';
+          const text = el.textContent?.trim().substring(0,80) || '';
+          console.log('[SEOZ-PICK]' + JSON.stringify({tag,id:el.id||'',class:el.className||'',text,html:el.outerHTML.substring(0,300)}));
+        };
+        document.addEventListener('mousemove', window.__seozPickerHandler, true);
+        document.addEventListener('click', window.__seozPickerClick, true);
+        window.__seozPicker = true;
+      }
+    `)
+  } else {
+    wv.executeJavaScript(`
+      if (window.__seozPicker) {
+        document.removeEventListener('mousemove', window.__seozPickerHandler, true);
+        document.removeEventListener('click', window.__seozPickerClick, true);
+        const hl = document.getElementById('__seozHighlight');
+        if (hl) hl.remove();
+        window.__seozPicker = false;
+      }
+    `)
+  }
+}
+
+// Listen for picked element info via console-message
+wv.addEventListener('console-message', e => {
+  if (e.message && e.message.startsWith('[SEOZ-PICK]')) {
+    try {
+      const data = JSON.parse(e.message.replace('[SEOZ-PICK]', ''))
+      // Turn off picker
+      elemPickerActive = false
+      document.getElementById('elemPickerBtn').classList.remove('active')
+      wv.executeJavaScript(`
+        if (window.__seozPicker) {
+          document.removeEventListener('mousemove', window.__seozPickerHandler, true);
+          document.removeEventListener('click', window.__seozPickerClick, true);
+          const hl = document.getElementById('__seozHighlight');
+          if (hl) hl.remove();
+          window.__seozPicker = false;
+        }
+      `)
+      // Show picked element info
+      inspectorSwitchTab('elements')
+      const body = document.getElementById('inspectorBody')
+      let html = '<div class="insp-section"><div class="insp-section-title">Valt element</div>'
+      html += `<div class="insp-row"><div class="insp-label">Tagg</div><div class="insp-value"><span class="elem-tag">${esc(data.tag)}</span></div></div>`
+      if (data.id) html += `<div class="insp-row"><div class="insp-label">ID</div><div class="insp-value">#${esc(data.id)}</div></div>`
+      if (data.class) html += `<div class="insp-row"><div class="insp-label">Klass</div><div class="insp-value">${esc(data.class)}</div></div>`
+      if (data.text) html += `<div class="insp-row"><div class="insp-label">Text</div><div class="insp-value">${esc(data.text)}</div></div>`
+      html += `<div class="insp-row"><div class="insp-label">HTML</div><div class="insp-value"><div class="insp-code">${esc(data.html)}</div></div></div>`
+      html += `<div class="insp-row"><div class="insp-label">CSS Selector</div><div class="insp-value" style="font-family:monospace;font-size:10px">${esc(data.tag)}${data.id ? '#'+esc(data.id) : ''}${data.class ? '.'+esc(data.class.trim().split(/\\s+/).join('.')) : ''}</div></div>`
+      html += '</div>'
+      html += `<button class="act-btn" style="width:auto;display:inline-flex;padding:0 16px;margin-top:8px" onclick="captureElements().then(()=>renderInspector())">Visa DOM-träd</button>`
+      body.innerHTML = html
+    } catch(_) {}
+  }
+})
+
+// ══════════════════════════════════════════════════════
+//  KEYBOARD SHORTCUTS (Chrome-style)
+// ══════════════════════════════════════════════════════
+document.addEventListener('keydown', e => {
+  const ctrl = e.ctrlKey || e.metaKey
+  const key = e.key.toLowerCase()
+
+  // Ctrl+T → New tab
+  if (ctrl && key === 't') { e.preventDefault(); newTab() }
+  // Ctrl+W → Close active tab
+  else if (ctrl && key === 'w') { e.preventDefault(); if (tabs.length > 1) { const idx = tabs.findIndex(t => t.id === activeId); tabs = tabs.filter(t => t.id !== activeId); switchTab(tabs[Math.min(idx, tabs.length-1)].id) } }
+  // Ctrl+L or F6 → Focus URL bar
+  else if ((ctrl && key === 'l') || e.key === 'F6') { e.preventDefault(); document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }
+  // Ctrl+R or F5 → Reload
+  else if ((ctrl && key === 'r') || e.key === 'F5') { e.preventDefault(); wvReload() }
+  // Ctrl+F → Find in page
+  else if (ctrl && key === 'f') { e.preventDefault(); openFindBar() }
+  // Escape → Close find bar
+  else if (e.key === 'Escape') {
+    if (findActive) closeFindBar()
+    else if (document.getElementById('chromeDd').classList.contains('open')) closeChromeMenu()
+    else if (document.getElementById('historyOverlay').classList.contains('open')) closeHistory()
+    else if (document.getElementById('inspectorDrawer').classList.contains('open')) closeInspector()
+  }
+  // Ctrl+H → History
+  else if (ctrl && key === 'h') { e.preventDefault(); openHistory() }
+  // Ctrl+J → Downloads
+  else if (ctrl && key === 'j') { e.preventDefault(); openDownloads() }
+  // Ctrl+D → Bookmark
+  else if (ctrl && key === 'd') { e.preventDefault(); toggleBookmark() }
+  // Ctrl+P → Print
+  else if (ctrl && key === 'p') { e.preventDefault(); doPrint() }
+  // F12 → SEOZ Inspector
+  else if (e.key === 'F12') { e.preventDefault(); toggleInspector() }
+  // Ctrl+Shift+I → DevTools (dev only)
+  else if (ctrl && e.shiftKey && key === 'i') { e.preventDefault(); SE.toggleDevTools() }
+  // F11 → Fullscreen
+  else if (e.key === 'F11') { e.preventDefault(); SE.fullscreen() }
+  // Ctrl+Plus → Zoom in
+  else if (ctrl && (e.key === '+' || e.key === '=')) { e.preventDefault(); doZoom(10) }
+  // Ctrl+Minus → Zoom out
+  else if (ctrl && e.key === '-') { e.preventDefault(); doZoom(-10) }
+  // Ctrl+0 → Reset zoom
+  else if (ctrl && e.key === '0') { e.preventDefault(); doZoom(0) }
+  // Ctrl+Tab → Next tab
+  else if (ctrl && e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); cycleTab(1) }
+  // Ctrl+Shift+Tab → Prev tab
+  else if (ctrl && e.key === 'Tab' && e.shiftKey) { e.preventDefault(); cycleTab(-1) }
+  // Alt+Left → Back
+  else if (e.altKey && e.key === 'ArrowLeft') { e.preventDefault(); wvBack() }
+  // Alt+Right → Forward
+  else if (e.altKey && e.key === 'ArrowRight') { e.preventDefault(); wvFwd() }
+})
+
+function cycleTab(dir) {
+  const idx = tabs.findIndex(t => t.id === activeId)
+  const next = (idx + dir + tabs.length) % tabs.length
+  switchTab(tabs[next].id)
+}
+
+// ══════════════════════════════════════════════════════
+//  HOOK: Track history on navigation
+// ══════════════════════════════════════════════════════
+const _origUpdateURL2 = updateURL
+updateURL = function(url) {
+  _origUpdateURL2(url)
+  const tab = getActive()
+  addToHistory(url, tab?.title || '')
+}
+
+// Close chrome menu on outside click
+document.addEventListener('click', e => {
+  if (!e.target.closest('.chrome-dd') && !e.target.closest('.chrome-menu-btn')) closeChromeMenu()
+})
+
+// Track downloads from webview
+wv.addEventListener('will-download', (e) => {
+  // NOTE: will-download doesn't fire on webview easily, but we set it up as a hook
+})
+
+// ══════════════════════════════════════════════════════
+//  AUTO-UPDATER UI
+// ══════════════════════════════════════════════════════
+let updateState = 'idle' // idle, available, downloading, ready
+
+SE.on('updater-status', data => {
+  const banner = document.getElementById('updateBanner')
+  const msg = document.getElementById('updateMsg')
+  const btn = document.getElementById('updateBtn')
+  const progress = document.getElementById('updateProgress')
+  const progressFill = document.getElementById('updateProgressFill')
+
+  if (data.status === 'available') {
+    updateState = 'available'
+    msg.textContent = `Version ${data.version} finns tillgänglig!`
+    btn.textContent = 'Ladda ner'
+    btn.style.display = ''
+    progress.style.display = 'none'
+    banner.classList.add('show')
+  } else if (data.status === 'downloading') {
+    updateState = 'downloading'
+    msg.textContent = `Laddar ner uppdatering...`
+    btn.style.display = 'none'
+    progress.style.display = ''
+    progressFill.style.width = (data.percent || 0) + '%'
+    banner.classList.add('show')
+  } else if (data.status === 'ready') {
+    updateState = 'ready'
+    msg.textContent = `Version ${data.version} redo att installeras!`
+    btn.textContent = 'Starta om & installera'
+    btn.style.display = ''
+    progress.style.display = 'none'
+    banner.classList.add('show')
+  } else if (data.status === 'up-to-date') {
+    updateState = 'idle'
+    banner.classList.remove('show')
+  } else if (data.status === 'error') {
+    updateState = 'idle'
+    // Silent — don't bother user with update errors
+  }
+})
+
+function handleUpdateAction() {
+  if (updateState === 'available') {
+    SE.updaterDownload()
+  } else if (updateState === 'ready') {
+    SE.updaterInstall()
+  }
+}
+
+// Show version in status bar
+SE.updaterGetVersion().then(v => {
+  document.getElementById('sbVersion').textContent = 'v' + v
+})
+
+init()
+loadBookmarks()
+loadHistory()
+loadDownloads()
+initBlocker()
+</script>
+</body>
+</html>

@@ -2,7 +2,7 @@
 <html lang="sv" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https: file:; script-src 'self' 'unsafe-inline'">
 <title>SEOZ Browser</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -574,6 +574,7 @@ input,textarea,select{user-select:text}
   display:none;align-items:center;gap:8px;
   padding:6px 14px;background:rgba(70,128,255,.1);border-bottom:1px solid rgba(70,128,255,.2);
   font-size:11px;color:var(--p);
+  -webkit-app-region:no-drag;
 }
 .update-banner.show{display:flex}
 .update-banner .ub-msg{flex:1}

@@ -83,7 +83,7 @@ input,textarea,select{user-select:text}
 .agent-tab-label{font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:140px}
 @keyframes agentDot{0%,100%{opacity:.3}50%{opacity:1}}
 
-.newtab{width:24px;height:24px;border-radius:5px;margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
+.newtab{width:24px;height:24px;border-radius:5px;margin-left:6px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
 .newtab:hover{background:rgba(255,255,255,.08)}
 .tsp{flex:1;min-width:8px}
 .wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center}
@@ -384,6 +384,26 @@ input,textarea,select{user-select:text}
 .cl-dot{width:8px;height:8px;border-radius:2px;flex-shrink:0}
 .cl-name{flex:1;font-size:12px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .cl-score{font-size:10px;font-weight:800}
+
+/* SEO panel sub-tabs */
+.seo-sub-tab{padding:6px 14px;font-size:10px;font-weight:700;color:var(--muted);cursor:pointer;border-bottom:2px solid transparent;transition:all .12s;text-transform:uppercase;letter-spacing:.04em}
+.seo-sub-tab:hover{color:var(--txt)}
+.seo-sub-tab.active{color:var(--p);border-bottom-color:var(--p)}
+.seo-check{display:flex;align-items:center;gap:8px;padding:6px 0;border-bottom:1px solid rgba(255,255,255,.04)}
+.seo-check-icon{width:18px;height:18px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;flex-shrink:0}
+.seo-check-icon.pass{background:rgba(44,168,127,.15);color:var(--g)}
+.seo-check-icon.warn{background:rgba(229,138,0,.15);color:var(--w)}
+.seo-check-icon.fail{background:rgba(220,38,38,.15);color:var(--r)}
+.seo-check-icon.info{background:rgba(70,128,255,.15);color:var(--p)}
+.seo-check-text{flex:1;font-size:11px;color:var(--head)}
+.seo-check-detail{font-size:9px;color:var(--muted);margin-top:1px}
+.seo-check .bdg{flex-shrink:0}
+.seo-score-bar{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin:4px 0}
+.seo-score-fill{height:100%;border-radius:3px}
+.lighthouse-cat{margin-bottom:14px}
+.lighthouse-cat-hdr{display:flex;align-items:center;gap:8px;margin-bottom:4px}
+.lighthouse-cat-score{width:32px;height:32px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:800;border:2px solid}
+.lighthouse-cat-name{font-size:11px;font-weight:700;color:var(--head)}
 
 /* Score ring */
 .score-ring{position:relative;width:50px;height:50px;flex-shrink:0}
@@ -739,7 +759,7 @@ input,textarea,select{user-select:text}
           </div>
         </div>
       </div>
-      <div class="seoz-pill" id="seozPill" onclick="togglePanel('seo')">
+      <div class="seoz-pill" id="seozPill" onclick="toggleDock()">
         <div class="sdot" id="seozDot"></div>
         SEOZ
       </div>
@@ -843,6 +863,7 @@ input,textarea,select{user-select:text}
             <div class="inspector-tab" data-tab="console" onclick="inspectorSwitchTab('console')">Konsol</div>
             <div class="inspector-tab" data-tab="network" onclick="inspectorSwitchTab('network')">Nätverk</div>
             <div class="inspector-tab" data-tab="elements" onclick="inspectorSwitchTab('elements')">Element</div>
+            <div class="inspector-tab" data-tab="source" onclick="inspectorSwitchTab('source')">HTML</div>
             <div class="inspector-tab" data-tab="raw" onclick="inspectorSwitchTab('raw')">Rådata</div>
           </div>
           <div class="inspector-hdr-spacer"></div>
@@ -1241,8 +1262,11 @@ function setUrlFavicon(src) {
 function doNav(raw) {
   if (!raw) return
   let u = raw.trim()
-  if (!/^https?:\/\//i.test(u) && !u.includes(' ') && u.includes('.')) u = 'https://' + u
-  else if (u.includes(' ') || !u.includes('.')) u = 'https://www.google.com/search?q=' + encodeURIComponent(u)
+  if (/^https?:\/\//i.test(u)) { /* already has protocol */ }
+  else if (/^localhost(:\d+)?/i.test(u)) u = 'http://' + u
+  else if (/^127\.0\.0\.1(:\d+)?/.test(u)) u = 'http://' + u
+  else if (!u.includes(' ') && u.includes('.')) u = 'https://' + u
+  else u = 'https://www.google.com/search?q=' + encodeURIComponent(u)
   wv.loadURL(u)
 }
 
@@ -1359,9 +1383,408 @@ function closeTab(e, id) {
 }
 
 // ══════════════════════════════════════════════════════
+//  SEO PANEL — Live analysis with sub-tabs
+// ══════════════════════════════════════════════════════
+let _seoPageData = null
+
+async function seoAnalyzePage() {
+  try {
+    _seoPageData = await wv.executeJavaScript(`(function(){
+      const d = document;
+      const title = d.title || '';
+      const metaDesc = d.querySelector('meta[name="description"]')?.content || '';
+      const canonical = d.querySelector('link[rel="canonical"]')?.href || '';
+      const robots = d.querySelector('meta[name="robots"]')?.content || '';
+      const viewport = d.querySelector('meta[name="viewport"]')?.content || '';
+      const lang = d.documentElement.lang || '';
+      const charset = d.characterSet || '';
+
+      // OG
+      const ogTitle = d.querySelector('meta[property="og:title"]')?.content || '';
+      const ogDesc = d.querySelector('meta[property="og:description"]')?.content || '';
+      const ogImage = d.querySelector('meta[property="og:image"]')?.content || '';
+      const twCard = d.querySelector('meta[name="twitter:card"]')?.content || '';
+
+      // Headings
+      const headings = [];
+      d.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => headings.push({ level: parseInt(h.tagName[1]), text: h.textContent.trim().substring(0,200) }));
+      const h1s = headings.filter(h => h.level === 1);
+
+      // Links
+      let intLinks = 0, extLinks = 0, nofollowLinks = 0;
+      d.querySelectorAll('a[href]').forEach(a => {
+        const href = a.href;
+        const isExt = href && !href.startsWith(location.origin) && /^https?:/.test(href);
+        if (isExt) extLinks++; else intLinks++;
+        if ((a.rel||'').includes('nofollow')) nofollowLinks++;
+      });
+
+      // Images
+      const imgs = d.querySelectorAll('img');
+      let imgTotal = imgs.length, imgNoAlt = 0, imgNoSize = 0;
+      imgs.forEach(i => { if (!i.alt) imgNoAlt++; if (!i.width && !i.naturalWidth) imgNoSize++; });
+
+      // Schema
+      const schemas = [];
+      d.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
+        try { const j = JSON.parse(s.textContent); schemas.push(j['@type'] || 'Unknown'); } catch(_){ schemas.push('Parse error'); }
+      });
+
+      // Hreflang
+      const hreflangs = [];
+      d.querySelectorAll('link[rel="alternate"][hreflang]').forEach(l => hreflangs.push(l.hreflang));
+
+      // Word count
+      const wordCount = (d.body?.innerText || '').split(/\\s+/).filter(w => w.length > 0).length;
+
+      // Performance
+      const perf = performance.getEntriesByType('navigation')[0] || {};
+      const resources = performance.getEntriesByType('resource');
+      const totalSize = resources.reduce((s,r) => s + (r.transferSize || 0), 0);
+
+      return {
+        url: location.href,
+        title, titleLen: title.length,
+        metaDesc, metaDescLen: metaDesc.length,
+        canonical, robots, viewport, lang, charset,
+        ogTitle, ogDesc, ogImage, twCard,
+        headings, h1s, h1Count: h1s.length,
+        intLinks, extLinks, nofollowLinks, totalLinks: intLinks + extLinks,
+        imgTotal, imgNoAlt, imgNoSize,
+        schemas, hreflangs, wordCount,
+        ttfb: Math.round(perf.responseStart - perf.startTime || 0),
+        domReady: Math.round(perf.domContentLoadedEventEnd - perf.startTime || 0),
+        loadTime: Math.round(perf.loadEventEnd - perf.startTime || 0),
+        resourceCount: resources.length,
+        totalSize,
+      };
+    })()`)
+  } catch(e) {
+    _seoPageData = null
+  }
+  return _seoPageData
+}
+
+async function renderSeoSubTab(tab) {
+  const el = document.getElementById('seoPanelContent')
+  if (!el) return
+
+  if (tab === 'onpage') {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)">Analyserar sida...</div>'
+    const d = await seoAnalyzePage()
+    if (!d) { el.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte analysera sidan.</div>'; return }
+
+    // Build score & checks
+    let score = 100
+    const checks = []
+
+    // Title
+    if (!d.title) { score -= 15; checks.push({ s:'fail', t:'Title tag saknas', d:'Lägg till en <title>-tagg' }) }
+    else if (d.titleLen < 30) { score -= 5; checks.push({ s:'warn', t:'Title för kort', d:d.titleLen + ' tecken (rekommenderat: 30–60)' }) }
+    else if (d.titleLen > 60) { score -= 5; checks.push({ s:'warn', t:'Title för lång', d:d.titleLen + ' tecken (rekommenderat: 30–60)' }) }
+    else checks.push({ s:'pass', t:'Title tag', d:d.title.substring(0,60) })
+
+    // Meta desc
+    if (!d.metaDesc) { score -= 15; checks.push({ s:'fail', t:'Meta description saknas', d:'Lägg till meta description' }) }
+    else if (d.metaDescLen < 70) { score -= 5; checks.push({ s:'warn', t:'Meta description för kort', d:d.metaDescLen + ' tecken (rekommenderat: 70–160)' }) }
+    else if (d.metaDescLen > 160) { score -= 5; checks.push({ s:'warn', t:'Meta description för lång', d:d.metaDescLen + ' tecken (rekommenderat: 70–160)' }) }
+    else checks.push({ s:'pass', t:'Meta description', d:d.metaDesc.substring(0,80) + '...' })
+
+    // H1
+    if (d.h1Count === 0) { score -= 10; checks.push({ s:'fail', t:'H1-rubrik saknas', d:'Varje sida bör ha exakt en H1' }) }
+    else if (d.h1Count > 1) { score -= 5; checks.push({ s:'warn', t:'Flera H1-rubriker (' + d.h1Count + ')', d:'Använd bara en H1 per sida' }) }
+    else checks.push({ s:'pass', t:'H1-struktur', d:d.h1s[0].text.substring(0,60) })
+
+    // Images
+    if (d.imgNoAlt > 0) { score -= Math.min(10, d.imgNoAlt * 2); checks.push({ s:'fail', t:'Alt-texter saknas', d:d.imgNoAlt + ' av ' + d.imgTotal + ' bilder saknar alt-text' }) }
+    else if (d.imgTotal > 0) checks.push({ s:'pass', t:'Alt-texter', d:'Alla ' + d.imgTotal + ' bilder har alt-text' })
+    else checks.push({ s:'info', t:'Inga bilder', d:'Sidan innehåller inga bilder' })
+
+    // Canonical
+    if (!d.canonical) { score -= 5; checks.push({ s:'warn', t:'Canonical saknas', d:'Lägg till <link rel="canonical">' }) }
+    else checks.push({ s:'pass', t:'Canonical', d:d.canonical.substring(0,60) })
+
+    // OG
+    if (!d.ogTitle && !d.ogDesc) { score -= 5; checks.push({ s:'warn', t:'Open Graph saknas', d:'Lägg till og:title och og:description' }) }
+    else checks.push({ s:'pass', t:'Open Graph', d:'og:title och og:description finns' })
+
+    // Schema
+    if (d.schemas.length === 0) { score -= 5; checks.push({ s:'warn', t:'Structured Data saknas', d:'Lägg till JSON-LD schema' }) }
+    else checks.push({ s:'pass', t:'Structured Data', d:d.schemas.join(', ') })
+
+    // Viewport
+    if (!d.viewport) { score -= 5; checks.push({ s:'fail', t:'Viewport saknas', d:'Mobilanpassning kräver viewport meta' }) }
+    else checks.push({ s:'pass', t:'Viewport', d:'Korrekt konfigurerad' })
+
+    // Lang
+    if (!d.lang) { score -= 3; checks.push({ s:'warn', t:'Språk ej angivet', d:'Lägg till lang-attribut på <html>' }) }
+    else checks.push({ s:'pass', t:'Språk', d:d.lang })
+
+    // Robots
+    if (d.robots && d.robots.includes('noindex')) checks.push({ s:'fail', t:'Sidan är noindex', d:'Google indexerar INTE denna sida' })
+    else checks.push({ s:'pass', t:'Indexerbar', d:'Ingen noindex-blockning' })
+
+    score = Math.max(0, score)
+    const col = score >= 80 ? 'var(--g)' : score >= 50 ? 'var(--w)' : 'var(--r)'
+
+    let html = `
+      <div style="display:flex;align-items:center;gap:12px;margin-bottom:14px">
+        <div class="score-ring">
+          <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.26} 126" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:center"/></svg>
+          <div class="score-num" style="color:${col}">${score}</div>
+        </div>
+        <div>
+          <div style="font-size:14px;font-weight:800;color:var(--head)">${score}/100</div>
+          <div style="font-size:10px;color:var(--muted)">On-Page SEO Score</div>
+        </div>
+      </div>
+      <div class="sh">KONTROLLER</div>
+    `
+    // Sort: fails first, then warns, then passes
+    const order = { fail:0, warn:1, info:2, pass:3 }
+    checks.sort((a,b) => (order[a.s]||9) - (order[b.s]||9))
+
+    for (const c of checks) {
+      const icon = c.s === 'pass' ? '✓' : c.s === 'warn' ? '!' : c.s === 'fail' ? '✕' : 'i'
+      html += `<div class="seo-check">
+        <div class="seo-check-icon ${c.s}">${icon}</div>
+        <div style="flex:1;min-width:0"><div class="seo-check-text">${esc(c.t)}</div><div class="seo-check-detail">${esc(c.d)}</div></div>
+      </div>`
+    }
+
+    // Quick stats
+    html += `
+      <div class="sh" style="margin-top:14px">SNABBSTATISTIK</div>
+      <div class="mr"><span class="mrl">Ordantal</span><span class="mrv">${d.wordCount.toLocaleString()}</span></div>
+      <div class="mr"><span class="mrl">Interna länkar</span><span class="mrv">${d.intLinks}</span></div>
+      <div class="mr"><span class="mrl">Externa länkar</span><span class="mrv">${d.extLinks}</span></div>
+      <div class="mr"><span class="mrl">Nofollow-länkar</span><span class="mrv">${d.nofollowLinks}</span></div>
+      <div class="mr"><span class="mrl">Bilder</span><span class="mrv">${d.imgTotal}</span></div>
+      <div class="mr"><span class="mrl">TTFB</span><span class="mrv">${d.ttfb} ms</span></div>
+      <div class="mr"><span class="mrl">Laddningstid</span><span class="mrv">${d.loadTime} ms</span></div>
+    `
+    el.innerHTML = html
+
+  } else if (tab === 'crawl') {
+    el.innerHTML = '<div style="text-align:center;padding:16px;color:var(--muted)">Analyserar intern länkstruktur...</div>'
+    const d = await seoAnalyzePage()
+    if (!d) { el.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte analysera.</div>'; return }
+
+    // Crawl-like analysis: internal links, headings tree, resource summary
+    let html = `
+      <div class="sh">RUBRIKSTRUKTUR</div>
+      <div style="font-family:Consolas,Monaco,monospace;font-size:10px;line-height:1.8;margin-bottom:14px">
+    `
+    if (d.headings.length === 0) {
+      html += '<div style="color:var(--muted)">Inga rubriker hittade</div>'
+    } else {
+      for (const h of d.headings) {
+        const indent = (h.level - 1) * 16
+        const col = h.level === 1 ? 'var(--p)' : h.level === 2 ? 'var(--g)' : 'var(--muted)'
+        html += `<div style="padding-left:${indent}px"><span style="color:${col};font-weight:700">H${h.level}</span> <span style="color:var(--head)">${esc(h.text.substring(0,80))}</span></div>`
+      }
+    }
+    html += '</div>'
+
+    // Links summary
+    html += `
+      <div class="sh">LÄNKANALYS</div>
+      <div class="mr"><span class="mrl">Totalt</span><span class="mrv">${d.totalLinks} länkar</span></div>
+      <div class="mr"><span class="mrl">Interna</span><span class="mrv" style="color:var(--g)">${d.intLinks}</span></div>
+      <div class="mr"><span class="mrl">Externa</span><span class="mrv" style="color:var(--p)">${d.extLinks}</span></div>
+      <div class="mr"><span class="mrl">Nofollow</span><span class="mrv" style="color:${d.nofollowLinks?'var(--w)':'var(--muted)'}">${d.nofollowLinks}</span></div>
+    `
+
+    // Resource breakdown
+    html += `
+      <div class="sh" style="margin-top:14px">RESURSER</div>
+      <div class="mr"><span class="mrl">Totalt</span><span class="mrv">${d.resourceCount} resurser (${fmtBytes(d.totalSize)})</span></div>
+      <div class="mr"><span class="mrl">DOM Ready</span><span class="mrv">${d.domReady} ms</span></div>
+      <div class="mr"><span class="mrl">Full laddning</span><span class="mrv">${d.loadTime} ms</span></div>
+      <div class="mr"><span class="mrl">TTFB</span><span class="mrv">${d.ttfb} ms</span></div>
+    `
+
+    // Schema
+    html += '<div class="sh" style="margin-top:14px">STRUCTURED DATA</div>'
+    if (d.schemas.length === 0) {
+      html += '<div style="font-size:10px;color:var(--muted);padding:4px 0">Ingen JSON-LD hittad</div>'
+    } else {
+      for (const s of d.schemas) html += `<span class="insp-tag blue">${esc(s)}</span> `
+    }
+
+    // Hreflang
+    if (d.hreflangs.length) {
+      html += '<div class="sh" style="margin-top:14px">HREFLANG</div>'
+      for (const h of d.hreflangs) html += `<span class="insp-tag blue">${esc(h)}</span> `
+    }
+
+    el.innerHTML = html
+
+  } else if (tab === 'lighthouse') {
+    el.innerHTML = `
+      <div style="text-align:center;padding:16px">
+        <div style="color:var(--muted);margin-bottom:12px;font-size:11px">Kör en Lighthouse-liknande prestandaanalys direkt i browsern</div>
+        <button class="act-btn" onclick="runLighthousePanel()">⚡ Kör Lighthouse-analys</button>
+      </div>
+    `
+  }
+}
+
+async function runLighthousePanel() {
+  const el = document.getElementById('seoPanelContent')
+  if (!el) return
+  el.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar prestanda, tillgänglighet och SEO...<br><br><div style="font-size:20px">⏳</div></div>'
+
+  try {
+    const d = await wv.executeJavaScript(`(function(){
+      const d = document;
+      const perf = performance.getEntriesByType('navigation')[0] || {};
+      const resources = performance.getEntriesByType('resource');
+
+      // === PERFORMANCE ===
+      const ttfb = Math.round(perf.responseStart - perf.startTime || 0);
+      const fcp = Math.round((performance.getEntriesByName('first-contentful-paint')[0]?.startTime) || 0);
+      const domReady = Math.round(perf.domContentLoadedEventEnd - perf.startTime || 0);
+      const loadTime = Math.round(perf.loadEventEnd - perf.startTime || 0);
+      const totalSize = resources.reduce((s,r) => s + (r.transferSize || 0), 0);
+      const jsSize = resources.filter(r=>/script/i.test(r.initiatorType)).reduce((s,r)=>s+(r.transferSize||0),0);
+      const cssSize = resources.filter(r=>/css|link/i.test(r.initiatorType)).reduce((s,r)=>s+(r.transferSize||0),0);
+      const imgSize = resources.filter(r=>/img/i.test(r.initiatorType)).reduce((s,r)=>s+(r.transferSize||0),0);
+
+      let perfScore = 100;
+      if (fcp > 3000) perfScore -= 25; else if (fcp > 1800) perfScore -= 10;
+      if (ttfb > 800) perfScore -= 20; else if (ttfb > 400) perfScore -= 10;
+      if (loadTime > 5000) perfScore -= 20; else if (loadTime > 3000) perfScore -= 10;
+      if (totalSize > 3000000) perfScore -= 15; else if (totalSize > 1500000) perfScore -= 5;
+      if (jsSize > 500000) perfScore -= 10; else if (jsSize > 200000) perfScore -= 5;
+
+      // === ACCESSIBILITY ===
+      let a11yScore = 100;
+      const a11yIssues = [];
+      const imgs = d.querySelectorAll('img');
+      let imgNoAlt = 0;
+      imgs.forEach(i => { if (!i.alt) imgNoAlt++ });
+      if (imgNoAlt > 0) { a11yScore -= Math.min(20, imgNoAlt * 3); a11yIssues.push(imgNoAlt + ' bilder saknar alt-text'); }
+
+      const buttons = d.querySelectorAll('button, [role="button"]');
+      let emptyBtns = 0;
+      buttons.forEach(b => { if (!b.textContent.trim() && !b.getAttribute('aria-label')) emptyBtns++ });
+      if (emptyBtns > 0) { a11yScore -= emptyBtns * 3; a11yIssues.push(emptyBtns + ' knappar saknar text/label'); }
+
+      if (!d.documentElement.lang) { a11yScore -= 10; a11yIssues.push('Saknar lang-attribut'); }
+      const contrast = d.querySelectorAll('[style*="color"]').length;
+      const formInputs = d.querySelectorAll('input:not([type="hidden"]), select, textarea');
+      let noLabel = 0;
+      formInputs.forEach(f => { if (!f.id || !d.querySelector('label[for="'+f.id+'"]')) noLabel++ });
+      if (noLabel > 0) { a11yScore -= noLabel * 3; a11yIssues.push(noLabel + ' formulärfält saknar label'); }
+
+      // === SEO ===
+      let seoScore = 100;
+      const seoIssues = [];
+      const title = d.title || '';
+      const metaDesc = d.querySelector('meta[name="description"]')?.content || '';
+      if (!title) { seoScore -= 15; seoIssues.push('Title saknas'); }
+      else if (title.length < 30 || title.length > 60) { seoScore -= 5; seoIssues.push('Title längd: ' + title.length + ' tecken'); }
+      if (!metaDesc) { seoScore -= 15; seoIssues.push('Meta description saknas'); }
+      const h1s = d.querySelectorAll('h1');
+      if (h1s.length === 0) { seoScore -= 10; seoIssues.push('H1 saknas'); }
+      else if (h1s.length > 1) { seoScore -= 5; seoIssues.push(h1s.length + ' st H1-taggar'); }
+      if (imgNoAlt > 0) { seoScore -= 5; seoIssues.push('Bilder utan alt-text'); }
+      if (!d.querySelector('link[rel="canonical"]')) { seoScore -= 5; seoIssues.push('Canonical saknas'); }
+      if (!d.querySelector('meta[name="viewport"]')) { seoScore -= 10; seoIssues.push('Viewport saknas'); }
+      const robots = d.querySelector('meta[name="robots"]')?.content || '';
+      if (robots.includes('noindex')) { seoScore -= 15; seoIssues.push('noindex aktivt'); }
+
+      // === BEST PRACTICES ===
+      let bpScore = 100;
+      const bpIssues = [];
+      if (location.protocol !== 'https:') { bpScore -= 20; bpIssues.push('Sidan körs ej på HTTPS'); }
+      if (!d.querySelector('meta[charset]') && d.characterSet !== 'UTF-8') { bpScore -= 5; bpIssues.push('Charset ej deklarerat'); }
+      const mixedContent = d.querySelectorAll('img[src^="http:"], script[src^="http:"], link[href^="http:"]').length;
+      if (mixedContent > 0) { bpScore -= 10; bpIssues.push(mixedContent + ' mixed-content-resurser'); }
+
+      return {
+        perf: { score: Math.max(0, perfScore), fcp, ttfb, domReady, loadTime, totalSize, jsSize, cssSize, imgSize, resourceCount: resources.length },
+        a11y: { score: Math.max(0, a11yScore), issues: a11yIssues },
+        seo: { score: Math.max(0, seoScore), issues: seoIssues },
+        bp: { score: Math.max(0, bpScore), issues: bpIssues },
+      };
+    })()`)
+
+    // Render results
+    const cats = [
+      { key:'perf', name:'Prestanda', score: d.perf.score },
+      { key:'a11y', name:'Tillgänglighet', score: d.a11y.score },
+      { key:'seo', name:'SEO', score: d.seo.score },
+      { key:'bp', name:'Best Practices', score: d.bp.score },
+    ]
+
+    let html = '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:16px;flex-wrap:wrap">'
+    for (const c of cats) {
+      const col = c.score >= 90 ? 'var(--g)' : c.score >= 50 ? 'var(--w)' : 'var(--r)'
+      html += `<div style="text-align:center">
+        <div class="lighthouse-cat-score" style="border-color:${col};color:${col};margin:0 auto 4px">${c.score}</div>
+        <div style="font-size:9px;color:var(--muted)">${c.name}</div>
+      </div>`
+    }
+    html += '</div>'
+
+    // Performance details
+    html += `<div class="sh">PRESTANDA</div>
+      <div class="mr"><span class="mrl">FCP</span><span class="mrv" style="color:${d.perf.fcp>3000?'var(--r)':d.perf.fcp>1800?'var(--w)':'var(--g)'}">${d.perf.fcp} ms</span></div>
+      <div class="mr"><span class="mrl">TTFB</span><span class="mrv" style="color:${d.perf.ttfb>800?'var(--r)':d.perf.ttfb>400?'var(--w)':'var(--g)'}">${d.perf.ttfb} ms</span></div>
+      <div class="mr"><span class="mrl">DOM Ready</span><span class="mrv">${d.perf.domReady} ms</span></div>
+      <div class="mr"><span class="mrl">Full laddning</span><span class="mrv">${d.perf.loadTime} ms</span></div>
+      <div class="mr"><span class="mrl">JS-storlek</span><span class="mrv">${fmtBytes(d.perf.jsSize)}</span></div>
+      <div class="mr"><span class="mrl">CSS-storlek</span><span class="mrv">${fmtBytes(d.perf.cssSize)}</span></div>
+      <div class="mr"><span class="mrl">Bilder</span><span class="mrv">${fmtBytes(d.perf.imgSize)}</span></div>
+      <div class="mr"><span class="mrl">Totalt</span><span class="mrv">${fmtBytes(d.perf.totalSize)} (${d.perf.resourceCount} resurser)</span></div>
+    `
+
+    // Issues per category
+    const issueCats = [
+      { name: 'TILLGÄNGLIGHET', issues: d.a11y.issues },
+      { name: 'SEO', issues: d.seo.issues },
+      { name: 'BEST PRACTICES', issues: d.bp.issues },
+    ]
+    for (const ic of issueCats) {
+      html += `<div class="sh" style="margin-top:14px">${ic.name}</div>`
+      if (ic.issues.length === 0) {
+        html += '<div style="font-size:10px;color:var(--g);padding:4px 0">✓ Inga problem hittade</div>'
+      } else {
+        for (const iss of ic.issues) {
+          html += `<div class="seo-check"><div class="seo-check-icon warn">!</div><div class="seo-check-text">${esc(iss)}</div></div>`
+        }
+      }
+    }
+
+    html += `<button class="act-btn" style="margin-top:14px" onclick="runLighthousePanel()">⚡ Kör igen</button>`
+    el.innerHTML = html
+
+  } catch(e) {
+    el.innerHTML = '<div style="padding:16px;color:var(--r)">Analys misslyckades: ' + esc(e.message) + '</div>'
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  PANEL SYSTEM (dock)
 // ══════════════════════════════════════════════════════
 let currentPanel = null
+let dockVisible = true
+
+function toggleDock() {
+  dockVisible = !dockVisible
+  const dock = document.querySelector('.dock')
+  const panel = document.getElementById('seozPanel')
+  if (dockVisible) {
+    dock.style.display = ''
+    panel.style.display = ''
+  } else {
+    closePanel()
+    dock.style.display = 'none'
+    panel.style.display = 'none'
+  }
+}
 
 function togglePanel(name) {
   if (currentPanel === name) { closePanel(); return }
@@ -1391,14 +1814,17 @@ async function renderPanelContent(name) {
 
   if (name === 'seo') {
     icon.textContent = '🔍'; title.textContent = 'SEO-analys'
+    // Sub-tab state
+    if (!window._seoTab) window._seoTab = 'onpage'
     body.innerHTML = `
-      <div class="sh">On-page</div>
-      <div class="mr"><span class="mrl"><span class="md dg"></span>Title tag</span><span class="bdg bg">OK</span></div>
-      <div class="mr"><span class="mrl"><span class="md dg"></span>Meta description</span><span class="bdg bg">OK</span></div>
-      <div class="mr"><span class="mrl"><span class="md do"></span>H1-struktur</span><span class="bdg bw">Se över</span></div>
-      <div class="mr"><span class="mrl"><span class="md dr"></span>Alt-texter</span><span class="bdg bb">Saknas</span></div>
-      <p style="font-size:11px;color:var(--muted);margin-top:14px">Analyserar aktuell sida. Anslut ditt SEOZ-konto för djupare data.</p>
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px">
+        <div class="seo-sub-tab ${window._seoTab==='onpage'?'active':''}" onclick="window._seoTab='onpage';renderPanelContent('seo')">On-Page</div>
+        <div class="seo-sub-tab ${window._seoTab==='crawl'?'active':''}" onclick="window._seoTab='crawl';renderPanelContent('seo')">Crawl</div>
+        <div class="seo-sub-tab ${window._seoTab==='lighthouse'?'active':''}" onclick="window._seoTab='lighthouse';renderPanelContent('seo')">Lighthouse</div>
+      </div>
+      <div id="seoPanelContent"><div style="text-align:center;padding:20px;color:var(--muted)">Laddar...</div></div>
     `
+    renderSeoSubTab(window._seoTab)
   } else if (name === 'kw') {
     icon.textContent = '📊'; title.textContent = 'Keywords'
     if (synced.keywords && synced.keywords.length) {
@@ -2635,7 +3061,19 @@ function clearHistory() {
     const lower = q.toLowerCase()
     matches = dedupe(browsingHistory.filter(h =>
       h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)
-    )).slice(0, 8)
+    )).sort((a, b) => {
+      // Prioritize root/main pages over subpages
+      try {
+        const aPath = new URL(a.url).pathname
+        const bPath = new URL(b.url).pathname
+        const aIsRoot = aPath === '/' || aPath === ''
+        const bIsRoot = bPath === '/' || bPath === ''
+        if (aIsRoot && !bIsRoot) return -1
+        if (!aIsRoot && bIsRoot) return 1
+        // Then shorter paths first
+        return aPath.length - bPath.length
+      } catch(_) { return 0 }
+    }).slice(0, 8)
     if (!matches.length) { hideSuggestions(); return }
     selIdx = -1
     box.innerHTML = matches.map((h, i) =>
@@ -4986,7 +5424,10 @@ function openInspector() {
   runInspector()
 }
 function closeInspector() {
-  document.getElementById('inspectorDrawer').classList.remove('open')
+  const drawer = document.getElementById('inspectorDrawer')
+  drawer.classList.remove('open')
+  // Clear inline height left by drag-to-resize, so CSS height:0 takes effect
+  drawer.style.height = ''
 }
 function toggleInspector() {
   const d = document.getElementById('inspectorDrawer')
@@ -5141,6 +5582,7 @@ function renderInspector() {
   if (inspectorTab === 'console') { body.innerHTML = renderInspConsole(); return }
   if (inspectorTab === 'network') { body.innerHTML = renderInspNetwork(); return }
   if (inspectorTab === 'elements') { body.innerHTML = renderInspElements(); return }
+  if (inspectorTab === 'source') { renderInspSource(body); return }
 
   if (inspectorTab === 'overview') {
     html = renderInspOverview(d)
@@ -5406,6 +5848,86 @@ function renderInspRaw(d) {
   return `<div class="insp-section"><div class="insp-section-title">Rådata (JSON) — för crawlern</div>
   <div style="margin-bottom:6px"><button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyInspectorData()">📋 Kopiera all data</button></div>
   <div class="insp-code" style="max-height:none">${esc(JSON.stringify(d, null, 2))}</div></div>`
+}
+
+async function renderInspSource(container) {
+  container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Hämtar HTML-källkod...</div>'
+  try {
+    const html = await wv.executeJavaScript(`
+      // Get the full HTML source with proper formatting
+      (function(){
+        const doctype = document.doctype
+          ? '<!DOCTYPE ' + document.doctype.name + (document.doctype.publicId ? ' PUBLIC "' + document.doctype.publicId + '"' : '') + (document.doctype.systemId ? ' "' + document.doctype.systemId + '"' : '') + '>\\n'
+          : '';
+        return doctype + document.documentElement.outerHTML;
+      })()
+    `)
+
+    // Syntax-highlight the HTML
+    const highlighted = htmlSyntaxHighlight(html)
+    const lines = highlighted.split('\n')
+    let numbered = '<table style="border-collapse:collapse;width:100%">'
+    for (let i = 0; i < lines.length; i++) {
+      numbered += `<tr><td style="color:var(--muted);text-align:right;padding:0 10px 0 0;user-select:none;font-size:10px;width:40px;vertical-align:top;border-right:1px solid var(--border)">${i+1}</td><td style="padding:0 0 0 8px;white-space:pre-wrap;word-break:break-all">${lines[i]}</td></tr>`
+    }
+    numbered += '</table>'
+
+    container.innerHTML = `
+      <div style="display:flex;gap:6px;margin-bottom:8px">
+        <button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyPageSource()">📋 Kopiera källkod</button>
+        <input class="ac-inp" id="sourceSearch" placeholder="Sök i källkoden..." style="flex:1;height:28px;font-size:10px" oninput="searchInSource(this.value)">
+      </div>
+      <div id="sourceContainer" style="font-family:Consolas,Monaco,monospace;font-size:10px;line-height:1.6;overflow:auto;max-height:calc(100% - 40px);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 0">${numbered}</div>
+    `
+    // Store source for copy/search
+    window._pageSource = html
+  } catch(e) {
+    container.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte hämta källkod: ' + esc(e.message) + '</div>'
+  }
+}
+
+function htmlSyntaxHighlight(html) {
+  // Simple HTML syntax highlighting
+  return html
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    // Tags: <tagname ... >
+    .replace(/&lt;(\/?)([\w-]+)/g, '&lt;$1<span style="color:#e06c75">$2</span>')
+    // Attributes: key="value"
+    .replace(/\s([\w-]+)=(&quot;|")/g, ' <span style="color:#d19a66">$1</span>=<span style="color:#98c379">&quot;')
+    .replace(/(&quot;|")([\s&>])/g, '&quot;</span>$2')
+    // Comments
+    .replace(/&lt;!--[\s\S]*?--&gt;/g, m => '<span style="color:#5c6370;font-style:italic">' + m + '</span>')
+}
+
+async function copyPageSource() {
+  if (window._pageSource) {
+    await navigator.clipboard.writeText(window._pageSource)
+    toast('Källkod kopierad!', '#2ca87f')
+  }
+}
+
+function searchInSource(query) {
+  const container = document.getElementById('sourceContainer')
+  if (!container || !query) {
+    // Remove highlights
+    container.querySelectorAll('.src-hl').forEach(el => {
+      el.replaceWith(document.createTextNode(el.textContent))
+    })
+    return
+  }
+  // Simple: scroll to first match by re-rendering with highlights
+  // For performance, just use browser find-like approach
+  const cells = container.querySelectorAll('td:nth-child(2)')
+  let found = false
+  cells.forEach(td => {
+    const text = td.textContent
+    if (text.toLowerCase().includes(query.toLowerCase())) {
+      if (!found) { td.scrollIntoView({ block:'center' }); found = true }
+      td.style.background = 'rgba(70,128,255,.1)'
+    } else {
+      td.style.background = ''
+    }
+  })
 }
 
 function copyInspectorData() {

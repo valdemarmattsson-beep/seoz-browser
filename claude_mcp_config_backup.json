@@ -1,0 +1,21 @@
+{
+  "preferences": {
+    "localAgentModeTrustedFolders": [
+      "C:\\Users\\valde\\OneDrive\\Dokument\\SEOZ\\seo-os-v3",
+      "C:\\Users\\valde\\Dev\\seo-os-v3",
+      "C:\\Users\\valde\\Dev\\creatives",
+      "C:\\Users\\valde\\Dev\\seoz"
+    ],
+    "coworkScheduledTasksEnabled": true,
+    "ccdScheduledTasksEnabled": true,
+    "sidebarMode": "task",
+    "coworkWebSearchEnabled": true,
+    "keepAwakeEnabled": true
+  },
+  "mcpServers": {
+    "SEOZ Browser": {
+      "command": "node",
+      "args": ["C:\\Users\\valde\\Dev\\seoz-browser\\src\\main\\mcp-stdio.js"]
+    }
+  }
+}

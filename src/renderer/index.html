@@ -12,7 +12,7 @@
   --w:#e58a00; --r:#dc2626;
   --bg:#131920; --card:#1b232d; --panel:#151d27;
   --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
-  --tab-h:34px; --addr-h:42px; --bm-h:28px; --chrome-h:104px;
+  --tab-h:38px; --addr-h:42px; --bm-h:28px; --chrome-h:108px;
   --dock-w:48px; --panel-w:280px; --status-h:22px;
 }
 [data-theme="light"] {
@@ -39,10 +39,10 @@ input,textarea,select{user-select:text}
   height:var(--tab-h);
   background:var(--bg);
   display:flex;align-items:flex-end;
-  padding:0 6px;gap:1px;
+  padding:0 6px;gap:0;
 }
 .tab{
-  height:28px;min-width:60px;max-width:200px;flex:0 1 auto;
+  height:32px;width:180px;min-width:48px;flex:0 1 180px;
   padding:0 8px;border-radius:7px 7px 0 0;
   display:flex;align-items:center;gap:5px;
   font-size:11px;cursor:pointer;
@@ -51,6 +51,8 @@ input,textarea,select{user-select:text}
   -webkit-app-region:no-drag;
   position:relative;
 }
+.tab::after{content:'';position:absolute;right:0;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.12)}
+.tab:last-of-type::after,.tab.active::after,.tab.active+.tab::after,.tab:hover::after,.tab:hover+.tab::after{background:transparent}
 .tab:hover:not(.active){background:rgba(255,255,255,.05)}
 .tab.active{background:var(--card);color:var(--head);font-weight:600}
 .tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:block}
@@ -812,7 +814,7 @@ input,textarea,select{user-select:text}
     <!-- Webview container (holds webview + inspector drawer) -->
     <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative">
       <webview id="wv" src="https://www.google.com"
-               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
                allowpopups style="flex:1;min-height:0;border:none;outline:none">
       </webview>
       <!-- Floating voice button -->
@@ -1115,6 +1117,61 @@ function scheduleRenderTabs() {
   requestAnimationFrame(() => { _tabRenderPending = false; renderTabs() })
 }
 
+// ── Anti-detection: make webview look like real Chrome to Google et al. ──
+// Google blocks Electron webviews by checking navigator properties.
+// We inject a small script on every page load to spoof Chrome fingerprints.
+const CHROME_SPOOF_SCRIPT = `
+  // Spoof window.chrome object (missing in Electron webviews)
+  if (!window.chrome) {
+    window.chrome = {
+      app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' } },
+      runtime: { OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' }, OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' }, PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' }, PlatformNaclArch: { ARM: 'arm', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' }, PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' }, RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' } },
+      csi: function(){},
+      loadTimes: function(){ return {} },
+    };
+  }
+
+  // Spoof navigator.plugins (empty array in Electron = red flag)
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+      const arr = [
+        { name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer', length: 1 },
+        { name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', length: 1 },
+        { name: 'Native Client', description: '', filename: 'internal-nacl-plugin', length: 2 },
+      ];
+      arr.item = i => arr[i] || null;
+      arr.namedItem = n => arr.find(p => p.name === n) || null;
+      arr.refresh = () => {};
+      return arr;
+    }
+  });
+
+  // Spoof navigator.languages (Electron sometimes only has one)
+  Object.defineProperty(navigator, 'languages', {
+    get: () => ['sv-SE', 'sv', 'en-US', 'en']
+  });
+
+  // Spoof webdriver flag (Google checks this)
+  Object.defineProperty(navigator, 'webdriver', {
+    get: () => false
+  });
+
+  // Spoof permissions API for notifications query
+  if (navigator.permissions) {
+    const origQuery = navigator.permissions.query.bind(navigator.permissions);
+    navigator.permissions.query = (params) => {
+      if (params.name === 'notifications') {
+        return Promise.resolve({ state: Notification.permission });
+      }
+      return origQuery(params);
+    };
+  }
+`
+
+wv.addEventListener('dom-ready', () => {
+  wv.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+})
+
 wv.addEventListener('did-navigate', e => updateURL(e.url))
 wv.addEventListener('did-navigate-in-page', e => updateURL(e.url))
 wv.addEventListener('did-start-loading', () => {
@@ -1145,7 +1202,7 @@ wv.addEventListener('page-favicon-updated', e => {
 wv.addEventListener('new-window', e => newTab(e.url))
 
 function updateURL(url) {
-  document.getElementById('urlInput').value = url
+  document.getElementById('urlInput').value = (url === 'about:blank') ? '' : url
   // Update status bar domain
   try { document.getElementById('sbDomain').textContent = new URL(url).hostname } catch(_){}
   // Set favicon from Google's service (instant, reliable)
@@ -1269,13 +1326,16 @@ function renderTabs() {
 
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
 
-function newTab(url = 'https://www.google.com') {
+function newTab(url) {
   const id = nextId++
-  tabs.push({ id, title:'Ny flik', url, loading:false, favicon:null })
+  const isBlank = !url
+  const loadUrl = url || 'about:blank'
+  tabs.push({ id, title:'Ny flik', url: loadUrl, loading:false, favicon:null })
   switchTab(id)
   const urlInput = document.getElementById('urlInput')
+  if (isBlank) urlInput.value = ''
   urlInput.focus()
-  urlInput.select()
+  if (!isBlank) urlInput.select()
 }
 
 function switchTab(id) {
@@ -1283,7 +1343,7 @@ function switchTab(id) {
   const tab = getActive()
   if (tab) {
     wv.loadURL(tab.url)
-    document.getElementById('urlInput').value = tab.url
+    document.getElementById('urlInput').value = (tab.url === 'about:blank') ? '' : tab.url
     if (tab.favicon) setUrlFavicon(tab.favicon)
   }
   renderTabs()
@@ -1601,6 +1661,11 @@ async function renderPanelContent(name) {
       <div class="mr"><span class="mrl">Status</span><span class="mrv" style="color:var(--g)">Aktiv på port 19532</span></div>
       <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Claude Code kan ansluta till browsern via MCP. Lägg till i din MCP-config:<br><code style="font-size:9px;background:var(--panel);padding:2px 4px;border-radius:3px">http://127.0.0.1:19532/sse</code></p>
 
+      <div class="sh" style="margin-top:18px">STANDARDWEBBLÄSARE</div>
+      <div class="mr"><span class="mrl">Status</span><span class="mrv" id="settingsDefaultBrowser">Kontrollerar...</span></div>
+      <button class="act-btn" style="margin-top:8px" id="setDefaultBrowserBtn" onclick="doSetDefaultBrowser()">🌐 Ange som standardwebbläsare</button>
+      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Öppnar Windows-inställningar där du kan välja SEOZ Browser som din standardwebbläsare för http/https-länkar.</p>
+
       <div class="sh" style="margin-top:18px">UPPDATERINGAR</div>
       <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
       <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">🔄 Sök efter uppdateringar</button>
@@ -1621,6 +1686,27 @@ async function renderPanelContent(name) {
       const el = document.getElementById('settingsElevenlabsKey')
       if (el) el.textContent = k ? k.slice(0, 10) + '••••••••' : 'Ej konfigurerad'
     })
+    // Check default browser status
+    if (SE.isWindows && SE.isDefaultBrowser) {
+      SE.isDefaultBrowser().then(isDefault => {
+        const el = document.getElementById('settingsDefaultBrowser')
+        const btn = document.getElementById('setDefaultBrowserBtn')
+        if (el) {
+          el.textContent = isDefault ? 'SEOZ Browser är standard' : 'Ej standardwebbläsare'
+          el.style.color = isDefault ? 'var(--g)' : 'var(--muted)'
+        }
+        if (btn && isDefault) {
+          btn.textContent = '✓ Redan standardwebbläsare'
+          btn.disabled = true
+          btn.style.opacity = '0.5'
+        }
+      })
+    } else {
+      const el = document.getElementById('settingsDefaultBrowser')
+      if (el) { el.textContent = 'Endast Windows'; el.style.color = 'var(--muted)' }
+      const btn = document.getElementById('setDefaultBrowserBtn')
+      if (btn) { btn.disabled = true; btn.style.opacity = '0.5' }
+    }
   }
 }
 
@@ -1808,6 +1894,14 @@ function updateSyncUI() {
 function openApiKeyPage() {
   wv.loadURL('https://seoz.se/dashboard/verktyg/api')
   document.getElementById('auth').classList.add('gone')
+}
+
+async function doSetDefaultBrowser() {
+  if (!SE.isWindows || !SE.setDefaultBrowser) return
+  const ok = await SE.setDefaultBrowser()
+  if (ok) {
+    toast('Windows-inställningar öppnade — välj SEOZ Browser som standard', '#4680ff')
+  }
 }
 
 // Listen for sync-data from main process (auto-sync)
@@ -2308,6 +2402,13 @@ SE.on('blocker-count', count => {
   updateBlockerUI()
 })
 
+// Listen for open-url from main process (default browser / second instance)
+SE.on('open-url', url => {
+  if (url && /^https?:\/\//i.test(url)) {
+    wv.loadURL(url)
+  }
+})
+
 // Close popup on outside click
 document.addEventListener('click', e => {
   if (!e.target.closest('#blockerWrap')) {
@@ -2456,6 +2557,8 @@ function addToHistory(url, title) {
   if (browsingHistory.length > 500) browsingHistory.length = 500
   // Persist
   SE.storeSet('browsingHistory', JSON.stringify(browsingHistory))
+  // Update Windows taskbar Jump List
+  if (SE.updateJumpList) SE.updateJumpList()
 }
 
 async function loadHistory() {
@@ -4763,6 +4866,108 @@ window.__mcpExecute = async function(toolName, args) {
         setTimeout(() => { obs.disconnect(); resolve(false) }, ${timeout});
       })`)
       return { ok: found, selector: args.selector, found }
+    }
+
+    case 'select_option': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const el = document.querySelector(${JSON.stringify(args.selector)});
+        if (!el) return { error: 'Element not found: ' + ${JSON.stringify(args.selector)} };
+        if (el.tagName !== 'SELECT') return { error: 'Element is not a <select>: ' + el.tagName };
+        const options = Array.from(el.options).map(o => ({ value: o.value, text: o.textContent.trim(), selected: o.selected }));
+        if (${JSON.stringify(!!args.list)}) return { options };
+        const val = ${JSON.stringify(args.value || '')};
+        if (!val) return { error: 'No value provided', options };
+        const lower = val.toLowerCase();
+        const match = Array.from(el.options).find(o => o.value === val || o.textContent.trim().toLowerCase().includes(lower));
+        if (!match) return { error: 'Option not found: ' + val, options };
+        el.value = match.value;
+        el.dispatchEvent(new Event('change', { bubbles: true }));
+        el.dispatchEvent(new Event('input', { bubbles: true }));
+        return { ok: true, selected: { value: match.value, text: match.textContent.trim() } };
+      }())`)
+    }
+
+    case 'get_page_structure': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const result = { title: document.title, url: location.href, headings: [], landmarks: [], forms: [], sections: [] };
+
+        // Headings
+        document.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+          const rect = h.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) return;
+          result.headings.push({ level: parseInt(h.tagName[1]), text: h.textContent.trim().slice(0, 100) });
+        });
+
+        // Landmarks
+        const landmarks = document.querySelectorAll('nav, main, aside, header, footer, [role="navigation"], [role="main"], [role="banner"], [role="contentinfo"], [role="search"]');
+        landmarks.forEach(l => {
+          result.landmarks.push({ tag: l.tagName.toLowerCase(), role: l.getAttribute('role') || l.tagName.toLowerCase(), label: l.getAttribute('aria-label') || '', id: l.id || '' });
+        });
+
+        // Forms
+        document.querySelectorAll('form').forEach(f => {
+          const fields = Array.from(f.querySelectorAll('input,select,textarea')).map(i => ({
+            tag: i.tagName.toLowerCase(), type: i.type || '', name: i.name || '', placeholder: i.placeholder || '', id: i.id || ''
+          }));
+          result.forms.push({ action: f.action || '', method: f.method || '', id: f.id || '', fields });
+        });
+
+        // Sections with ids or aria-labels
+        document.querySelectorAll('section[id], section[aria-label], div[id][class]').forEach(s => {
+          if (s.tagName === 'DIV' && !s.id) return;
+          const rect = s.getBoundingClientRect();
+          if (rect.width === 0) return;
+          result.sections.push({ tag: s.tagName.toLowerCase(), id: s.id || '', label: s.getAttribute('aria-label') || '', class: (s.className || '').toString().slice(0, 60) });
+        });
+        if (result.sections.length > 30) result.sections.length = 30;
+
+        return result;
+      }())`)
+    }
+
+    case 'fill_form': {
+      if (!wv) return { error: 'No page loaded' }
+      const fields = args.fields || []
+      const results = []
+      for (const field of fields) {
+        const r = await wv.executeJavaScript(`(function(){
+          const el = document.querySelector(${JSON.stringify(field.selector)});
+          if (!el) return { selector: ${JSON.stringify(field.selector)}, error: 'Not found' };
+          const tag = el.tagName.toLowerCase();
+          const type = (el.type || '').toLowerCase();
+          if (type === 'checkbox' || type === 'radio') {
+            const want = ${JSON.stringify(field.value)} === 'true';
+            if (el.checked !== want) el.click();
+            return { selector: ${JSON.stringify(field.selector)}, ok: true, type };
+          }
+          if (tag === 'select') {
+            const val = ${JSON.stringify(field.value)};
+            const lower = val.toLowerCase();
+            const opt = Array.from(el.options).find(o => o.value === val || o.textContent.trim().toLowerCase().includes(lower));
+            if (!opt) return { selector: ${JSON.stringify(field.selector)}, error: 'Option not found: ' + val };
+            el.value = opt.value;
+            el.dispatchEvent(new Event('change', { bubbles: true }));
+            return { selector: ${JSON.stringify(field.selector)}, ok: true, type: 'select', selected: opt.value };
+          }
+          el.focus();
+          el.value = '';
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.value = ${JSON.stringify(field.value)};
+          el.dispatchEvent(new Event('input', { bubbles: true }));
+          el.dispatchEvent(new Event('change', { bubbles: true }));
+          return { selector: ${JSON.stringify(field.selector)}, ok: true, type: type || tag };
+        }())`)
+        results.push(r)
+      }
+      if (args.submit) {
+        await wv.executeJavaScript(`(function(){
+          const form = document.querySelector(${JSON.stringify(fields[0]?.selector || 'form')})?.closest('form');
+          if (form) { form.requestSubmit ? form.requestSubmit() : form.submit() }
+        }())`)
+      }
+      return { ok: true, results }
     }
 
     default:

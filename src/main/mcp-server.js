@@ -211,6 +211,50 @@ const TOOLS = [
       }
     }
   },
+  {
+    name: 'select_option',
+    description: 'Select an option from a <select> dropdown by its visible text or value. Can also list available options.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector of the <select> element' },
+        value: { type: 'string', description: 'Option value or visible text to select' },
+        list: { type: 'boolean', description: 'If true, just list all available options without selecting' }
+      },
+      required: ['selector']
+    }
+  },
+  {
+    name: 'get_page_structure',
+    description: 'Get a compact structural overview of the page: headings hierarchy, landmark regions, forms, and main content sections. Much faster than reading all text for understanding page layout.',
+    inputSchema: {
+      type: 'object',
+      properties: {}
+    }
+  },
+  {
+    name: 'fill_form',
+    description: 'Fill multiple form fields at once. Each field is specified as a selector-value pair. Handles text inputs, textareas, checkboxes, radio buttons, and selects.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        fields: {
+          type: 'array',
+          description: 'Array of {selector, value} pairs. For checkboxes/radios, value is "true"/"false".',
+          items: {
+            type: 'object',
+            properties: {
+              selector: { type: 'string', description: 'CSS selector of the form field' },
+              value: { type: 'string', description: 'Value to set' }
+            },
+            required: ['selector', 'value']
+          }
+        },
+        submit: { type: 'boolean', description: 'Submit the form after filling (default false)' }
+      },
+      required: ['fields']
+    }
+  },
 ]
 
 // ── Execute MCP tool via IPC to renderer ──

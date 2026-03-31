@@ -5,6 +5,8 @@ node_modules/
 dist/
 out/
 build/
+!build/installer.nsh
+!build/entitlements.mac.plist
 
 # OS
 .DS_Store

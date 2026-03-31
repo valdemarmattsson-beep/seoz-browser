@@ -56,6 +56,13 @@ contextBridge.exposeInMainWorld('seoz', {
   // Open links in system browser
   openExternal: url => ipcRenderer.send('open-external', url),
 
+  // Default browser
+  isDefaultBrowser:  () => ipcRenderer.invoke('is-default-browser'),
+  setDefaultBrowser: () => ipcRenderer.invoke('set-default-browser'),
+
+  // Jump List (Windows taskbar right-click menu)
+  updateJumpList: () => ipcRenderer.send('update-jump-list'),
+
   // Content blocker
   blockerGetEnabled: () => ipcRenderer.invoke('blocker-get-enabled'),
   blockerSetEnabled: v => ipcRenderer.invoke('blocker-set-enabled', v),
@@ -70,7 +77,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

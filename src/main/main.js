@@ -2,10 +2,12 @@
 
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session } = require('electron')
 const path = require('path')
+const https = require('https')
 const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
 const { startMCPServer, stopMCPServer, setWindowGetter } = require('./mcp-server')
 const PM = require('./profile-manager')
+const faviconCache = require('./favicon-cache')
 
 // App icon (monkey emoji) — resolved once at startup
 const APP_ICON = nativeImage.createFromPath(
@@ -25,6 +27,48 @@ const store = new Store({
 
 let win = null
 let syncInterval = null
+let launchUrl = null // URL passed via command line or protocol activation
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  DEFAULT BROWSER — register as handler for http/https
+// ══════════════════════════════════════════════════════════════════════════════
+if (process.platform === 'win32') {
+  app.setAsDefaultProtocolClient('http')
+  app.setAsDefaultProtocolClient('https')
+}
+
+// Capture URL from command-line args (e.g. when Windows opens a link with this app)
+function extractUrlFromArgs(argv) {
+  // The URL is typically the last argument
+  const urlArg = argv.find(arg => /^https?:\/\//i.test(arg))
+  return urlArg || null
+}
+
+// First instance: capture URL from launch args
+launchUrl = extractUrlFromArgs(process.argv)
+
+// Single-instance lock — prevents multiple windows, forwards URL to existing instance
+const gotLock = app.requestSingleInstanceLock()
+if (!gotLock) {
+  app.quit()
+} else {
+  app.on('second-instance', (event, argv) => {
+    // Handle --new-window flag from Jump List
+    if (argv.includes('--new-window')) {
+      createWindow()
+      return
+    }
+    const url = extractUrlFromArgs(argv)
+    if (url && win) {
+      win.webContents.send('open-url', url)
+    }
+    // Focus existing window
+    if (win) {
+      if (win.isMinimized()) win.restore()
+      win.focus()
+    }
+  })
+}
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  CONTENT BLOCKER — blocks ads, trackers, heavy junk
@@ -84,10 +128,16 @@ function isDomainBlocked(hostname) {
   return false
 }
 
+// Chrome User-Agent — used globally so all requests look like real Chrome
+const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
 function setupContentBlocker() {
   // Intercept requests in the webview's partition
   // Webviews use the default session unless a partition is set
   const ses = session.defaultSession
+
+  // Override User-Agent at session level (removes "Electron/..." from UA)
+  ses.setUserAgent(CHROME_UA)
 
   // Never block these domains
   const whitelist = ['seoz.se', 'flow.seoz.se', 'api.seoz.se']
@@ -132,8 +182,25 @@ function createWindow() {
     icon: APP_ICON,
   })
 
+  // Grant microphone permission for voice chat (getUserMedia)
+  win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
+    const allowed = ['media', 'microphone', 'audioCapture']
+    callback(allowed.includes(permission))
+  })
+  win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
+    const allowed = ['media', 'microphone', 'audioCapture']
+    return allowed.includes(permission)
+  })
+
   win.loadFile(path.join(__dirname, '../renderer/index.html'))
-  win.once('ready-to-show', () => win.show())
+  win.once('ready-to-show', () => {
+    win.show()
+    // If the app was launched with a URL, send it to the renderer
+    if (launchUrl) {
+      win.webContents.send('open-url', launchUrl)
+      launchUrl = null
+    }
+  })
 
   win.on('resize', () => {
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
@@ -250,53 +317,65 @@ ipcMain.handle('openai-chat', async (_, { messages, systemPrompt, apiKey, model 
 })
 
 // ── Whisper STT (OpenAI Speech-to-Text) ──
+// Uses Node https module because Electron net.fetch doesn't handle multipart Buffer bodies reliably
 ipcMain.handle('whisper-stt', async (_, { audioBase64, apiKey, language }) => {
   if (!apiKey) return { error: 'No OpenAI API key configured' }
   if (!audioBase64) return { error: 'No audio data provided' }
-  try {
-    // Convert base64 to Buffer
-    const audioBuffer = Buffer.from(audioBase64, 'base64')
 
-    // Build multipart/form-data manually (Electron net.fetch supports it)
-    const boundary = '----WhisperBoundary' + Date.now()
-    const parts = []
+  return new Promise((resolve) => {
+    try {
+      const audioBuffer = Buffer.from(audioBase64, 'base64')
+      const boundary = '----WhisperBoundary' + Date.now()
 
-    // file field
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.webm"\r\nContent-Type: audio/webm\r\n\r\n`)
-    parts.push(audioBuffer)
-    parts.push('\r\n')
+      // Build multipart body
+      const parts = []
+      parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.webm"\r\nContent-Type: audio/webm\r\n\r\n`))
+      parts.push(audioBuffer)
+      parts.push(Buffer.from(`\r\n--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`))
+      if (language) {
+        parts.push(Buffer.from(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`))
+      }
+      parts.push(Buffer.from(`--${boundary}--\r\n`))
+      const body = Buffer.concat(parts)
 
-    // model field
-    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`)
+      const options = {
+        hostname: 'api.openai.com',
+        path: '/v1/audio/transcriptions',
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${apiKey}`,
+          'Content-Type': `multipart/form-data; boundary=${boundary}`,
+          'Content-Length': body.length,
+        }
+      }
 
-    // language field (optional)
-    if (language) {
-      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`)
+      const req = https.request(options, (res) => {
+        let data = ''
+        res.on('data', chunk => { data += chunk })
+        res.on('end', () => {
+          try {
+            const json = JSON.parse(data)
+            if (res.statusCode !== 200) {
+              resolve({ error: `Whisper ${res.statusCode}: ${json.error?.message || data}` })
+            } else {
+              resolve({ ok: true, text: json.text || '' })
+            }
+          } catch {
+            resolve({ error: `Whisper parse error: ${data.slice(0, 200)}` })
+          }
+        })
+      })
+
+      req.on('error', (err) => {
+        resolve({ error: 'Whisper network error: ' + err.message })
+      })
+
+      req.write(body)
+      req.end()
+    } catch (err) {
+      resolve({ error: err.message || 'Whisper STT failed' })
     }
-
-    parts.push(`--${boundary}--\r\n`)
-
-    // Combine into one Buffer
-    const bodyParts = parts.map(p => typeof p === 'string' ? Buffer.from(p) : p)
-    const body = Buffer.concat(bodyParts)
-
-    const res = await net.fetch('https://api.openai.com/v1/audio/transcriptions', {
-      method: 'POST',
-      headers: {
-        'Authorization': `Bearer ${apiKey}`,
-        'Content-Type': `multipart/form-data; boundary=${boundary}`,
-      },
-      body
-    })
-    if (!res.ok) {
-      const txt = await res.text().catch(() => 'Unknown error')
-      return { error: `Whisper error ${res.status}: ${txt}` }
-    }
-    const data = await res.json()
-    return { ok: true, text: data.text || '' }
-  } catch (err) {
-    return { error: err.message || 'Whisper STT failed' }
-  }
+  })
 })
 
 // ── ElevenLabs TTS ──
@@ -304,7 +383,7 @@ ipcMain.handle('elevenlabs-tts', async (_, { text, apiKey, voiceId, modelId }) =
   if (!apiKey) return { error: 'No ElevenLabs API key configured' }
   if (!text) return { error: 'No text provided' }
   try {
-    const voice = voiceId || 'EXAVITQu4vr4xnSDxMaL' // Default: "Sarah"
+    const voice = voiceId || '1Iztu4UHnTb9SUjJcpS1' // Default: Swedish voice
     const res = await net.fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
       method: 'POST',
       headers: {
@@ -313,8 +392,10 @@ ipcMain.handle('elevenlabs-tts', async (_, { text, apiKey, voiceId, modelId }) =
       },
       body: JSON.stringify({
         text,
-        model_id: modelId || 'eleven_multilingual_v2',
-        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+        model_id: modelId || 'eleven_turbo_v2_5',
+        language_code: 'sv',
+        voice_settings: { stability: 0.5, similarity_boost: 0.85 },
+        optimize_streaming_latency: 4
       })
     })
     if (!res.ok) {
@@ -341,6 +422,22 @@ ipcMain.handle('elevenlabs-voices', async (_, { apiKey }) => {
   } catch (err) {
     return { error: err.message }
   }
+})
+
+// ── Default browser check ──
+ipcMain.handle('is-default-browser', () => {
+  if (process.platform !== 'win32') return false
+  return app.isDefaultProtocolClient('https')
+})
+ipcMain.handle('set-default-browser', async () => {
+  if (process.platform === 'win32') {
+    app.setAsDefaultProtocolClient('http')
+    app.setAsDefaultProtocolClient('https')
+    // Open Windows default apps settings so user can confirm
+    shell.openExternal('ms-settings:defaultapps')
+    return true
+  }
+  return false
 })
 
 // ── Open external links ──
@@ -451,14 +548,129 @@ function startSync() {
 }
 function stopSync() { if (syncInterval) { clearInterval(syncInterval); syncInterval = null } }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  WINDOWS JUMP LIST — right-click menu on taskbar (Chrome-style)
+// ══════════════════════════════════════════════════════════════════════════════
+let jumpListTimer = null
+
+async function updateJumpList() {
+  if (process.platform !== 'win32') return
+
+  const exePath = process.execPath
+
+  // Parse history once
+  let history = []
+  try {
+    const raw = PM.profileGet('browsingHistory', '[]')
+    history = typeof raw === 'string' ? JSON.parse(raw) : (raw || [])
+  } catch (_) {}
+
+  // ── Most-visited (top 5 by domain frequency) ──
+  const counts = {}
+  for (const h of history) {
+    try {
+      const host = new URL(h.url).hostname
+      if (!counts[host]) counts[host] = { title: h.title || host, url: h.url, host, count: 0 }
+      counts[host].count++
+    } catch (_) {}
+  }
+  const topSites = Object.values(counts).sort((a, b) => b.count - a.count).slice(0, 5)
+
+  // ── Recently visited (last 5 unique URLs) ──
+  const recentSites = []
+  const seen = new Set()
+  for (const h of history) {
+    if (seen.has(h.url)) continue
+    seen.add(h.url)
+    let host = ''
+    try { host = new URL(h.url).hostname } catch (_) {}
+    recentSites.push({ title: h.title || h.url, url: h.url, host })
+    if (recentSites.length >= 5) break
+  }
+
+  // ── Download favicons for all unique hostnames ──
+  const allHosts = [...new Set([...topSites.map(s => s.host), ...recentSites.map(s => s.host)].filter(Boolean))]
+  const iconMap = await faviconCache.ensureMany(allHosts)
+
+  // ── Helper: build a Jump List item with favicon ──
+  function makeItem(title, url, host) {
+    const item = {
+      type: 'task',
+      title: title.length > 50 ? title.slice(0, 47) + '...' : title,
+      program: exePath,
+      args: url,
+      description: url,
+    }
+    const iconPath = iconMap.get(host)
+    if (iconPath) {
+      item.iconPath = iconPath
+      item.iconIndex = 0
+    }
+    return item
+  }
+
+  const categories = []
+
+  // "Aktiviteter" — always present
+  categories.push({
+    type: 'tasks',
+    items: [
+      {
+        type: 'task',
+        title: 'Nytt fönster',
+        program: exePath,
+        args: '--new-window',
+        description: 'Öppna ett nytt SEOZ Browser-fönster',
+        iconPath: exePath,
+        iconIndex: 0,
+      },
+    ]
+  })
+
+  // "Mest besökta"
+  if (topSites.length) {
+    categories.push({
+      type: 'custom',
+      name: 'Mest besökta',
+      items: topSites.map(s => makeItem(s.title, s.url, s.host)),
+    })
+  }
+
+  // "Senast besökta"
+  if (recentSites.length) {
+    categories.push({
+      type: 'custom',
+      name: 'Senast besökta',
+      items: recentSites.map(s => makeItem(s.title, s.url, s.host)),
+    })
+  }
+
+  try {
+    app.setJumpList(categories)
+  } catch (e) {
+    // Jump List errors are non-fatal
+  }
+}
+
+// IPC: renderer tells main to refresh Jump List after navigation
+// Debounced — don't spam downloads on rapid navigations
+ipcMain.on('update-jump-list', () => {
+  if (jumpListTimer) clearTimeout(jumpListTimer)
+  jumpListTimer = setTimeout(() => updateJumpList(), 2000)
+})
+
 // ── Lifecycle ──
 app.whenReady().then(() => {
   // Migrate legacy single-user data to first profile (runs once)
   PM.migrateLegacyData(store)
 
+  // Initialise favicon cache for Jump List icons
+  faviconCache.init(app.getPath('userData'))
+
   setupContentBlocker()
   createWindow()
   startSync()
+  updateJumpList()
   // MCP server — lets Claude control the browser
   setWindowGetter(() => win)
   startMCPServer()

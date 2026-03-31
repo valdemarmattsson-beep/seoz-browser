@@ -36,7 +36,8 @@
       "provider": "github",
       "owner": "valdemarmattsson-beep",
       "repo": "seoz-browser",
-      "releaseType": "release"
+      "releaseType": "release",
+      "publishAutoUpdate": true
     },
     "win": {
       "target": [

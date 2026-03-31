@@ -301,8 +301,9 @@ input,textarea,select{user-select:text}
   padding:6px 12px;font-size:11px;color:var(--txt);cursor:pointer;
   display:flex;align-items:center;gap:7px;transition:background .1s;
 }
-.ctx-item:hover{background:rgba(255,255,255,.06)}
+.ctx-item:hover:not(.disabled){background:rgba(255,255,255,.06)}
 .ctx-item.danger{color:var(--r)}
+.ctx-item.disabled{color:var(--muted);opacity:.4;cursor:default}
 .ctx-sep{height:1px;background:var(--border);margin:4px 8px}
 
 /* Bookmark edit modal */
@@ -1212,8 +1213,26 @@ const CHROME_SPOOF_SCRIPT = `
   }
 `
 
+// Context menu script — injected into webview pages to store context on right-click
+const WV_CONTEXT_MENU_SCRIPT = `
+  document.addEventListener('contextmenu', (e) => {
+    const sel = window.getSelection().toString()
+    const a = e.target.closest('a')
+    const img = e.target.closest('img')
+    const input = e.target.closest('input, textarea, [contenteditable="true"]')
+    window.__seozCtx = {
+      selectedText: sel || '',
+      linkUrl: a ? a.href : '',
+      linkText: a ? (a.textContent || '').trim().slice(0, 100) : '',
+      imgSrc: img ? img.src : '',
+      isEditable: !!(input || e.target.isContentEditable),
+    }
+  })
+`
+
 wv.addEventListener('dom-ready', () => {
   wv.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+  wv.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
 })
 
 wv.addEventListener('did-navigate', e => updateURL(e.url))
@@ -1244,6 +1263,67 @@ wv.addEventListener('page-favicon-updated', e => {
   }
 })
 wv.addEventListener('new-window', e => newTab(e.url))
+
+// ── Webview right-click context menu (Chrome-style) ──
+wv.addEventListener('contextmenu', async (e) => {
+  e.preventDefault()
+  e.stopPropagation()
+  let ctx = { selectedText: '', linkUrl: '', linkText: '', imgSrc: '', isEditable: false }
+  try {
+    ctx = await wv.executeJavaScript('window.__seozCtx || {}')
+  } catch(_) {}
+
+  const items = []
+  const currentUrl = document.getElementById('urlInput').value
+
+  // Navigation
+  items.push({ label: '← Tillbaka', action: () => wvBack(), disabled: !wv.canGoBack() })
+  items.push({ label: '→ Framåt', action: () => wvFwd(), disabled: !wv.canGoForward() })
+  items.push({ label: '↻ Ladda om', action: () => wvReload() })
+  items.push('---')
+
+  // Link actions
+  if (ctx.linkUrl) {
+    items.push({ label: 'Öppna länk i ny flik', action: () => newTab(ctx.linkUrl) })
+    items.push({ label: 'Kopiera länkadress', action: () => navigator.clipboard.writeText(ctx.linkUrl) })
+    items.push('---')
+  }
+
+  // Image actions
+  if (ctx.imgSrc) {
+    items.push({ label: 'Öppna bild i ny flik', action: () => newTab(ctx.imgSrc) })
+    items.push({ label: 'Kopiera bildadress', action: () => navigator.clipboard.writeText(ctx.imgSrc) })
+    items.push('---')
+  }
+
+  // Text selection actions
+  if (ctx.selectedText) {
+    const short = ctx.selectedText.length > 40 ? ctx.selectedText.slice(0, 37) + '...' : ctx.selectedText
+    items.push({ label: 'Kopiera', action: () => wv.executeJavaScript('document.execCommand("copy")') })
+    items.push({ label: `Sök "${short}" på Google`, action: () => newTab('https://www.google.com/search?q=' + encodeURIComponent(ctx.selectedText)) })
+    items.push('---')
+  }
+
+  // Edit actions (input/textarea)
+  if (ctx.isEditable) {
+    if (!ctx.selectedText) {
+      items.push({ label: 'Klipp ut', action: () => wv.executeJavaScript('document.execCommand("cut")') })
+      items.push({ label: 'Kopiera', action: () => wv.executeJavaScript('document.execCommand("copy")') })
+    }
+    items.push({ label: 'Klistra in', action: () => wv.executeJavaScript('document.execCommand("paste")') })
+    items.push({ label: 'Markera allt', action: () => wv.executeJavaScript('document.execCommand("selectAll")') })
+    items.push('---')
+  }
+
+  // Page actions
+  items.push({ label: 'Visa sidkälla', action: () => newTab('view-source:' + currentUrl) })
+  items.push({ label: 'SEOZ Inspector', action: () => toggleInspector() })
+
+  // Remove trailing separator
+  while (items.length && items[items.length - 1] === '---') items.pop()
+
+  showCtx(e, items)
+})
 
 function updateURL(url) {
   document.getElementById('urlInput').value = (url === 'about:blank') ? '' : url
@@ -2617,13 +2697,13 @@ function showCtx(e, items) {
   items.forEach(item => {
     if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
     const el = document.createElement('div')
-    el.className = 'ctx-item' + (item.danger ? ' danger' : '')
+    el.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '')
     el.textContent = item.label
-    el.onclick = () => { hideCtx(); item.action() }
+    if (!item.disabled) el.onclick = () => { hideCtx(); item.action() }
     menu.appendChild(el)
   })
   // Position
-  menu.style.left = Math.min(e.clientX, window.innerWidth - 180) + 'px'
+  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
   menu.style.top = Math.min(e.clientY, window.innerHeight - items.length * 30) + 'px'
   menu.classList.add('open')
 }

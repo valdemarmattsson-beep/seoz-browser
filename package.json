@@ -62,8 +62,8 @@
       "category": "public.app-category.productivity"
     },
     "nsis": {
-      "oneClick": false,
-      "allowToChangeInstallationDirectory": true,
+      "oneClick": true,
+      "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "SEOZ Browser",

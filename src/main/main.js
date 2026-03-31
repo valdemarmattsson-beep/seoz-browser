@@ -502,7 +502,7 @@ ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params }) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  AUTO-UPDATER — checks GitHub Releases for new versions
 // ══════════════════════════════════════════════════════════════════════════════
-autoUpdater.autoDownload = false
+autoUpdater.autoDownload = true
 autoUpdater.autoInstallOnAppQuit = true
 
 autoUpdater.on('checking-for-update', () => {

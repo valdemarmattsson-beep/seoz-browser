@@ -121,7 +121,8 @@ input,textarea,select{user-select:text}
 .addr-spinner{width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite;display:none}
 .addr-spinner.on{display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
-@keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}
+@keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(44,168,127,.4)}50%{box-shadow:0 0 0 12px rgba(44,168,127,0)}}
+#voiceFab:hover{transform:scale(1.1);box-shadow:0 6px 24px rgba(0,0,0,.5)}
 .seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(44,168,127,.12);color:var(--g);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
 .seoz-pill:hover{background:rgba(44,168,127,.22)}
 .seoz-pill.inactive{background:rgba(220,53,69,.10);color:var(--r)}
@@ -757,7 +758,7 @@ input,textarea,select{user-select:text}
       <span class="ub-msg" id="updateMsg">En ny version finns tillgänglig!</span>
       <div class="update-progress" id="updateProgress" style="display:none"><div class="update-progress-fill" id="updateProgressFill" style="width:0%"></div></div>
       <button class="ub-btn primary" id="updateBtn" onclick="handleUpdateAction()">Ladda ner</button>
-      <button class="ub-btn secondary" onclick="document.getElementById('updateBanner').classList.remove('show')">Senare</button>
+      <button class="ub-btn secondary" onclick="setUpdateBannerVisible(false)">Senare</button>
     </div>
 
     <!-- Bookmark bar -->
@@ -814,6 +815,17 @@ input,textarea,select{user-select:text}
                useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
                allowpopups style="flex:1;min-height:0;border:none;outline:none">
       </webview>
+      <!-- Floating voice button -->
+      <div id="voiceFab" onclick="toggleVoiceRecording()" title="Röstsamtal" style="
+        position:absolute;bottom:24px;right:24px;z-index:100;
+        width:48px;height:48px;border-radius:50%;
+        background:var(--card);border:2px solid var(--border);
+        display:flex;align-items:center;justify-content:center;
+        cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);
+        transition:all .2s;color:#a78bfa;
+      ">
+        <svg id="voiceFabIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+      </div>
       <!-- SEOZ Inspector drawer -->
       <div class="inspector-drawer" id="inspectorDrawer">
         <div class="inspector-hdr" id="inspectorHdr">
@@ -1481,12 +1493,12 @@ async function renderPanelContent(name) {
         <div style="border-top:1px solid var(--border);padding:12px 0 0;display:flex;flex-direction:column;align-items:center;gap:8px">
           <canvas id="voiceVisualizer" width="240" height="40" style="border-radius:8px;background:var(--panel);width:100%;height:40px"></canvas>
           <div style="display:flex;align-items:center;gap:10px">
-            <button id="voiceMicBtn" onclick="toggleVoiceRecording()" style="width:48px;height:48px;border-radius:50%;border:2px solid var(--border);background:var(--panel);color:var(--p);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .2s">
+            <button id="voiceMicBtn" onclick="toggleVoiceRecording()" style="width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--panel);color:var(--p);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .2s">
               <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
             </button>
             <button id="voiceStopTTSBtn" onclick="stopVoiceTTS()" style="display:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--r);cursor:pointer;font-size:14px" title="Stoppa uppläsning">◼</button>
           </div>
-          <div id="voiceStatus" style="font-size:10px;color:var(--muted);text-align:center">Tryck på mikrofonen för att börja prata</div>
+          <div id="voiceStatus" style="font-size:10px;color:var(--muted);text-align:center">Tryck för att starta ett samtal</div>
         </div>
 
         <!-- Settings row -->
@@ -1501,21 +1513,38 @@ async function renderPanelContent(name) {
               <option value="elevenlabs" ${hasEL ? 'selected' : ''}>TTS: ElevenLabs</option>
             </select>
           </div>
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
+            <select id="voiceELVoiceSelect" onchange="onVoiceELVoiceChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
+              <option value="1Iztu4UHnTb9SUjJcpS1">Anna</option>
+              <option value="oQV06a7Gn8pbCJh5DXcO">David</option>
+            </select>
+          </div>
           <div style="display:flex;align-items:center;justify-content:space-between">
             <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!openaiKey ? '⚠️ Saknar OpenAI-nyckel (krävs för Whisper)' : !hasAI ? '⚠️ Saknar AI-nyckel' : hasEL ? '✅ Redo' : '✅ Redo (browser-TTS)'}</span>
             <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearVoiceChat()">Rensa</button>
           </div>
+          <div style="margin-top:6px;padding:4px 6px;background:var(--bg);border-radius:4px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
+            <span id="voiceCostDisplay" style="font-size:9px;color:var(--muted)">Senaste: — · Session: $0.000</span>
+            <span id="voiceCostMonthly" style="font-size:9px;font-weight:600;color:var(--blue,#4680ff)">Månad: $0.00</span>
+          </div>
         </div>
       </div>
     `
+    // Sync TTS mode to store based on what's actually selected
+    if (hasEL) await SE.storeSet('voiceTTSMode', 'elevenlabs')
+    // Load ElevenLabs voices
+    if (hasEL) loadElevenLabsVoices()
+    // Load monthly cost display
+    updateCostDisplay()
+
     // Show welcome if empty
     if (!_voiceMessages.length) {
       document.getElementById('voiceMessages').innerHTML = `
         <div style="text-align:center;padding:20px 8px;color:var(--muted)">
           <div style="font-size:28px;margin-bottom:6px">🎙️</div>
           <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
-          <div style="font-size:10px;line-height:1.5">Prata med AI via rösten! Tryck på mikrofon-knappen, ställ din fråga, och få svar uppläst. Använder OpenAI Whisper för taligenkänning och ElevenLabs eller webbläsarens TTS för uppläsning.</div>
-          <div style="font-size:9px;color:var(--muted);margin-top:6px">Kräver OpenAI API-nyckel (för Whisper STT). Lägg till i Inställningar.</div>
+          <div style="font-size:10px;line-height:1.5">Tryck på mikrofonen för att aktivera. Säg sedan assistentens namn (<strong>"Anna"</strong> eller <strong>"David"</strong>) följt av din fråga — precis som Siri.</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px">Exempel: "Anna, vad tycker du om SEO:n?" eller "David, kör en audit"</div>
         </div>
       `
     } else {
@@ -3209,33 +3238,138 @@ let _voiceCurrentAudio = null
 let _voiceTTSUtterance = null
 let _voiceMediaRecorder = null
 let _voiceAudioChunks = []
+let _voiceConversationActive = false  // conversation mode on/off
+let _voiceSilenceTimer = null
+let _voiceHasSpoken = false           // detected speech in current turn
+const VOICE_SILENCE_MS = 1000          // 1s silence = done talking
+const VOICE_NOISE_FLOOR = 10           // minimum volume level to count as speech
+
+// ── Cost tracking ───────────────────────────────────────────
+// Pricing (USD):
+// Whisper: $0.006/min audio
+// GPT-4o: $2.50/1M input, $10/1M output
+// Claude Sonnet: $3/1M input, $15/1M output
+// ElevenLabs: ~$0.30/1000 chars (Starter plan ~ $5 for ~30k chars)
+let _voiceCostSession = 0             // cost this session ($)
+let _voiceCostRequests = 0            // number of requests this session
+let _voiceLastRequestCost = 0         // last request cost ($)
+
+function estimateTokens(text) {
+  // Rough estimate: ~4 chars per token for English/Swedish
+  return Math.ceil((text || '').length / 4)
+}
+
+function trackCost(type, detail) {
+  let cost = 0
+  switch (type) {
+    case 'whisper': {
+      // detail = audio duration in seconds
+      const mins = (detail || 5) / 60
+      cost = mins * 0.006
+      break
+    }
+    case 'ai_input': {
+      // detail = { tokens, provider }
+      const rate = detail.provider === 'openai' ? 2.5 : 3.0  // per 1M tokens
+      cost = (detail.tokens / 1_000_000) * rate
+      break
+    }
+    case 'ai_output': {
+      // detail = { tokens, provider }
+      const rate = detail.provider === 'openai' ? 10 : 15  // per 1M tokens
+      cost = (detail.tokens / 1_000_000) * rate
+      break
+    }
+    case 'elevenlabs': {
+      // detail = chars count. ~$0.30 per 1000 chars (Starter tier)
+      cost = ((detail || 0) / 1000) * 0.30
+      break
+    }
+  }
+  _voiceLastRequestCost += cost
+  _voiceCostSession += cost
+  updateCostDisplay()
+  saveMonthlyCost(cost)
+  return cost
+}
+
+async function saveMonthlyCost(addedCost) {
+  const now = new Date()
+  const monthKey = `voiceCost_${now.getFullYear()}_${now.getMonth() + 1}`
+  const current = await SE.storeGet(monthKey, 0)
+  await SE.storeSet(monthKey, current + addedCost)
+}
+
+async function getMonthlyCost() {
+  const now = new Date()
+  const monthKey = `voiceCost_${now.getFullYear()}_${now.getMonth() + 1}`
+  return await SE.storeGet(monthKey, 0)
+}
+
+function updateCostDisplay() {
+  const el = document.getElementById('voiceCostDisplay')
+  if (!el) return
+  const fmt = (v) => v < 0.001 ? '<$0.001' : '$' + v.toFixed(3)
+  el.innerHTML = `Senaste: ${fmt(_voiceLastRequestCost)} · Session: ${fmt(_voiceCostSession)}`
+  // Update monthly async
+  getMonthlyCost().then(monthly => {
+    const mel = document.getElementById('voiceCostMonthly')
+    if (mel) mel.textContent = `Månad: $${monthly.toFixed(2)}`
+  })
+}
 
 function updateVoiceStatus(text) {
   const el = document.getElementById('voiceStatus')
   if (el) el.textContent = text
 }
 
-function setMicBtnState(recording) {
+function setMicBtnState(state) {
   const btn = document.getElementById('voiceMicBtn')
-  if (!btn) return
-  if (recording) {
-    btn.style.background = 'var(--r)'
-    btn.style.borderColor = 'var(--r)'
-    btn.style.color = '#fff'
-    btn.style.animation = 'voicePulse 1.5s ease-in-out infinite'
+  const fab = document.getElementById('voiceFab')
+  const micSvg = '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
+
+  const targets = [btn, fab].filter(Boolean)
+
+  if (state === 'conversation') {
+    targets.forEach(el => {
+      el.style.background = '#2ca87f'
+      el.style.borderColor = '#2ca87f'
+      el.style.color = '#fff'
+      el.style.animation = 'voicePulse 1.5s ease-in-out infinite'
+      el.innerHTML = micSvg
+    })
+  } else if (state === 'processing') {
+    targets.forEach(el => {
+      el.style.background = 'var(--p)'
+      el.style.borderColor = 'var(--p)'
+      el.style.color = '#fff'
+      el.style.animation = 'none'
+      el.innerHTML = '⏳'
+    })
   } else {
-    btn.style.background = 'var(--panel)'
-    btn.style.borderColor = 'var(--border)'
-    btn.style.color = 'var(--p)'
-    btn.style.animation = 'none'
+    if (btn) {
+      btn.style.background = 'var(--panel)'
+      btn.style.borderColor = 'var(--border)'
+      btn.style.color = 'var(--p)'
+      btn.style.animation = 'none'
+      btn.innerHTML = micSvg
+    }
+    if (fab) {
+      fab.style.background = 'var(--card)'
+      fab.style.borderColor = 'var(--border)'
+      fab.style.color = '#a78bfa'
+      fab.style.animation = 'none'
+      fab.innerHTML = micSvg
+    }
   }
 }
 
-// Visualizer animation
+// Visualizer animation — also handles VAD (voice activity detection)
 function startVisualizer(stream) {
   _voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
   _voiceAnalyser = _voiceAudioCtx.createAnalyser()
-  _voiceAnalyser.fftSize = 256
+  _voiceAnalyser.fftSize = 512
+  _voiceAnalyser.smoothingTimeConstant = 0.8
   const source = _voiceAudioCtx.createMediaStreamSource(stream)
   source.connect(_voiceAnalyser)
 
@@ -3246,15 +3380,37 @@ function startVisualizer(stream) {
   const dataArr = new Uint8Array(bufLen)
 
   function draw() {
+    if (!_voiceAnalyser) return
     _voiceAnimFrame = requestAnimationFrame(draw)
     _voiceAnalyser.getByteFrequencyData(dataArr)
-    ctx.clearRect(0, 0, canvas.width, canvas.height)
 
+    // Calculate average volume for VAD
+    let sum = 0
+    for (let i = 0; i < bufLen; i++) sum += dataArr[i]
+    const avgVolume = sum / bufLen
+
+    // VAD: detect speech / silence
+    if (_voiceRecording && _voiceConversationActive) {
+      if (avgVolume > VOICE_NOISE_FLOOR) {
+        _voiceHasSpoken = true
+        clearTimeout(_voiceSilenceTimer)
+        _voiceSilenceTimer = null
+      } else if (_voiceHasSpoken && !_voiceSilenceTimer) {
+        // User was speaking and now it's quiet — start silence timer
+        _voiceSilenceTimer = setTimeout(() => {
+          console.log('[Voice] Silence detected — auto-stopping recording')
+          stopVoiceRecording()
+        }, VOICE_SILENCE_MS)
+      }
+    }
+
+    // Draw visualizer
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
     const barW = (canvas.width / bufLen) * 2.5
     let x = 0
     for (let i = 0; i < bufLen; i++) {
       const barH = (dataArr[i] / 255) * canvas.height
-      const hue = 250 + (i / bufLen) * 40 // purple gradient
+      const hue = _voiceConversationActive ? (140 + (i / bufLen) * 30) : (250 + (i / bufLen) * 40)
       ctx.fillStyle = `hsla(${hue}, 70%, 65%, 0.8)`
       ctx.fillRect(x, canvas.height - barH, barW - 1, barH)
       x += barW
@@ -3268,6 +3424,8 @@ function stopVisualizer() {
   _voiceAnimFrame = null
   if (_voiceAudioCtx) { _voiceAudioCtx.close().catch(() => {}); _voiceAudioCtx = null }
   _voiceAnalyser = null
+  clearTimeout(_voiceSilenceTimer)
+  _voiceSilenceTimer = null
   const canvas = document.getElementById('voiceVisualizer')
   if (canvas) {
     const ctx = canvas.getContext('2d')
@@ -3275,112 +3433,187 @@ function stopVisualizer() {
   }
 }
 
+// Toggle conversation on/off (single button press)
 async function toggleVoiceRecording() {
-  if (_voiceProcessing) return
-  if (_voiceRecording) {
-    stopVoiceRecording()
+  if (_voiceConversationActive) {
+    // End entire conversation
+    endVoiceConversation()
   } else {
-    startVoiceRecording()
+    // Start conversation mode
+    startVoiceConversation()
   }
 }
 
-async function startVoiceRecording() {
-  // Stop any playing TTS
+async function startVoiceConversation() {
   stopVoiceTTS()
 
-  // Check we have an OpenAI key for Whisper transcription
   const openaiKey = await SE.storeGet('openaiApiKey', '')
   if (!openaiKey) {
     toast('Du behöver en OpenAI API-nyckel för taligenkänning (Whisper). Lägg till den i Inställningar.', '#dc2626')
     return
   }
 
-  try {
-    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
-    _voiceMediaStream = stream
-    startVisualizer(stream)
+  _voiceConversationActive = true
+  const av = getActiveVoice()
+  console.log(`[Voice] Conversation started — wake word: "${av.name}"`)
+  updateVoiceStatus(`Lyssnar — säg "${av.name}" för att prata`)
+  startListening()
+}
 
-    // Set up MediaRecorder
+function endVoiceConversation() {
+  console.log('[Voice] Conversation ended')
+  _voiceConversationActive = false
+  stopVoiceTTS()
+  if (_voiceRecording) {
+    // Force stop without processing
+    _voiceRecording = false
+    if (_voiceMediaRecorder && _voiceMediaRecorder.state !== 'inactive') {
+      _voiceMediaRecorder.ondataavailable = null
+      _voiceMediaRecorder.onstop = null
+      _voiceMediaRecorder.stop()
+    }
+  }
+  stopVisualizer()
+  if (_voiceMediaStream) {
+    _voiceMediaStream.getTracks().forEach(t => t.stop())
+    _voiceMediaStream = null
+  }
+  clearTimeout(_voiceSilenceTimer)
+  _voiceSilenceTimer = null
+  _voiceProcessing = false
+  setMicBtnState('idle')
+  updateVoiceStatus('Samtal avslutat. Tryck för att starta ett nytt.')
+}
+
+async function startListening() {
+  if (!_voiceConversationActive) return
+
+  _voiceHasSpoken = false
+  clearTimeout(_voiceSilenceTimer)
+  _voiceSilenceTimer = null
+
+  try {
+    // Reuse existing stream or get new one
+    if (!_voiceMediaStream || _voiceMediaStream.getTracks().every(t => t.readyState === 'ended')) {
+      _voiceMediaStream = await navigator.mediaDevices.getUserMedia({ audio: true })
+    }
+    startVisualizer(_voiceMediaStream)
+
     _voiceAudioChunks = []
     const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
       ? 'audio/webm;codecs=opus'
-      : MediaRecorder.isTypeSupported('audio/webm')
-        ? 'audio/webm'
-        : 'audio/ogg'
-    _voiceMediaRecorder = new MediaRecorder(stream, { mimeType })
+      : MediaRecorder.isTypeSupported('audio/webm') ? 'audio/webm' : 'audio/ogg'
+    _voiceMediaRecorder = new MediaRecorder(_voiceMediaStream, { mimeType, audioBitsPerSecond: 32000 })
 
     _voiceMediaRecorder.ondataavailable = (e) => {
       if (e.data.size > 0) _voiceAudioChunks.push(e.data)
     }
 
-    _voiceMediaRecorder.onstop = async () => {
-      // Stop visualizer and mic
-      stopVisualizer()
-      if (_voiceMediaStream) {
-        _voiceMediaStream.getTracks().forEach(t => t.stop())
-        _voiceMediaStream = null
-      }
-      setMicBtnState(false)
-      _voiceRecording = false
+    _voiceMediaRecorder.onstop = () => onRecordingDone(mimeType)
 
-      if (_voiceAudioChunks.length === 0) {
-        updateVoiceStatus('Tryck på mikrofonen för att börja prata')
-        return
-      }
-
-      // Convert to base64 and send to Whisper
-      updateVoiceStatus('Transkriberar...')
-      _voiceProcessing = true
-
-      try {
-        const blob = new Blob(_voiceAudioChunks, { type: mimeType })
-        const arrayBuf = await blob.arrayBuffer()
-        const bytes = new Uint8Array(arrayBuf)
-        // Chunk the conversion to avoid call stack overflow on large recordings
-        let binary = ''
-        const chunkSize = 8192
-        for (let i = 0; i < bytes.length; i += chunkSize) {
-          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
-        }
-        const base64 = btoa(binary)
-
-        const res = await SE.whisperSTT({ audioBase64: base64, apiKey: openaiKey, language: 'sv' })
-
-        if (res.error) {
-          toast('Whisper-fel: ' + res.error, '#dc2626')
-          updateVoiceStatus('Fel vid transkribering')
-          _voiceProcessing = false
-          return
-        }
-
-        const text = (res.text || '').trim()
-        if (!text) {
-          updateVoiceStatus('Inget tal uppfattades. Försök igen!')
-          _voiceProcessing = false
-          return
-        }
-
-        // Process the transcribed text
-        await processVoiceInput(text)
-      } catch (err) {
-        toast('Fel: ' + (err.message || err), '#dc2626')
-        updateVoiceStatus('Fel vid transkribering')
-        _voiceProcessing = false
-      }
-    }
-
-    _voiceMediaRecorder.start(250) // collect chunks every 250ms
+    _voiceMediaRecorder.start(250)
     _voiceRecording = true
-    setMicBtnState(true)
-    updateVoiceStatus('Lyssnar... (tryck igen för att stoppa)')
+    setMicBtnState('conversation')
+    updateVoiceStatus(`Säg "${getActiveVoice().name}" följt av din fråga...`)
+    console.log('[Voice] Listening started, mimeType:', mimeType)
   } catch (err) {
     toast('Kunde inte aktivera mikrofonen: ' + err.message, '#dc2626')
+    endVoiceConversation()
   }
 }
 
 function stopVoiceRecording() {
+  _voiceRecording = false
   if (_voiceMediaRecorder && _voiceMediaRecorder.state !== 'inactive') {
     _voiceMediaRecorder.stop()
+  }
+}
+
+async function onRecordingDone(mimeType) {
+  _voiceRecording = false
+
+  if (!_voiceConversationActive) return
+  if (_voiceAudioChunks.length === 0 || !_voiceHasSpoken) {
+    // No speech detected — keep listening
+    console.log('[Voice] No speech detected, re-listening...')
+    startListening()
+    return
+  }
+
+  setMicBtnState('processing')
+  _voiceProcessing = true
+  updateVoiceStatus('Transkriberar...')
+
+  try {
+    const blob = new Blob(_voiceAudioChunks, { type: mimeType })
+    const arrayBuf = await blob.arrayBuffer()
+    const bytes = new Uint8Array(arrayBuf)
+    let binary = ''
+    const chunkSize = 8192
+    for (let i = 0; i < bytes.length; i += chunkSize) {
+      binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
+    }
+    const base64 = btoa(binary)
+
+    console.log('[Voice] Recording done, chunks:', _voiceAudioChunks.length, 'blob size:', blob.size)
+    _voiceLastRequestCost = 0  // reset per-request cost
+    // Estimate audio duration: blob size / (32000 bps / 8) ≈ seconds
+    const estAudioSec = Math.max(1, blob.size / 4000)
+    trackCost('whisper', estAudioSec)
+
+    const openaiKey = await SE.storeGet('openaiApiKey', '')
+    updateVoiceStatus('Skickar till Whisper (' + Math.round(blob.size / 1024) + ' KB)...')
+    const res = await SE.whisperSTT({ audioBase64: base64, apiKey: openaiKey, language: 'sv' })
+
+    if (res.error) {
+      console.error('[Voice] Whisper error:', res.error)
+      toast('Whisper-fel: ' + res.error.slice(0, 120), '#dc2626')
+      _voiceProcessing = false
+      // Keep conversation going despite error
+      if (_voiceConversationActive) startListening()
+      return
+    }
+
+    const rawText = (res.text || '').trim()
+    if (!rawText) {
+      console.log('[Voice] Empty transcription, re-listening')
+      _voiceProcessing = false
+      if (_voiceConversationActive) startListening()
+      return
+    }
+
+    // Wake word check — must start with the active voice's wake word (Anna or David)
+    const av = getActiveVoice()
+    const wakeRegex = new RegExp(`^(${av.wake}[,.\\s!?:]*)`, 'i')
+    const wakeMatch = rawText.match(wakeRegex)
+    if (!wakeMatch) {
+      console.log(`[Voice] No wake word "${av.name}", ignoring:`, rawText)
+      _voiceProcessing = false
+      setMicBtnState('conversation')
+      updateVoiceStatus(`Säg "${av.name}" följt av din fråga...`)
+      if (_voiceConversationActive) startListening()
+      return
+    }
+
+    // Strip wake word from text
+    const text = rawText.slice(wakeMatch[0].length).trim()
+    if (!text) {
+      // User just said the wake word without a question
+      console.log(`[Voice] Wake word "${av.name}" only, no question`)
+      _voiceProcessing = false
+      setMicBtnState('conversation')
+      updateVoiceStatus('Ja? Vad vill du veta?')
+      if (_voiceConversationActive) startListening()
+      return
+    }
+
+    console.log(`[Voice] Wake word "${av.name}" detected! Processing:`, text)
+    await processVoiceInput(text)
+  } catch (err) {
+    console.error('[Voice] Error:', err)
+    toast('Fel: ' + (err.message || err), '#dc2626')
+    _voiceProcessing = false
+    if (_voiceConversationActive) startListening()
   }
 }
 
@@ -3388,71 +3621,635 @@ async function processVoiceInput(text) {
   _voiceProcessing = true
   updateVoiceStatus('Tänker...')
 
-  // Add user message
   _voiceMessages.push({ role: 'user', content: text, ts: Date.now() })
   renderVoiceMessages()
 
-  // Get page context
   const ctx = await getPageContext()
-  const systemPrompt = `Du är en AI-assistent inbyggd i SEOZ Browser — en SEO-fokuserad webbläsare. Användaren pratar med dig via röst, så svara kort och naturligt — som i en konversation. Svara på svenska om inte användaren pratar på ett annat språk. Max 2-3 meningar om inte frågan kräver mer detalj.
+  const av = getActiveVoice()
+  const systemPrompt = `Du är ${av.name}, en röstassistent inbyggd i en webbläsare. Du kan BÅDE svara på frågor OCH styra browsern.
 
-${ctx ? `AKTUELL SIDA:
-URL: ${ctx.url}
-Titel: ${ctx.title}
-Meta description: ${ctx.meta?.description || 'Saknas'}
-H1: ${ctx.h1s?.join(', ') || 'Inga'}` : 'Ingen sida är laddad just nu.'}`
+REGLER FÖR SVAR:
+- Max 1-2 meningar. Kort och rakt.
+- Svenska som standard.
+- Ingen inledning, inga listor.
 
-  // Pick AI provider
+BROWSER-KOMMANDON:
+Om användaren vill att du navigerar, klickar, scrollar etc — lägg till ett JSON-block i slutet av ditt svar:
+\`\`\`action
+{"type":"navigate","url":"https://example.com"}
+\`\`\`
+
+Tillgängliga actions:
+
+NAVIGATION:
+- {"type":"navigate","url":"..."} — gå till en URL
+- {"type":"search","query":"..."} — googla något
+- {"type":"click","text":"..."} — klicka på en länk/knapp med den texten
+- {"type":"back"} — gå tillbaka
+- {"type":"forward"} — gå framåt
+- {"type":"scroll","direction":"down"} — scrolla ner (eller "up")
+- {"type":"reload"} — ladda om sidan
+- {"type":"newtab","url":"..."} — öppna ny flik
+
+SEOZ-FUNKTIONER (lokala):
+- {"type":"seo_audit"} — kör full SEO-analys på sidan (title, meta, h-tags, bilder, länkar, schema)
+- {"type":"inspector"} — öppna SEOZ Inspector
+- {"type":"panel","name":"seo"} — öppna SEO-panelen
+- {"type":"panel","name":"kw"} — öppna Keywords-panelen
+- {"type":"panel","name":"cwv"} — öppna Core Web Vitals
+- {"type":"panel","name":"ai"} — öppna AI-synlighet
+- {"type":"panel","name":"compads"} — öppna Konkurrentannonser
+- {"type":"panel","name":"settings"} — öppna Inställningar
+- {"type":"screenshot"} — ta en screenshot av sidan
+- {"type":"scan_ads"} — skanna sidan för annonsnätverk
+
+SEOZ FLOW API (hämtar data från flow.seoz.se):
+- {"type":"flow_keywords"} — hämta sökord och GSC-data för aktiv klient
+- {"type":"flow_keywords","url":"..."} — hämta sökord för en specifik URL
+- {"type":"flow_site_audit"} — hämta SEO-analys från SEOZ backend (mer detaljerad än lokal)
+- {"type":"flow_site_audit","url":"..."} — audit för specifik URL
+- {"type":"flow_rank_tracking"} — visa rankingpositioner för aktiv klient
+- {"type":"flow_content_analysis"} — analysera innehållet via AI-förslag
+- {"type":"flow_ai_visibility"} — kolla synlighet i ChatGPT, Perplexity etc.
+- {"type":"flow_tasks"} — lista öppna SEO-uppgifter
+- {"type":"flow_create_task","title":"...","description":"...","priority":"high"} — skapa ny uppgift
+- {"type":"flow_clients"} — lista alla klienter
+- {"type":"flow_switch_client","name":"..."} — byt aktiv klient
+
+EXEMPEL:
+Användare: "gå till aftonbladet"
+Assistent: Öppnar Aftonbladet.
+\`\`\`action
+{"type":"navigate","url":"https://www.aftonbladet.se"}
+\`\`\`
+
+Användare: "googla bästa seo-verktyg"
+Assistent: Söker.
+\`\`\`action
+{"type":"search","query":"bästa seo-verktyg"}
+\`\`\`
+
+Användare: "kör en seo-analys"
+Assistent: Kör en analys, ett ögonblick.
+\`\`\`action
+{"type":"seo_audit"}
+\`\`\`
+
+Användare: "vilka sökord rankar vi på?"
+Assistent: Hämtar sökord, ett ögonblick.
+\`\`\`action
+{"type":"flow_keywords"}
+\`\`\`
+
+Användare: "hur synliga är vi i AI-sökmotorer?"
+Assistent: Kollar er AI-synlighet.
+\`\`\`action
+{"type":"flow_ai_visibility"}
+\`\`\`
+
+Användare: "skapa en uppgift att fixa meta-beskrivningarna"
+Assistent: Skapar uppgiften.
+\`\`\`action
+{"type":"flow_create_task","title":"Fixa meta-beskrivningar","description":"Uppdatera saknade och för korta meta-beskrivningar","priority":"high"}
+\`\`\`
+
+Användare: "vilka klienter har vi?"
+Assistent: Hämtar listan.
+\`\`\`action
+{"type":"flow_clients"}
+\`\`\`
+
+Användare: "byt till klient Acme"
+Assistent: Byter klient.
+\`\`\`action
+{"type":"flow_switch_client","name":"Acme"}
+\`\`\`
+
+Om användaren INTE vill navigera eller köra en funktion — svara bara med text, inget action-block. Om du kör en flow_-action eller seo_audit, sammanfatta resultatet kort i ditt nästa svar.
+
+${ctx ? `AKTUELL SIDA: ${ctx.title} (${ctx.url})
+H1: ${ctx.h1s?.join(', ') || '—'}` : 'Ingen sida laddad.'}`
+
   const provider = await SE.storeGet('voiceAiProvider', 'claude')
   const apiMessages = _voiceMessages.map(m => ({ role: m.role, content: m.content }))
 
-  let responseText = ''
+  // Estimate input tokens (system prompt + all messages)
+  const inputText = systemPrompt + apiMessages.map(m => m.content).join(' ')
+  const inputTokens = estimateTokens(inputText)
 
+  let responseText = ''
   try {
     if (provider === 'openai') {
       const apiKey = await SE.storeGet('openaiApiKey', '')
-      if (!apiKey) { responseText = 'Du behöver ange en OpenAI API-nyckel i Inställningar först.'; throw null }
+      if (!apiKey) { responseText = 'Du behöver ange en OpenAI API-nyckel.'; throw null }
+      trackCost('ai_input', { tokens: inputTokens, provider: 'openai' })
       const res = await SE.openaiChat({ messages: apiMessages, systemPrompt, apiKey })
       if (res.error) throw new Error(res.error)
       responseText = res.content
+      trackCost('ai_output', { tokens: estimateTokens(responseText), provider: 'openai' })
     } else {
       const apiKey = await SE.storeGet('anthropicApiKey', '')
-      if (!apiKey) { responseText = 'Du behöver ange en Anthropic API-nyckel i Inställningar först.'; throw null }
+      if (!apiKey) { responseText = 'Du behöver ange en Anthropic API-nyckel.'; throw null }
+      trackCost('ai_input', { tokens: inputTokens, provider: 'claude' })
       const res = await SE.claudeChat({ messages: apiMessages, systemPrompt, apiKey })
       if (res.error) throw new Error(res.error)
       responseText = res.content
+      trackCost('ai_output', { tokens: estimateTokens(responseText), provider: 'claude' })
     }
   } catch (err) {
     if (err) responseText = responseText || ('Fel: ' + (err.message || err))
   }
 
-  // Add assistant message
-  _voiceMessages.push({ role: 'assistant', content: responseText, ts: Date.now() })
+  // Parse action block from response
+  let spokenText = responseText
+  let action = null
+  const actionMatch = responseText.match(/```action\s*\n?([\s\S]*?)```/)
+  if (actionMatch) {
+    spokenText = responseText.replace(/```action\s*\n?[\s\S]*?```/, '').trim()
+    try { action = JSON.parse(actionMatch[1].trim()) } catch (e) { console.warn('[Voice] Bad action JSON:', e) }
+  }
+
+  _voiceMessages.push({ role: 'assistant', content: spokenText, ts: Date.now() })
   renderVoiceMessages()
 
   _voiceProcessing = false
-  updateVoiceStatus('Läser upp...')
+  setMicBtnState('processing')
 
-  // TTS
-  await speakVoiceResponse(responseText)
-  updateVoiceStatus('Tryck på mikrofonen för att fortsätta')
+  // Execute browser action
+  if (action) {
+    console.log('[Voice] Executing action:', action)
+    await executeVoiceAction(action)
+  }
+
+  // If we got data back from an action (audit or Flow), feed it to AI for verbal summary
+  const pendingData = window._voiceAuditResult || window._voiceFlowResult || null
+  window._voiceAuditResult = null
+  window._voiceFlowResult = null
+  if (action && pendingData) {
+    _voiceMessages.push({ role: 'user', content: `[SYSTEM: Data hämtad, sammanfatta kort de viktigaste punkterna. Max 3 meningar.]\n${pendingData}`, ts: Date.now() })
+    const provider2 = await SE.storeGet('voiceAiProvider', 'claude')
+    const dataSysPrompt = `Du är ${av.name}, en SEO-expert inbyggd i SEOZ Browser. Sammanfatta datan kort på svenska, max 3 meningar. Fokusera på det viktigaste och eventuella problem.`
+    let summaryText = ''
+    try {
+      const apiMessages2 = _voiceMessages.map(m => ({ role: m.role, content: m.content }))
+      const sumInputTokens = estimateTokens(dataSysPrompt + apiMessages2.map(m => m.content).join(' '))
+      if (provider2 === 'openai') {
+        const k = await SE.storeGet('openaiApiKey', '')
+        trackCost('ai_input', { tokens: sumInputTokens, provider: 'openai' })
+        const r = await SE.openaiChat({ messages: apiMessages2, systemPrompt: dataSysPrompt, apiKey: k })
+        if (!r.error) { summaryText = r.content; trackCost('ai_output', { tokens: estimateTokens(summaryText), provider: 'openai' }) }
+      } else {
+        const k = await SE.storeGet('anthropicApiKey', '')
+        trackCost('ai_input', { tokens: sumInputTokens, provider: 'claude' })
+        const r = await SE.claudeChat({ messages: apiMessages2, systemPrompt: dataSysPrompt, apiKey: k })
+        if (!r.error) { summaryText = r.content; trackCost('ai_output', { tokens: estimateTokens(summaryText), provider: 'claude' }) }
+      }
+    } catch (e) { console.error('[Voice] Data summary error:', e) }
+    if (summaryText) {
+      summaryText = summaryText.replace(/```action\s*\n?[\s\S]*?```/g, '').trim()
+      _voiceMessages.push({ role: 'assistant', content: summaryText, ts: Date.now() })
+      renderVoiceMessages()
+      updateVoiceStatus('Läser upp resultat...')
+      await speakVoiceResponse(summaryText)
+      if (_voiceConversationActive) { startListening() } else { updateVoiceStatus('Samtal avslutat.') }
+      return
+    }
+  }
+
+  // Speak response
+  if (spokenText) {
+    updateVoiceStatus('Läser upp...')
+    await speakVoiceResponse(spokenText)
+  }
+
+  // Resume listening
+  if (_voiceConversationActive) {
+    startListening()
+  } else {
+    updateVoiceStatus('Samtal avslutat.')
+  }
+}
+
+async function executeVoiceAction(action) {
+  const wv = getWV()
+  if (!wv) return
+
+  try {
+    switch (action.type) {
+      case 'navigate':
+        if (action.url) {
+          let url = action.url
+          if (!/^https?:\/\//i.test(url)) url = 'https://' + url
+          document.getElementById('urlInput').value = url
+          wv.loadURL(url)
+          console.log('[Voice] Navigating to:', url)
+        }
+        break
+
+      case 'search':
+        if (action.query) {
+          const url = 'https://www.google.com/search?q=' + encodeURIComponent(action.query)
+          document.getElementById('urlInput').value = url
+          wv.loadURL(url)
+          console.log('[Voice] Searching:', action.query)
+        }
+        break
+
+      case 'click':
+        if (action.text) {
+          await wv.executeJavaScript(`(function(){
+            const els = document.querySelectorAll('a, button, [role="button"], [onclick], input[type="submit"]');
+            const target = Array.from(els).find(el => el.textContent.trim().toLowerCase().includes(${JSON.stringify(action.text.toLowerCase())}));
+            if (target) { target.click(); return 'clicked: ' + target.textContent.trim().slice(0,50); }
+            return 'not found';
+          }())`)
+          console.log('[Voice] Clicking:', action.text)
+        }
+        break
+
+      case 'back':
+        wv.goBack()
+        console.log('[Voice] Going back')
+        break
+
+      case 'forward':
+        wv.goForward()
+        console.log('[Voice] Going forward')
+        break
+
+      case 'scroll':
+        const dir = action.direction === 'up' ? -500 : 500
+        await wv.executeJavaScript(`window.scrollBy(0, ${dir})`)
+        console.log('[Voice] Scrolling:', action.direction)
+        break
+
+      case 'reload':
+        wv.reload()
+        console.log('[Voice] Reloading')
+        break
+
+      // ── SEOZ-specific actions ──────────────────────────────────
+      case 'seo_audit': {
+        console.log('[Voice] Running SEO audit...')
+        updateVoiceStatus('Kör SEO-analys...')
+        try {
+          const result = await wv.executeJavaScript(`(function(){
+            const title = document.title;
+            const metaDesc = document.querySelector('meta[name="description"]')?.content || '';
+            const canonical = document.querySelector('link[rel="canonical"]')?.href || '';
+            const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim());
+            const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.textContent.trim());
+            const imgs = Array.from(document.querySelectorAll('img')).map(i => ({src: i.src?.slice(0,200), alt: i.alt, width: i.naturalWidth, height: i.naturalHeight}));
+            const imgsNoAlt = imgs.filter(i => !i.alt).length;
+            const links = Array.from(document.querySelectorAll('a[href]'));
+            const internal = links.filter(l => l.hostname === location.hostname).length;
+            const external = links.length - internal;
+            const schemas = Array.from(document.querySelectorAll('script[type="application/ld+json"]')).map(s => { try { return JSON.parse(s.textContent) } catch { return null } }).filter(Boolean);
+            const og = {}; document.querySelectorAll('meta[property^="og:"]').forEach(m => og[m.getAttribute('property')] = m.content);
+            return {
+              url: location.href, title, titleLength: title.length,
+              metaDescription: metaDesc, metaDescLength: metaDesc.length,
+              canonical, h1s, h2s,
+              images: { total: imgs.length, missingAlt: imgsNoAlt },
+              links: { total: links.length, internal, external },
+              schema: schemas.length,
+              openGraph: Object.keys(og).length > 0
+            }
+          }())`)
+          // Feed audit results back to AI for verbal summary
+          const summary = `SEO-AUDIT RESULTAT:\n` +
+            `URL: ${result.url}\n` +
+            `Title (${result.titleLength} tecken): ${result.title}\n` +
+            `Meta description (${result.metaDescLength} tecken): ${result.metaDescription || 'SAKNAS'}\n` +
+            `Canonical: ${result.canonical || 'SAKNAS'}\n` +
+            `H1: ${result.h1s?.length ? result.h1s.join(', ') : 'SAKNAS'}\n` +
+            `H2: ${result.h2s?.length ? result.h2s.length + ' st' : 'SAKNAS'}\n` +
+            `Bilder: ${result.images.total} (${result.images.missingAlt} saknar alt)\n` +
+            `Länkar: ${result.links.total} (${result.links.internal} interna, ${result.links.external} externa)\n` +
+            `Schema markup: ${result.schema > 0 ? result.schema + ' st' : 'SAKNAS'}\n` +
+            `Open Graph: ${result.openGraph ? 'Ja' : 'SAKNAS'}`
+          // Store result so processVoiceInput can pick it up after executeVoiceAction returns
+          window._voiceAuditResult = summary
+        } catch (err) {
+          console.error('[Voice] SEO audit error:', err)
+        }
+        break
+      }
+
+      case 'inspector':
+        console.log('[Voice] Opening Inspector')
+        if (typeof toggleInspector === 'function') toggleInspector()
+        else if (typeof runInspector === 'function') runInspector()
+        break
+
+      case 'panel':
+        if (action.name) {
+          console.log('[Voice] Opening panel:', action.name)
+          if (typeof togglePanel === 'function') togglePanel(action.name)
+        }
+        break
+
+      case 'screenshot': {
+        console.log('[Voice] Taking screenshot')
+        updateVoiceStatus('Tar screenshot...')
+        try {
+          const nativeImg = await wv.capturePage()
+          const dataUrl = nativeImg.toDataURL()
+          // Show screenshot inline in the voice messages area
+          const msgArea = document.getElementById('voiceMsgArea')
+          if (msgArea) {
+            const imgEl = document.createElement('div')
+            imgEl.style.cssText = 'margin:8px 0;text-align:center;'
+            imgEl.innerHTML = `<img src="${dataUrl}" style="max-width:100%;border-radius:8px;border:1px solid var(--bd);">`
+            msgArea.appendChild(imgEl)
+            msgArea.scrollTop = msgArea.scrollHeight
+          }
+        } catch (err) {
+          console.error('[Voice] Screenshot error:', err)
+        }
+        break
+      }
+
+      case 'scan_ads':
+        console.log('[Voice] Scanning ad networks')
+        updateVoiceStatus('Skannar annonsnätverk...')
+        if (typeof scanAdNetworks === 'function') await scanAdNetworks()
+        break
+
+      // ── SEOZ Flow API actions ─────────────────────────────────
+      case 'flow_keywords': {
+        console.log('[Voice] Fetching keywords from Flow API')
+        updateVoiceStatus('Hämtar sökord från SEOZ Flow...')
+        try {
+          const data = await _flowApiCall('/keywords', { url: action.url })
+          const summary = _formatFlowResult('keywords', data)
+          window._voiceFlowResult = summary
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta sökord: ${err.message}`
+          console.error('[Voice] Flow keywords error:', err)
+        }
+        break
+      }
+
+      case 'flow_site_audit': {
+        console.log('[Voice] Fetching site audit from Flow API')
+        updateVoiceStatus('Hämtar SEO-analys från SEOZ Flow...')
+        try {
+          const url = action.url || (wv ? await wv.executeJavaScript('location.href') : null)
+          const data = await _flowApiCall('/seo/analysis', { url })
+          const summary = _formatFlowResult('site_audit', data)
+          window._voiceFlowResult = summary
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta audit: ${err.message}`
+          console.error('[Voice] Flow audit error:', err)
+        }
+        break
+      }
+
+      case 'flow_rank_tracking':
+      case 'flow_keywords_ranking': {
+        console.log('[Voice] Fetching rank tracking from Flow API')
+        updateVoiceStatus('Hämtar rankings från SEOZ Flow...')
+        try {
+          const data = await _flowApiCall('/keywords', { days: 28 })
+          const summary = _formatFlowResult('rankings', data)
+          window._voiceFlowResult = summary
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta rankings: ${err.message}`
+          console.error('[Voice] Flow rankings error:', err)
+        }
+        break
+      }
+
+      case 'flow_content_analysis': {
+        console.log('[Voice] Running content analysis via Flow API')
+        updateVoiceStatus('Analyserar innehåll via SEOZ Flow...')
+        try {
+          // First get local SEO data, then ask AI for suggestion
+          const seoData = await wv.executeJavaScript(`(function(){
+            return {
+              url: location.href, title: document.title,
+              metaDescription: document.querySelector('meta[name="description"]')?.content || '',
+              h1s: Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim()),
+              wordCount: document.body?.innerText?.split(/\\s+/).length || 0
+            }
+          }())`)
+          const data = await _flowApiPost('/ai/suggest-task', { seoData })
+          window._voiceFlowResult = `INNEHÅLLSANALYS & FÖRSLAG:\nTitel: ${data.title || '—'}\nBeskrivning: ${data.description || '—'}\nPrioritet: ${data.priority || '—'}\nKategori: ${data.category || '—'}`
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte analysera innehåll: ${err.message}`
+          console.error('[Voice] Flow content error:', err)
+        }
+        break
+      }
+
+      case 'flow_ai_visibility': {
+        console.log('[Voice] Fetching AI visibility from Flow API')
+        updateVoiceStatus('Hämtar AI-synlighet från SEOZ Flow...')
+        try {
+          const data = await _flowApiCall('/ai-visibility')
+          const summary = _formatFlowResult('ai_visibility', data)
+          window._voiceFlowResult = summary
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta AI-synlighet: ${err.message}`
+          console.error('[Voice] Flow AI visibility error:', err)
+        }
+        break
+      }
+
+      case 'flow_tasks': {
+        console.log('[Voice] Fetching tasks from Flow API')
+        updateVoiceStatus('Hämtar uppgifter från SEOZ Flow...')
+        try {
+          const data = await _flowApiCall('/tasks', { status: action.status || 'open' })
+          const summary = _formatFlowResult('tasks', data)
+          window._voiceFlowResult = summary
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta uppgifter: ${err.message}`
+          console.error('[Voice] Flow tasks error:', err)
+        }
+        break
+      }
+
+      case 'flow_create_task': {
+        console.log('[Voice] Creating task via Flow API')
+        updateVoiceStatus('Skapar uppgift i SEOZ Flow...')
+        try {
+          const url = wv ? await wv.executeJavaScript('location.href') : ''
+          await _flowApiPost('/tasks', {
+            title: action.title || 'Ny uppgift',
+            description: action.description || '',
+            priority: action.priority || 'medium',
+            category: action.category || 'seo',
+            url
+          })
+          window._voiceFlowResult = `UPPGIFT SKAPAD:\nTitel: ${action.title}\nPrioritet: ${action.priority || 'medium'}`
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte skapa uppgift: ${err.message}`
+          console.error('[Voice] Flow create task error:', err)
+        }
+        break
+      }
+
+      case 'flow_clients': {
+        console.log('[Voice] Fetching clients from Flow API')
+        updateVoiceStatus('Hämtar klienter från SEOZ Flow...')
+        try {
+          const data = await _flowApiCall('/clients')
+          const clients = Array.isArray(data) ? data : (data.clients || [])
+          const list = clients.map(c => `${c.name} (${c.domain}) — SEO-poäng: ${c.seoScore || '?'}`).join('\n')
+          window._voiceFlowResult = `KLIENTER (${clients.length} st):\n${list || 'Inga klienter hittades.'}`
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte hämta klienter: ${err.message}`
+          console.error('[Voice] Flow clients error:', err)
+        }
+        break
+      }
+
+      case 'flow_switch_client': {
+        console.log('[Voice] Switching client:', action.name)
+        updateVoiceStatus('Byter klient...')
+        try {
+          const data = await _flowApiCall('/clients')
+          const clients = Array.isArray(data) ? data : (data.clients || [])
+          const match = clients.find(c => c.name.toLowerCase().includes((action.name || '').toLowerCase()))
+          if (match) {
+            await SE.storeSet('activeClientId', match.id)
+            window._voiceFlowResult = `Bytte till klient: ${match.name} (${match.domain})`
+          } else {
+            window._voiceFlowResult = `Hittade ingen klient med namn "${action.name}". Tillgängliga: ${clients.map(c => c.name).join(', ')}`
+          }
+        } catch (err) {
+          window._voiceFlowResult = `Kunde inte byta klient: ${err.message}`
+          console.error('[Voice] Flow switch client error:', err)
+        }
+        break
+      }
+
+      default:
+        console.warn('[Voice] Unknown action:', action.type)
+    }
+  } catch (err) {
+    console.error('[Voice] Action error:', err)
+  }
+}
+
+// ── Flow API helpers ──────────────────────────────────────────
+async function _flowApiCall(path, params = {}) {
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) throw new Error('Ingen SEOZ API-nyckel konfigurerad')
+  const clientId = await SE.storeGet('activeClientId', '')
+  if (clientId) params.clientId = clientId
+
+  const url = new URL('https://seoz.se/api' + path)
+  Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, v))
+
+  const res = await fetch(url.toString(), {
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` }
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${txt.slice(0, 100)}`)
+  }
+  return res.json()
+}
+
+async function _flowApiPost(path, body = {}) {
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) throw new Error('Ingen SEOZ API-nyckel konfigurerad')
+  const clientId = await SE.storeGet('activeClientId', '')
+  if (clientId) body.clientId = clientId
+
+  const res = await fetch('https://seoz.se/api' + path, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify(body)
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${txt.slice(0, 100)}`)
+  }
+  return res.json()
+}
+
+function _formatFlowResult(type, data) {
+  switch (type) {
+    case 'keywords': {
+      const gsc = data.gscStats || {}
+      const kws = (data.keywords || []).slice(0, 15)
+      let s = `SÖKORD & GSC-DATA:\nKlick: ${gsc.clicks || 0} | Visningar: ${gsc.impressions || 0} | CTR: ${((gsc.ctr || 0) * 100).toFixed(1)}% | Snittposition: ${(gsc.position || 0).toFixed(1)}\n\n`
+      if (kws.length) {
+        s += `Topp ${kws.length} sökord:\n`
+        kws.forEach((k, i) => { s += `${i + 1}. "${k.keyword}" — volym: ${k.volume || '?'}, pos: ${k.position || '?'}\n` })
+      } else { s += 'Inga sökord hittades.' }
+      return s
+    }
+    case 'rankings': {
+      const gsc = data.gscStats || {}
+      const kws = (data.keywords || []).slice(0, 10)
+      let s = `RANK TRACKING (28 dagar):\nSnittposition: ${(gsc.position || 0).toFixed(1)} | CTR: ${((gsc.ctr || 0) * 100).toFixed(1)}%\n\n`
+      if (kws.length) {
+        kws.forEach((k, i) => { s += `${i + 1}. "${k.keyword}" — position ${k.position || '?'}\n` })
+      }
+      return s
+    }
+    case 'site_audit': {
+      const score = data.score || '?'
+      const op = data.onPage || {}
+      const cwv = data.cwv || {}
+      return `SEO AUDIT (SEOZ FLOW):\nPoäng: ${score}/100\n` +
+        `Title: ${op.titleLength || '?'} tecken | Meta: ${op.metaLength || '?'} tecken\n` +
+        `H1: ${op.h1Count || '?'} st | Bilder utan alt: ${op.imagesWithoutAlt || '?'}\n` +
+        `Interna länkar: ${op.internalLinks || '?'} | Externa: ${op.externalLinks || '?'}\n` +
+        `CWV — LCP: ${cwv.lcp || '?'}ms, CLS: ${cwv.cls || '?'}, FID: ${cwv.fid || '?'}ms`
+    }
+    case 'ai_visibility': {
+      const score = data.score || '?'
+      const models = (data.models || [])
+      let s = `AI-SYNLIGHET:\nPoäng: ${score}/100\n\n`
+      models.forEach(m => { s += `${m.name}: ${m.mentions}/${m.total} omnämnanden\n` })
+      if (data.keywords?.length) {
+        s += `\nRelaterade sökord: ${data.keywords.slice(0, 5).join(', ')}`
+      }
+      return s
+    }
+    case 'tasks': {
+      const tasks = Array.isArray(data) ? data : (data.tasks || [])
+      if (!tasks.length) return 'UPPGIFTER: Inga öppna uppgifter.'
+      let s = `ÖPPNA UPPGIFTER (${tasks.length} st):\n`
+      tasks.slice(0, 10).forEach((t, i) => {
+        s += `${i + 1}. [${t.priority || '?'}] ${t.title}${t.url ? ' — ' + t.url : ''}\n`
+      })
+      return s
+    }
+    default:
+      return JSON.stringify(data).slice(0, 500)
+  }
 }
 
 async function speakVoiceResponse(text) {
-  const ttsMode = await SE.storeGet('voiceTTSMode', 'browser')
   const elKey = await SE.storeGet('elevenlabsApiKey', '')
 
-  if (ttsMode === 'elevenlabs' && elKey) {
-    const voiceId = await SE.storeGet('voiceElevenlabsVoiceId', '')
+  console.log('[Voice] ElevenLabs key:', elKey ? 'yes (' + elKey.slice(0,8) + '...)' : 'no')
+
+  if (elKey) {
+    const voiceSelect = document.getElementById('voiceELVoiceSelect')
+    const voiceId = (voiceSelect && voiceSelect.value) || await SE.storeGet('voiceElevenlabsVoiceId', '') || '1Iztu4UHnTb9SUjJcpS1'
+    console.log('[Voice] Using ElevenLabs, voiceId:', voiceId)
+    updateVoiceStatus('Genererar röst via ElevenLabs...')
+    trackCost('elevenlabs', text.length)
     const res = await SE.elevenlabsTTS({ text, apiKey: elKey, voiceId: voiceId || undefined })
     if (res.ok && res.audio) {
+      console.log('[Voice] ElevenLabs audio received, size:', Math.round(res.audio.length * 0.75 / 1024), 'KB')
       return playBase64Audio(res.audio)
     }
     // Fallback to browser TTS on error
-    console.warn('ElevenLabs TTS failed, falling back to browser:', res.error)
+    console.warn('[Voice] ElevenLabs TTS failed, falling back to browser:', res.error)
+    toast('ElevenLabs-fel: ' + (res.error || '').slice(0, 100) + ' — använder webbläsar-TTS', '#e58a00')
   }
 
   // Browser TTS fallback
+  console.log('[Voice] Using browser TTS (speechSynthesis)')
   return new Promise(resolve => {
     if (!window.speechSynthesis) { resolve(); return }
     const utter = new SpeechSynthesisUtterance(text)
@@ -3460,8 +4257,8 @@ async function speakVoiceResponse(text) {
     utter.rate = 1.0
     utter.pitch = 1.0
     _voiceTTSUtterance = utter
-    utter.onend = () => { _voiceTTSUtterance = null; resolve() }
-    utter.onerror = () => { _voiceTTSUtterance = null; resolve() }
+    utter.onend = () => { _voiceTTSUtterance = null; const b = document.getElementById('voiceStopTTSBtn'); if(b) b.style.display='none'; resolve() }
+    utter.onerror = () => { _voiceTTSUtterance = null; const b = document.getElementById('voiceStopTTSBtn'); if(b) b.style.display='none'; resolve() }
     // Show stop button
     const stopBtn = document.getElementById('voiceStopTTSBtn')
     if (stopBtn) stopBtn.style.display = 'flex'
@@ -3511,6 +4308,7 @@ function stopVoiceTTS() {
 }
 
 function clearVoiceChat() {
+  if (_voiceConversationActive) endVoiceConversation()
   _voiceMessages.length = 0
   stopVoiceTTS()
   const el = document.getElementById('voiceMessages')
@@ -3518,10 +4316,10 @@ function clearVoiceChat() {
     <div style="text-align:center;padding:20px 8px;color:var(--muted)">
       <div style="font-size:28px;margin-bottom:6px">🎙️</div>
       <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
-      <div style="font-size:10px;line-height:1.5">Chatt rensad. Tryck på mikrofonen för att börja!</div>
+      <div style="font-size:10px;line-height:1.5">Chatt rensad. Tryck på mikrofonen för att starta ett nytt samtal!</div>
     </div>
   `
-  updateVoiceStatus('Tryck på mikrofonen för att börja prata')
+  updateVoiceStatus('Tryck för att starta ett samtal')
 }
 
 function renderVoiceMessages() {
@@ -3556,6 +4354,53 @@ async function onVoiceProviderChange(val) {
 async function onVoiceTTSChange(val) {
   await SE.storeSet('voiceTTSMode', val)
   toast('TTS ändrad till ' + (val === 'elevenlabs' ? 'ElevenLabs' : 'Webbläsare'), '#4680ff')
+  // Load voices when switching to ElevenLabs
+  if (val === 'elevenlabs') loadElevenLabsVoices()
+}
+
+async function onVoiceELVoiceChange(voiceId) {
+  await SE.storeSet('voiceElevenlabsVoiceId', voiceId)
+  const select = document.getElementById('voiceELVoiceSelect')
+  const name = select ? select.options[select.selectedIndex]?.text : voiceId
+  console.log('[Voice] ElevenLabs voice changed to:', name, voiceId)
+  toast('Röst ändrad till: ' + name, '#a78bfa')
+}
+
+let _voicesCached = null
+// Fixed voice options — only Anna and David
+const VOICE_OPTIONS = [
+  { id: '1Iztu4UHnTb9SUjJcpS1', name: 'Anna', wake: 'anna' },
+  { id: 'oQV06a7Gn8pbCJh5DXcO', name: 'David', wake: 'david' }
+]
+
+function getActiveVoice() {
+  const select = document.getElementById('voiceELVoiceSelect')
+  const id = select ? select.value : '1Iztu4UHnTb9SUjJcpS1'
+  return VOICE_OPTIONS.find(v => v.id === id) || VOICE_OPTIONS[0]
+}
+
+async function loadElevenLabsVoices() {
+  const select = document.getElementById('voiceELVoiceSelect')
+  if (!select) return
+
+  const elKey = await SE.storeGet('elevenlabsApiKey', '')
+  if (!elKey) {
+    select.innerHTML = '<option value="">Ingen ElevenLabs-nyckel</option>'
+    return
+  }
+
+  populateVoiceSelect(select)
+}
+
+async function populateVoiceSelect(select) {
+  const savedVoiceId = await SE.storeGet('voiceElevenlabsVoiceId', '') || '1Iztu4UHnTb9SUjJcpS1'
+
+  let html = ''
+  VOICE_OPTIONS.forEach(v => {
+    html += `<option value="${esc(v.id)}" ${v.id === savedVoiceId ? 'selected' : ''}>${esc(v.name)}</option>`
+  })
+
+  select.innerHTML = html
 }
 
 // Settings key helpers for OpenAI & ElevenLabs
@@ -4739,8 +5584,19 @@ wv.addEventListener('will-download', (e) => {
 // ══════════════════════════════════════════════════════
 let updateState = 'idle' // idle, available, downloading, ready
 
-SE.on('updater-status', data => {
+function setUpdateBannerVisible(visible) {
   const banner = document.getElementById('updateBanner')
+  const wvEl = document.getElementById('wv')
+  if (visible) {
+    banner.classList.add('show')
+    if (wvEl) wvEl.style.pointerEvents = 'none'
+  } else {
+    banner.classList.remove('show')
+    if (wvEl) wvEl.style.pointerEvents = ''
+  }
+}
+
+SE.on('updater-status', data => {
   const msg = document.getElementById('updateMsg')
   const btn = document.getElementById('updateBtn')
   const progress = document.getElementById('updateProgress')
@@ -4752,24 +5608,24 @@ SE.on('updater-status', data => {
     btn.textContent = 'Ladda ner'
     btn.style.display = ''
     progress.style.display = 'none'
-    banner.classList.add('show')
+    setUpdateBannerVisible(true)
   } else if (data.status === 'downloading') {
     updateState = 'downloading'
     msg.textContent = `Laddar ner uppdatering...`
     btn.style.display = 'none'
     progress.style.display = ''
     progressFill.style.width = (data.percent || 0) + '%'
-    banner.classList.add('show')
+    setUpdateBannerVisible(true)
   } else if (data.status === 'ready') {
     updateState = 'ready'
     msg.textContent = `Version ${data.version} redo att installeras!`
     btn.textContent = 'Starta om & installera'
     btn.style.display = ''
     progress.style.display = 'none'
-    banner.classList.add('show')
+    setUpdateBannerVisible(true)
   } else if (data.status === 'up-to-date') {
     updateState = 'idle'
-    banner.classList.remove('show')
+    setUpdateBannerVisible(false)
   } else if (data.status === 'error') {
     updateState = 'idle'
     // Silent — don't bother user with update errors

@@ -43,6 +43,9 @@ contextBridge.exposeInMainWorld('seoz', {
   // OpenAI Chat
   openaiChat:  (opts) => ipcRenderer.invoke('openai-chat', opts),
 
+  // Whisper STT (Speech-to-Text)
+  whisperSTT:  (opts) => ipcRenderer.invoke('whisper-stt', opts),
+
   // ElevenLabs TTS
   elevenlabsTTS:    (opts) => ipcRenderer.invoke('elevenlabs-tts', opts),
   elevenlabsVoices: (opts) => ipcRenderer.invoke('elevenlabs-voices', opts),

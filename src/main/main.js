@@ -249,6 +249,56 @@ ipcMain.handle('openai-chat', async (_, { messages, systemPrompt, apiKey, model 
   }
 })
 
+// ── Whisper STT (OpenAI Speech-to-Text) ──
+ipcMain.handle('whisper-stt', async (_, { audioBase64, apiKey, language }) => {
+  if (!apiKey) return { error: 'No OpenAI API key configured' }
+  if (!audioBase64) return { error: 'No audio data provided' }
+  try {
+    // Convert base64 to Buffer
+    const audioBuffer = Buffer.from(audioBase64, 'base64')
+
+    // Build multipart/form-data manually (Electron net.fetch supports it)
+    const boundary = '----WhisperBoundary' + Date.now()
+    const parts = []
+
+    // file field
+    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="file"; filename="audio.webm"\r\nContent-Type: audio/webm\r\n\r\n`)
+    parts.push(audioBuffer)
+    parts.push('\r\n')
+
+    // model field
+    parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="model"\r\n\r\nwhisper-1\r\n`)
+
+    // language field (optional)
+    if (language) {
+      parts.push(`--${boundary}\r\nContent-Disposition: form-data; name="language"\r\n\r\n${language}\r\n`)
+    }
+
+    parts.push(`--${boundary}--\r\n`)
+
+    // Combine into one Buffer
+    const bodyParts = parts.map(p => typeof p === 'string' ? Buffer.from(p) : p)
+    const body = Buffer.concat(bodyParts)
+
+    const res = await net.fetch('https://api.openai.com/v1/audio/transcriptions', {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${apiKey}`,
+        'Content-Type': `multipart/form-data; boundary=${boundary}`,
+      },
+      body
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => 'Unknown error')
+      return { error: `Whisper error ${res.status}: ${txt}` }
+    }
+    const data = await res.json()
+    return { ok: true, text: data.text || '' }
+  } catch (err) {
+    return { error: err.message || 'Whisper STT failed' }
+  }
+})
+
 // ── ElevenLabs TTS ──
 ipcMain.handle('elevenlabs-tts', async (_, { text, apiKey, voiceId, modelId }) => {
   if (!apiKey) return { error: 'No ElevenLabs API key configured' }

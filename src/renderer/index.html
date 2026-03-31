@@ -121,6 +121,7 @@ input,textarea,select{user-select:text}
 .addr-spinner{width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite;display:none}
 .addr-spinner.on{display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
+@keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(220,38,38,.4)}50%{box-shadow:0 0 0 12px rgba(220,38,38,0)}}
 .seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(44,168,127,.12);color:var(--g);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
 .seoz-pill:hover{background:rgba(44,168,127,.22)}
 .seoz-pill.inactive{background:rgba(220,53,69,.10);color:var(--r)}
@@ -610,6 +611,7 @@ input,textarea,select{user-select:text}
   padding:6px 14px;background:rgba(70,128,255,.1);border-bottom:1px solid rgba(70,128,255,.2);
   font-size:11px;color:var(--p);
   -webkit-app-region:no-drag;
+  position:relative;z-index:10;
 }
 .update-banner.show{display:flex}
 .update-banner .ub-msg{flex:1}
@@ -1500,7 +1502,7 @@ async function renderPanelContent(name) {
             </select>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!hasAI ? '⚠️ Saknar AI-nyckel' : hasEL ? '✅ Redo' : '✅ Redo (browser-TTS)'}</span>
+            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!openaiKey ? '⚠️ Saknar OpenAI-nyckel (krävs för Whisper)' : !hasAI ? '⚠️ Saknar AI-nyckel' : hasEL ? '✅ Redo' : '✅ Redo (browser-TTS)'}</span>
             <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearVoiceChat()">Rensa</button>
           </div>
         </div>
@@ -1512,7 +1514,8 @@ async function renderPanelContent(name) {
         <div style="text-align:center;padding:20px 8px;color:var(--muted)">
           <div style="font-size:28px;margin-bottom:6px">🎙️</div>
           <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
-          <div style="font-size:10px;line-height:1.5">Prata med AI via rösten! Tryck på mikrofon-knappen, ställ din fråga, och få svar uppläst. Använder Web Speech API för igenkänning och ElevenLabs eller webbläsarens TTS för uppläsning.</div>
+          <div style="font-size:10px;line-height:1.5">Prata med AI via rösten! Tryck på mikrofon-knappen, ställ din fråga, och få svar uppläst. Använder OpenAI Whisper för taligenkänning och ElevenLabs eller webbläsarens TTS för uppläsning.</div>
+          <div style="font-size:9px;color:var(--muted);margin-top:6px">Kräver OpenAI API-nyckel (för Whisper STT). Lägg till i Inställningar.</div>
         </div>
       `
     } else {
@@ -1580,6 +1583,14 @@ async function renderPanelContent(name) {
     SE.storeGet('anthropicApiKey', '').then(k => {
       const el = document.getElementById('settingsAnthropicKey')
       if (el) el.textContent = k ? k.slice(0, 12) + '••••••••' : 'Ej konfigurerad'
+    })
+    SE.storeGet('openaiApiKey', '').then(k => {
+      const el = document.getElementById('settingsOpenaiKey')
+      if (el) el.textContent = k ? k.slice(0, 10) + '••••••••' : 'Ej konfigurerad'
+    })
+    SE.storeGet('elevenlabsApiKey', '').then(k => {
+      const el = document.getElementById('settingsElevenlabsKey')
+      if (el) el.textContent = k ? k.slice(0, 10) + '••••••••' : 'Ej konfigurerad'
     })
   }
 }
@@ -3190,13 +3201,14 @@ async function removeAnthropicKey() {
 const _voiceMessages = [] // { role, content, ts }
 let _voiceRecording = false
 let _voiceProcessing = false
-let _voiceRecognition = null
 let _voiceAudioCtx = null
 let _voiceAnalyser = null
 let _voiceMediaStream = null
 let _voiceAnimFrame = null
 let _voiceCurrentAudio = null
 let _voiceTTSUtterance = null
+let _voiceMediaRecorder = null
+let _voiceAudioChunks = []
 
 function updateVoiceStatus(text) {
   const el = document.getElementById('voiceStatus')
@@ -3272,94 +3284,103 @@ async function toggleVoiceRecording() {
   }
 }
 
-function startVoiceRecording() {
+async function startVoiceRecording() {
   // Stop any playing TTS
   stopVoiceTTS()
 
-  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
-    toast('Taligenkänning stöds ej i denna version', '#dc2626')
+  // Check we have an OpenAI key for Whisper transcription
+  const openaiKey = await SE.storeGet('openaiApiKey', '')
+  if (!openaiKey) {
+    toast('Du behöver en OpenAI API-nyckel för taligenkänning (Whisper). Lägg till den i Inställningar.', '#dc2626')
     return
   }
 
-  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
-  _voiceRecognition = new SpeechRec()
-  _voiceRecognition.lang = 'sv-SE'
-  _voiceRecognition.interimResults = true
-  _voiceRecognition.continuous = true
-  _voiceRecognition.maxAlternatives = 1
-
-  let finalTranscript = ''
-  let silenceTimer = null
-
-  _voiceRecognition.onresult = (event) => {
-    let interim = ''
-    for (let i = event.resultIndex; i < event.results.length; i++) {
-      if (event.results[i].isFinal) {
-        finalTranscript += event.results[i][0].transcript + ' '
-        // Reset silence timer on final result
-        clearTimeout(silenceTimer)
-        silenceTimer = setTimeout(() => {
-          // Auto-stop after 2s of silence with content
-          if (finalTranscript.trim()) {
-            stopVoiceRecording()
-          }
-        }, 2000)
-      } else {
-        interim += event.results[i][0].transcript
-      }
-    }
-    updateVoiceStatus(finalTranscript + (interim ? '...' + interim : '') || 'Lyssnar...')
-  }
-
-  _voiceRecognition.onend = () => {
-    if (_voiceRecording && !finalTranscript.trim()) {
-      // Restarted without content — try again
-      try { _voiceRecognition.start() } catch {}
-      return
-    }
-    _voiceRecording = false
-    setMicBtnState(false)
-    stopVisualizer()
-    if (_voiceMediaStream) {
-      _voiceMediaStream.getTracks().forEach(t => t.stop())
-      _voiceMediaStream = null
-    }
-    clearTimeout(silenceTimer)
-    if (finalTranscript.trim()) {
-      processVoiceInput(finalTranscript.trim())
-    } else {
-      updateVoiceStatus('Tryck på mikrofonen för att börja prata')
-    }
-  }
-
-  _voiceRecognition.onerror = (e) => {
-    console.warn('Voice recognition error:', e.error)
-    if (e.error === 'not-allowed') {
-      toast('Mikrofontillgång nekad. Tillåt i systeminställningar.', '#dc2626')
-    }
-    _voiceRecording = false
-    setMicBtnState(false)
-    stopVisualizer()
-    updateVoiceStatus('Fel: ' + e.error)
-  }
-
-  // Start mic for visualizer
-  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+  try {
+    const stream = await navigator.mediaDevices.getUserMedia({ audio: true })
     _voiceMediaStream = stream
     startVisualizer(stream)
-    _voiceRecognition.start()
+
+    // Set up MediaRecorder
+    _voiceAudioChunks = []
+    const mimeType = MediaRecorder.isTypeSupported('audio/webm;codecs=opus')
+      ? 'audio/webm;codecs=opus'
+      : MediaRecorder.isTypeSupported('audio/webm')
+        ? 'audio/webm'
+        : 'audio/ogg'
+    _voiceMediaRecorder = new MediaRecorder(stream, { mimeType })
+
+    _voiceMediaRecorder.ondataavailable = (e) => {
+      if (e.data.size > 0) _voiceAudioChunks.push(e.data)
+    }
+
+    _voiceMediaRecorder.onstop = async () => {
+      // Stop visualizer and mic
+      stopVisualizer()
+      if (_voiceMediaStream) {
+        _voiceMediaStream.getTracks().forEach(t => t.stop())
+        _voiceMediaStream = null
+      }
+      setMicBtnState(false)
+      _voiceRecording = false
+
+      if (_voiceAudioChunks.length === 0) {
+        updateVoiceStatus('Tryck på mikrofonen för att börja prata')
+        return
+      }
+
+      // Convert to base64 and send to Whisper
+      updateVoiceStatus('Transkriberar...')
+      _voiceProcessing = true
+
+      try {
+        const blob = new Blob(_voiceAudioChunks, { type: mimeType })
+        const arrayBuf = await blob.arrayBuffer()
+        const bytes = new Uint8Array(arrayBuf)
+        // Chunk the conversion to avoid call stack overflow on large recordings
+        let binary = ''
+        const chunkSize = 8192
+        for (let i = 0; i < bytes.length; i += chunkSize) {
+          binary += String.fromCharCode.apply(null, bytes.subarray(i, i + chunkSize))
+        }
+        const base64 = btoa(binary)
+
+        const res = await SE.whisperSTT({ audioBase64: base64, apiKey: openaiKey, language: 'sv' })
+
+        if (res.error) {
+          toast('Whisper-fel: ' + res.error, '#dc2626')
+          updateVoiceStatus('Fel vid transkribering')
+          _voiceProcessing = false
+          return
+        }
+
+        const text = (res.text || '').trim()
+        if (!text) {
+          updateVoiceStatus('Inget tal uppfattades. Försök igen!')
+          _voiceProcessing = false
+          return
+        }
+
+        // Process the transcribed text
+        await processVoiceInput(text)
+      } catch (err) {
+        toast('Fel: ' + (err.message || err), '#dc2626')
+        updateVoiceStatus('Fel vid transkribering')
+        _voiceProcessing = false
+      }
+    }
+
+    _voiceMediaRecorder.start(250) // collect chunks every 250ms
     _voiceRecording = true
     setMicBtnState(true)
-    updateVoiceStatus('Lyssnar...')
-  }).catch(err => {
+    updateVoiceStatus('Lyssnar... (tryck igen för att stoppa)')
+  } catch (err) {
     toast('Kunde inte aktivera mikrofonen: ' + err.message, '#dc2626')
-  })
+  }
 }
 
 function stopVoiceRecording() {
-  if (_voiceRecognition) {
-    _voiceRecording = false
-    try { _voiceRecognition.stop() } catch {}
+  if (_voiceMediaRecorder && _voiceMediaRecorder.state !== 'inactive') {
+    _voiceMediaRecorder.stop()
   }
 }
 

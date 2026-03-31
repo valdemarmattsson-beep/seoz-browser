@@ -856,11 +856,13 @@ input,textarea,select{user-select:text}
   <!-- BODY -->
   <div class="body-row">
     <!-- Webview container (holds webview + inspector drawer) -->
-    <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative">
-      <webview id="wv" src="https://www.google.com"
-               useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
-               allowpopups style="flex:1;min-height:0;border:none;outline:none">
-      </webview>
+    <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative" id="wvContainer">
+      <div id="wvStack" style="flex:1;min-height:0;position:relative">
+        <webview id="wv" src="https://www.google.com"
+                 useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                 allowpopups style="position:absolute;inset:0;width:100%;height:100%;border:none;outline:none">
+        </webview>
+      </div>
       <!-- Floating voice button -->
       <div id="voiceFab" onclick="toggleVoiceRecording()" title="Röstsamtal" style="
         position:absolute;bottom:24px;right:24px;z-index:100;
@@ -1149,10 +1151,36 @@ const synced = {
 }
 
 // ══════════════════════════════════════════════════════
-//  WEBVIEW
+//  WEBVIEW — multi-webview: one per tab, show/hide
 // ══════════════════════════════════════════════════════
-const wv = document.getElementById('wv')
+const _wvStack = document.getElementById('wvStack')
+const _wvTemplate = document.getElementById('wv') // initial webview (tab 1)
+const _tabWebviews = new Map() // tabId → webview element
+let wv = _wvTemplate // always points to the active tab's webview
 function getWV() { return wv }
+
+const CHROME_UA_WV = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+
+function createWebviewForTab(tabId, url) {
+  const el = document.createElement('webview')
+  el.setAttribute('useragent', CHROME_UA_WV)
+  el.setAttribute('allowpopups', '')
+  el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none'
+  el.src = url || 'about:blank'
+  _wvStack.appendChild(el)
+  _tabWebviews.set(tabId, el)
+  _attachWebviewListeners(el, tabId)
+  return el
+}
+
+function showWebview(tabId) {
+  _tabWebviews.forEach((el, id) => {
+    el.style.display = id === tabId ? '' : 'none'
+  })
+}
+
+// Register initial webview (tab 1)
+_tabWebviews.set(1, _wvTemplate)
 
 // Batched tab rendering — coalesce rapid events into one paint
 let _tabRenderPending = false
@@ -1230,57 +1258,71 @@ const WV_CONTEXT_MENU_SCRIPT = `
   })
 `
 
-wv.addEventListener('dom-ready', () => {
-  wv.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
-  wv.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
-})
+// Attach all standard listeners to a webview (called for every new tab's webview)
+function _attachWebviewListeners(el, tabId) {
+  // Find which tab object this webview belongs to
+  function _myTab() { return tabs.find(t => t.id === tabId) }
+  function _isActive() { return tabId === activeId }
 
-wv.addEventListener('did-navigate', e => updateURL(e.url))
-wv.addEventListener('did-navigate-in-page', e => updateURL(e.url))
-wv.addEventListener('did-start-loading', () => {
-  _isLoading = true
-  document.getElementById('spinner').classList.add('on')
-  document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
-  const tab = getActive(); if (tab) { tab.loading = true; scheduleRenderTabs() }
-})
-wv.addEventListener('did-stop-loading', () => {
-  _isLoading = false
-  document.getElementById('spinner').classList.remove('on')
-  document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
-  const tab = getActive(); if (tab) { tab.loading = false; scheduleRenderTabs() }
-})
-wv.addEventListener('page-title-updated', e => {
-  const tab = getActive()
-  if (tab) { tab.title = e.title; scheduleRenderTabs() }
-})
-wv.addEventListener('page-favicon-updated', e => {
-  const tab = getActive()
-  if (tab && e.favicons && e.favicons.length > 0) {
-    tab.favicon = e.favicons[0]
-    scheduleRenderTabs()
-    // Also update URL bar favicon
-    setUrlFavicon(e.favicons[0])
-  }
-})
-wv.addEventListener('new-window', e => newTab(e.url))
+  el.addEventListener('dom-ready', () => {
+    el.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+    el.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
+  })
 
-// ── Webview right-click context menu (Chrome-style) ──
-wv.addEventListener('contextmenu', async (e) => {
-  e.preventDefault()
-  e.stopPropagation()
-  let ctx = { selectedText: '', linkUrl: '', linkText: '', imgSrc: '', isEditable: false }
-  try {
-    ctx = await wv.executeJavaScript('window.__seozCtx || {}')
-  } catch(_) {}
+  el.addEventListener('did-navigate', e => {
+    const t = _myTab(); if (t) t.url = e.url
+    if (_isActive()) updateURL(e.url)
+  })
+  el.addEventListener('did-navigate-in-page', e => {
+    const t = _myTab(); if (t) t.url = e.url
+    if (_isActive()) updateURL(e.url)
+  })
+  el.addEventListener('did-start-loading', () => {
+    const t = _myTab(); if (t) { t.loading = true; scheduleRenderTabs() }
+    if (_isActive()) {
+      _isLoading = true
+      document.getElementById('spinner').classList.add('on')
+      document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
+    }
+  })
+  el.addEventListener('did-stop-loading', () => {
+    const t = _myTab(); if (t) { t.loading = false; scheduleRenderTabs() }
+    if (_isActive()) {
+      _isLoading = false
+      document.getElementById('spinner').classList.remove('on')
+      document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
+    }
+  })
+  el.addEventListener('page-title-updated', e => {
+    const t = _myTab(); if (t) { t.title = e.title; scheduleRenderTabs() }
+  })
+  el.addEventListener('page-favicon-updated', e => {
+    const t = _myTab()
+    if (t && e.favicons && e.favicons.length > 0) {
+      t.favicon = e.favicons[0]
+      scheduleRenderTabs()
+      if (_isActive()) setUrlFavicon(e.favicons[0])
+    }
+  })
+  el.addEventListener('new-window', e => newTab(e.url))
 
-  const items = []
-  const currentUrl = document.getElementById('urlInput').value
+  // ── Webview right-click context menu (Chrome-style) ──
+  el.addEventListener('contextmenu', async (ev) => {
+    ev.preventDefault()
+    ev.stopPropagation()
+    let ctx = { selectedText: '', linkUrl: '', linkText: '', imgSrc: '', isEditable: false }
+    try {
+      ctx = await el.executeJavaScript('window.__seozCtx || {}')
+    } catch(_) {}
 
-  // Navigation
-  items.push({ label: '← Tillbaka', action: () => wvBack(), disabled: !wv.canGoBack() })
-  items.push({ label: '→ Framåt', action: () => wvFwd(), disabled: !wv.canGoForward() })
-  items.push({ label: '↻ Ladda om', action: () => wvReload() })
-  items.push('---')
+    const items = []
+    const currentUrl = document.getElementById('urlInput').value
+
+    // Navigation
+    items.push({ label: '← Tillbaka', action: () => wvBack(), disabled: !el.canGoBack() })
+    items.push({ label: '→ Framåt', action: () => wvFwd(), disabled: !el.canGoForward() })
+    items.push({ label: '↻ Ladda om', action: () => wvReload() })
+    items.push('---')
 
   // Link actions
   if (ctx.linkUrl) {
@@ -1319,11 +1361,82 @@ wv.addEventListener('contextmenu', async (e) => {
   items.push({ label: 'Visa sidkälla', action: () => newTab('view-source:' + currentUrl) })
   items.push({ label: 'SEOZ Inspector', action: () => toggleInspector() })
 
-  // Remove trailing separator
-  while (items.length && items[items.length - 1] === '---') items.pop()
+    // Remove trailing separator
+    while (items.length && items[items.length - 1] === '---') items.pop()
 
-  showCtx(e, items)
-})
+    showCtx(ev, items)
+  })
+
+  // Find-in-page results
+  el.addEventListener('found-in-page', e => {
+    if (!_isActive()) return
+    const r = e.result
+    if (r) document.getElementById('findCount').textContent = `${r.activeMatchOrdinal}/${r.matches}`
+  })
+
+  // Console message capture (errors + SEOZ-PICK element picker)
+  el.addEventListener('console-message', e => {
+    if (e.message && e.message.startsWith('[SEOZ-PICK]')) {
+      if (!_isActive()) return
+      try {
+        const data = JSON.parse(e.message.replace('[SEOZ-PICK]', ''))
+        if (typeof elemPickerActive !== 'undefined') {
+          elemPickerActive = false
+          const btn = document.getElementById('elemPickerBtn')
+          if (btn) btn.classList.remove('active')
+        }
+        el.executeJavaScript(`
+          if (window.__seozPicker) {
+            document.removeEventListener('mousemove', window.__seozPickerHandler, true);
+            document.removeEventListener('click', window.__seozPickerClick, true);
+            const hl = document.getElementById('__seozHighlight');
+            if (hl) hl.remove();
+            window.__seozPicker = false;
+          }
+        `)
+        if (typeof inspectorSwitchTab === 'function') inspectorSwitchTab('elements')
+        const body = document.getElementById('inspectorBody')
+        if (body && typeof esc === 'function') {
+          let html = '<div class="insp-section"><div class="insp-section-title">Valt element</div>'
+          html += '<div class="insp-row"><div class="insp-label">Tagg</div><div class="insp-value"><span class="elem-tag">' + esc(data.tag) + '</span></div></div>'
+          if (data.id) html += '<div class="insp-row"><div class="insp-label">ID</div><div class="insp-value">#' + esc(data.id) + '</div></div>'
+          if (data.class) html += '<div class="insp-row"><div class="insp-label">Klass</div><div class="insp-value">' + esc(data.class) + '</div></div>'
+          if (data.text) html += '<div class="insp-row"><div class="insp-label">Text</div><div class="insp-value">' + esc(data.text) + '</div></div>'
+          html += '<div class="insp-row"><div class="insp-label">HTML</div><div class="insp-value"><div class="insp-code">' + esc(data.html) + '</div></div></div>'
+          html += '</div>'
+          body.innerHTML = html
+        }
+      } catch(_) {}
+      return
+    }
+    if (typeof consoleMessages !== 'undefined') {
+      const types = { 0: 'info', 1: 'info', 2: 'warn', 3: 'error' }
+      consoleMessages.push({
+        type: types[e.level] || 'info',
+        message: e.message,
+        source: e.sourceId || '',
+        line: e.lineNumber || 0,
+        time: Date.now()
+      })
+      if (consoleMessages.length > 500) consoleMessages.shift()
+      // Live update if console tab is open
+      if (_isActive() && typeof inspectorTab !== 'undefined' && inspectorTab === 'console') {
+        const drawer = document.getElementById('inspectorDrawer')
+        if (drawer && drawer.classList.contains('open') && typeof renderInspector === 'function') renderInspector()
+      }
+    }
+  })
+
+  // CWV monitor reset on navigation
+  el.addEventListener('did-start-loading', () => {
+    if (typeof cwvMonitorInterval !== 'undefined' && cwvMonitorInterval) {
+      clearInterval(cwvMonitorInterval); cwvMonitorInterval = null
+    }
+  })
+}
+
+// Attach listeners to the initial tab 1 webview
+_attachWebviewListeners(_wvTemplate, 1)
 
 function updateURL(url) {
   document.getElementById('urlInput').value = (url === 'about:blank') ? '' : url
@@ -1384,7 +1497,7 @@ function wvReload() {
 // ══════════════════════════════════════════════════════
 //  TABS
 // ══════════════════════════════════════════════════════
-let tabs = [{ id:1, title:'Google', url:'https://www.google.com', loading:false, favicon:null }]
+let tabs = [{ id:1, title:'Google', url:'https://www.google.com', loading:false, favicon:null, _zoom:100 }]
 let activeId = 1
 let nextId = 2
 
@@ -1457,7 +1570,9 @@ function newTab(url) {
   const id = nextId++
   const isBlank = !url
   const loadUrl = url || 'about:blank'
-  tabs.push({ id, title:'Ny flik', url: loadUrl, loading:false, favicon:null })
+  tabs.push({ id, title:'Ny flik', url: loadUrl, loading:false, favicon:null, _zoom:100 })
+  // Create a dedicated webview for this tab
+  createWebviewForTab(id, loadUrl)
   switchTab(id)
   const urlInput = document.getElementById('urlInput')
   if (isBlank) urlInput.value = ''
@@ -1468,10 +1583,27 @@ function newTab(url) {
 function switchTab(id) {
   activeId = id
   const tab = getActive()
+
+  // Switch to the tab's webview (no reload!)
+  const targetWv = _tabWebviews.get(id)
+  if (targetWv) {
+    wv = targetWv
+    showWebview(id)
+  }
+
   if (tab) {
-    wv.loadURL(tab.url)
     document.getElementById('urlInput').value = (tab.url === 'about:blank') ? '' : tab.url
     if (tab.favicon) setUrlFavicon(tab.favicon)
+    // Update spinner state for this tab
+    _isLoading = !!tab.loading
+    document.getElementById('spinner').classList.toggle('on', _isLoading)
+    // Update zoom bar for this tab
+    const z = tab._zoom || 100
+    zoomLevel = z
+    const zoomBar = document.getElementById('zoomBar')
+    const zoomBarPct = document.getElementById('zoomBarPct')
+    if (zoomBar) zoomBar.classList.toggle('show', z !== 100)
+    if (zoomBarPct) zoomBarPct.textContent = z + '%'
   }
   renderTabs()
 }
@@ -1481,6 +1613,9 @@ function closeTab(e, id) {
   if (tabs.length === 1) return
   const idx = tabs.findIndex(t => t.id === id)
   tabs = tabs.filter(t => t.id !== id)
+  // Remove the webview element for this tab
+  const closedWv = _tabWebviews.get(id)
+  if (closedWv) { closedWv.remove(); _tabWebviews.delete(id) }
   if (activeId === id) switchTab(tabs[Math.min(idx, tabs.length-1)].id)
   else renderTabs()
 }
@@ -2934,7 +3069,7 @@ SE.on('blocker-count', count => {
 // Listen for open-url from main process (default browser / second instance)
 SE.on('open-url', url => {
   if (url && /^https?:\/\//i.test(url)) {
-    wv.loadURL(url)
+    newTab(url)
   }
 })
 
@@ -3021,6 +3156,8 @@ function doZoom(delta) {
   if (delta === 0) zoomLevel = 100
   else zoomLevel = Math.max(25, Math.min(500, zoomLevel + delta))
   wv.setZoomFactor(zoomLevel / 100)
+  // Save zoom per tab
+  const tab = getActive(); if (tab) tab._zoom = zoomLevel
   // Update chrome-menu zoom label
   const label = document.getElementById('zoomLabel')
   if (label) label.textContent = zoomLevel + '%'
@@ -3070,11 +3207,7 @@ function findKeyHandler(e) {
   if (e.key === 'Escape') closeFindBar()
   else if (e.key === 'Enter') doFindNav(e.shiftKey ? 'back' : 'fwd')
 }
-// Listen for find-in-page results
-wv.addEventListener('found-in-page', e => {
-  const r = e.result
-  if (r) document.getElementById('findCount').textContent = `${r.activeMatchOrdinal}/${r.matches}`
-})
+// NOTE: found-in-page listener is in _attachWebviewListeners
 
 // ══════════════════════════════════════════════════════
 //  HISTORY
@@ -3440,10 +3573,7 @@ function startCWVMonitor() {
   cwvMonitorInterval = setInterval(() => measureCWV(), 5000)
 }
 
-// Stop monitor on navigation
-wv.addEventListener('did-start-loading', () => {
-  if (cwvMonitorInterval) { clearInterval(cwvMonitorInterval); cwvMonitorInterval = null }
-})
+// NOTE: CWV did-start-loading listener is in _attachWebviewListeners
 
 // ══════════════════════════════════════════════════════
 //  CREATIVE INTELLIGENCE — AI ad copy from page content
@@ -6080,22 +6210,7 @@ function copyInspectorData() {
 // ══════════════════════════════════════════════════════
 let consoleMessages = [] // {type, message, source, line, time}
 
-wv.addEventListener('console-message', e => {
-  if (e.message && e.message.startsWith('[SEOZ-PICK]')) return // handled by picker
-  const types = { 0: 'info', 1: 'info', 2: 'warn', 3: 'error' }
-  consoleMessages.push({
-    type: types[e.level] || 'info',
-    message: e.message,
-    source: e.sourceId || '',
-    line: e.lineNumber || 0,
-    time: Date.now()
-  })
-  if (consoleMessages.length > 500) consoleMessages.shift()
-  // Live update if console tab is open
-  if (inspectorTab === 'console' && document.getElementById('inspectorDrawer').classList.contains('open')) {
-    renderInspector()
-  }
-})
+// NOTE: console-message listener is in _attachWebviewListeners
 
 function renderInspConsole() {
   if (!consoleMessages.length) {
@@ -6301,39 +6416,7 @@ function toggleElementPicker() {
   }
 }
 
-// Listen for picked element info via console-message
-wv.addEventListener('console-message', e => {
-  if (e.message && e.message.startsWith('[SEOZ-PICK]')) {
-    try {
-      const data = JSON.parse(e.message.replace('[SEOZ-PICK]', ''))
-      // Turn off picker
-      elemPickerActive = false
-      document.getElementById('elemPickerBtn').classList.remove('active')
-      wv.executeJavaScript(`
-        if (window.__seozPicker) {
-          document.removeEventListener('mousemove', window.__seozPickerHandler, true);
-          document.removeEventListener('click', window.__seozPickerClick, true);
-          const hl = document.getElementById('__seozHighlight');
-          if (hl) hl.remove();
-          window.__seozPicker = false;
-        }
-      `)
-      // Show picked element info
-      inspectorSwitchTab('elements')
-      const body = document.getElementById('inspectorBody')
-      let html = '<div class="insp-section"><div class="insp-section-title">Valt element</div>'
-      html += `<div class="insp-row"><div class="insp-label">Tagg</div><div class="insp-value"><span class="elem-tag">${esc(data.tag)}</span></div></div>`
-      if (data.id) html += `<div class="insp-row"><div class="insp-label">ID</div><div class="insp-value">#${esc(data.id)}</div></div>`
-      if (data.class) html += `<div class="insp-row"><div class="insp-label">Klass</div><div class="insp-value">${esc(data.class)}</div></div>`
-      if (data.text) html += `<div class="insp-row"><div class="insp-label">Text</div><div class="insp-value">${esc(data.text)}</div></div>`
-      html += `<div class="insp-row"><div class="insp-label">HTML</div><div class="insp-value"><div class="insp-code">${esc(data.html)}</div></div></div>`
-      html += `<div class="insp-row"><div class="insp-label">CSS Selector</div><div class="insp-value" style="font-family:monospace;font-size:10px">${esc(data.tag)}${data.id ? '#'+esc(data.id) : ''}${data.class ? '.'+esc(data.class.trim().split(/\\s+/).join('.')) : ''}</div></div>`
-      html += '</div>'
-      html += `<button class="act-btn" style="width:auto;display:inline-flex;padding:0 16px;margin-top:8px" onclick="captureElements().then(()=>renderInspector())">Visa DOM-träd</button>`
-      body.innerHTML = html
-    } catch(_) {}
-  }
-})
+// NOTE: SEOZ-PICK console-message listener is in _attachWebviewListeners
 
 // ══════════════════════════════════════════════════════
 //  KEYBOARD SHORTCUTS (Chrome-style)
@@ -6345,7 +6428,7 @@ document.addEventListener('keydown', e => {
   // Ctrl+T → New tab
   if (ctrl && key === 't') { e.preventDefault(); newTab() }
   // Ctrl+W → Close active tab
-  else if (ctrl && key === 'w') { e.preventDefault(); if (tabs.length > 1) { const idx = tabs.findIndex(t => t.id === activeId); tabs = tabs.filter(t => t.id !== activeId); switchTab(tabs[Math.min(idx, tabs.length-1)].id) } }
+  else if (ctrl && key === 'w') { e.preventDefault(); if (tabs.length > 1) { const _cid = activeId; const idx = tabs.findIndex(t => t.id === _cid); tabs = tabs.filter(t => t.id !== _cid); const closedWv = _tabWebviews.get(_cid); if (closedWv) { closedWv.remove(); _tabWebviews.delete(_cid) } switchTab(tabs[Math.min(idx, tabs.length-1)].id) } }
   // Ctrl+L or F6 → Focus URL bar
   else if ((ctrl && key === 'l') || e.key === 'F6') { e.preventDefault(); document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }
   // Ctrl+R or F5 → Reload
@@ -6429,13 +6512,12 @@ let updateState = 'idle' // idle, available, downloading, ready
 
 function setUpdateBannerVisible(visible) {
   const banner = document.getElementById('updateBanner')
-  const wvEl = document.getElementById('wv')
   if (visible) {
     banner.classList.add('show')
-    if (wvEl) wvEl.style.pointerEvents = 'none'
+    _tabWebviews.forEach(el => el.style.pointerEvents = 'none')
   } else {
     banner.classList.remove('show')
-    if (wvEl) wvEl.style.pointerEvents = ''
+    _tabWebviews.forEach(el => el.style.pointerEvents = '')
   }
 }
 

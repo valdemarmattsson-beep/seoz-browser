@@ -32,11 +32,12 @@ function getWindow() {
 const TOOLS = [
   {
     name: 'navigate',
-    description: 'Navigate the active browser tab to a URL',
+    description: 'Navigate the active browser tab to a URL and wait for the page to finish loading before returning',
     inputSchema: {
       type: 'object',
       properties: {
-        url: { type: 'string', description: 'The URL to navigate to' }
+        url: { type: 'string', description: 'The URL to navigate to' },
+        wait: { type: 'boolean', description: 'Wait for page load to complete (default true)' }
       },
       required: ['url']
     }
@@ -176,6 +177,40 @@ const TOOLS = [
       required: ['text']
     }
   },
+  {
+    name: 'get_interactive_elements',
+    description: 'List all interactive elements on the page (links, buttons, inputs, selects, textareas) with their CSS selector, tag, text, type, href and visibility. Essential for understanding what actions are available on a page.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        filter: { type: 'string', enum: ['all', 'links', 'buttons', 'inputs', 'forms'], description: 'Filter by element type (default: all)' }
+      }
+    }
+  },
+  {
+    name: 'click_text',
+    description: 'Click the first visible element whose text content matches the given string. Searches buttons, links, and other clickable elements. Much easier than finding a CSS selector.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        text: { type: 'string', description: 'Text to match (case-insensitive, partial match)' },
+        tag: { type: 'string', description: 'Optional: limit search to specific tag (a, button, etc.)' }
+      },
+      required: ['text']
+    }
+  },
+  {
+    name: 'wait_for',
+    description: 'Wait for a CSS selector to appear on the page, or wait a fixed number of seconds. Useful after navigation or clicking to ensure content has loaded.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector to wait for' },
+        timeout: { type: 'number', description: 'Max wait time in ms (default 5000)' },
+        delay: { type: 'number', description: 'Fixed delay in ms instead of waiting for selector' }
+      }
+    }
+  },
 ]
 
 // ── Execute MCP tool via IPC to renderer ──
@@ -210,7 +245,7 @@ async function handleRequest(body) {
       return jsonrpcResult(id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: 'seoz-browser', version: '1.0.0' }
+        serverInfo: { name: 'SEOZ Browser', version: '1.0.0' }
       })
 
     case 'notifications/initialized':

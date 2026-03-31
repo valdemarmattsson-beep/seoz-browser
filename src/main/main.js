@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session } = require('electron')
 const path = require('path')
 const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
@@ -194,29 +194,6 @@ ipcMain.handle('profile-switch', (_, id) => {
   return { ok: true, profile }
 })
 
-// ── Profile avatar ──
-ipcMain.handle('profile-pick-avatar', async (_, profileId) => {
-  const result = await dialog.showOpenDialog(win, {
-    title: 'Välj profilbild',
-    filters: [{ name: 'Bilder', extensions: ['png', 'jpg', 'jpeg', 'webp', 'gif', 'bmp', 'svg'] }],
-    properties: ['openFile'],
-  })
-  if (result.canceled || !result.filePaths[0]) return { ok: false }
-  const avatarPath = PM.saveAvatar(profileId, result.filePaths[0])
-  PM.updateProfile(profileId, { avatar: avatarPath })
-  return { ok: true, path: avatarPath }
-})
-
-ipcMain.handle('profile-get-avatar', (_, profileId) => {
-  return PM.getAvatarPath(profileId)
-})
-
-ipcMain.handle('profile-remove-avatar', (_, profileId) => {
-  PM.deleteAvatar(profileId)
-  PM.updateProfile(profileId, { avatar: null })
-  return { ok: true }
-})
-
 // ── Claude AI (Anthropic API) ──
 ipcMain.handle('claude-chat', async (_, { messages, systemPrompt, apiKey }) => {
   if (!apiKey) return { error: 'No Anthropic API key configured' }
@@ -244,6 +221,75 @@ ipcMain.handle('claude-chat', async (_, { messages, systemPrompt, apiKey }) => {
     return { ok: true, content: data.content?.[0]?.text || '', usage: data.usage }
   } catch (err) {
     return { error: err.message || 'Claude API call failed' }
+  }
+})
+
+// ── OpenAI Chat (configurable model) ──
+ipcMain.handle('openai-chat', async (_, { messages, systemPrompt, apiKey, model }) => {
+  if (!apiKey) return { error: 'No OpenAI API key configured' }
+  try {
+    const body = JSON.stringify({
+      model: model || 'gpt-4o',
+      messages: [{ role: 'system', content: systemPrompt || 'You are a helpful SEO assistant. Respond in Swedish unless the user writes in another language.' }, ...messages],
+      max_tokens: 4096,
+    })
+    const res = await net.fetch('https://api.openai.com/v1/chat/completions', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+      body
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => 'Unknown error')
+      return { error: `API error ${res.status}: ${txt}` }
+    }
+    const data = await res.json()
+    return { ok: true, content: data.choices?.[0]?.message?.content || '', usage: data.usage }
+  } catch (err) {
+    return { error: err.message || 'OpenAI API call failed' }
+  }
+})
+
+// ── ElevenLabs TTS ──
+ipcMain.handle('elevenlabs-tts', async (_, { text, apiKey, voiceId, modelId }) => {
+  if (!apiKey) return { error: 'No ElevenLabs API key configured' }
+  if (!text) return { error: 'No text provided' }
+  try {
+    const voice = voiceId || 'EXAVITQu4vr4xnSDxMaL' // Default: "Sarah"
+    const res = await net.fetch(`https://api.elevenlabs.io/v1/text-to-speech/${voice}`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'xi-api-key': apiKey,
+      },
+      body: JSON.stringify({
+        text,
+        model_id: modelId || 'eleven_multilingual_v2',
+        voice_settings: { stability: 0.5, similarity_boost: 0.75 }
+      })
+    })
+    if (!res.ok) {
+      const txt = await res.text().catch(() => 'Unknown error')
+      return { error: `ElevenLabs error ${res.status}: ${txt}` }
+    }
+    const buf = await res.arrayBuffer()
+    return { ok: true, audio: Buffer.from(buf).toString('base64') }
+  } catch (err) {
+    return { error: err.message || 'ElevenLabs API call failed' }
+  }
+})
+
+// ── ElevenLabs: List voices ──
+ipcMain.handle('elevenlabs-voices', async (_, { apiKey }) => {
+  if (!apiKey) return { error: 'No ElevenLabs API key configured' }
+  try {
+    const res = await net.fetch('https://api.elevenlabs.io/v1/voices', {
+      headers: { 'xi-api-key': apiKey }
+    })
+    if (!res.ok) return { error: `Error ${res.status}` }
+    const data = await res.json()
+    return { ok: true, voices: (data.voices || []).map(v => ({ id: v.voice_id, name: v.name, category: v.category })) }
+  } catch (err) {
+    return { error: err.message }
   }
 })
 

@@ -28,9 +28,6 @@ contextBridge.exposeInMainWorld('seoz', {
   profileUpdate:    (id, updates) => ipcRenderer.invoke('profile-update', { id, updates }),
   profileDelete:    (id) => ipcRenderer.invoke('profile-delete', id),
   profileSwitch:    (id) => ipcRenderer.invoke('profile-switch', id),
-  profilePickAvatar:(id) => ipcRenderer.invoke('profile-pick-avatar', id),
-  profileGetAvatar: (id) => ipcRenderer.invoke('profile-get-avatar', id),
-  profileRemoveAvatar:(id) => ipcRenderer.invoke('profile-remove-avatar', id),
 
   // Generic store
   storeGet:    (k, d) => ipcRenderer.invoke('store-get', k, d),
@@ -42,6 +39,13 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Claude AI
   claudeChat:  (opts) => ipcRenderer.invoke('claude-chat', opts),
+
+  // OpenAI Chat
+  openaiChat:  (opts) => ipcRenderer.invoke('openai-chat', opts),
+
+  // ElevenLabs TTS
+  elevenlabsTTS:    (opts) => ipcRenderer.invoke('elevenlabs-tts', opts),
+  elevenlabsVoices: (opts) => ipcRenderer.invoke('elevenlabs-voices', opts),
 
   // OS notifications
   notify:      (title, body) => ipcRenderer.send('send-notification', { title, body }),

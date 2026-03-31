@@ -17,9 +17,6 @@
 
 const Store = require('electron-store')
 const crypto = require('crypto')
-const fs = require('fs')
-const path = require('path')
-const { app } = require('electron')
 
 // Root store — just the profile list & active profile pointer
 const rootStore = new Store({
@@ -54,45 +51,6 @@ function getInitials(name) {
   const parts = name.trim().split(/\s+/)
   if (parts.length >= 2) return (parts[0][0] + parts[1][0]).toUpperCase()
   return parts[0].substring(0, 2).toUpperCase()
-}
-
-// ── Avatar storage ────────────────────────────────────────────────────────
-
-function getAvatarDir() {
-  const dir = path.join(app.getPath('userData'), 'profile-avatars')
-  if (!fs.existsSync(dir)) fs.mkdirSync(dir, { recursive: true })
-  return dir
-}
-
-/**
- * Save an image file as profile avatar.
- * Copies the file into app userData so it persists even if the original is deleted.
- * Returns the path to the saved avatar.
- */
-function saveAvatar(profileId, sourcePath) {
-  const dir = getAvatarDir()
-  const ext = path.extname(sourcePath).toLowerCase() || '.png'
-  const dest = path.join(dir, `${profileId}${ext}`)
-  fs.copyFileSync(sourcePath, dest)
-  return dest
-}
-
-function deleteAvatar(profileId) {
-  const dir = getAvatarDir()
-  // Remove any avatar file for this profile (any extension)
-  for (const ext of ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg']) {
-    const f = path.join(dir, `${profileId}${ext}`)
-    if (fs.existsSync(f)) fs.unlinkSync(f)
-  }
-}
-
-function getAvatarPath(profileId) {
-  const dir = getAvatarDir()
-  for (const ext of ['.png', '.jpg', '.jpeg', '.webp', '.gif', '.bmp', '.svg']) {
-    const f = path.join(dir, `${profileId}${ext}`)
-    if (fs.existsSync(f)) return f
-  }
-  return null
 }
 
 // ── Per-profile store ─────────────────────────────────────────────────────
@@ -213,7 +171,7 @@ function updateProfile(profileId, updates) {
   if (idx === -1) return null
 
   // Only allow safe fields to be updated
-  const allowed = ['name', 'email', 'avatar', 'color']
+  const allowed = ['name', 'email', 'avatar', 'avatarUrl', 'color']
   for (const key of allowed) {
     if (updates[key] !== undefined) profiles[idx][key] = updates[key]
   }
@@ -286,7 +244,4 @@ module.exports = {
   profileSet,
   profileDelete,
   getInitials,
-  saveAvatar,
-  deleteAvatar,
-  getAvatarPath,
 }

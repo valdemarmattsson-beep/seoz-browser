@@ -2,7 +2,7 @@
 <html lang="sv" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https: file:; script-src 'self' 'unsafe-inline'">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; media-src 'self' blob: data:">
 <title>SEOZ Browser</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -72,6 +72,15 @@ input,textarea,select{user-select:text}
 .tab:hover .tab-tip{opacity:1}
 .tab-tip-title{font-size:11px;font-weight:700;color:var(--head);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
 .tab-tip-url{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Agent tab in tab bar */
+.agent-tab{display:none;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:7px 7px 0 0;font-size:11px;color:var(--p);cursor:default;white-space:nowrap;-webkit-app-region:no-drag;flex-shrink:0;background:rgba(78,115,248,.08);transition:background .15s}
+.agent-tab.active{display:flex}
+.agent-tab:hover{background:rgba(78,115,248,.12)}
+.agent-tab svg{width:13px;height:13px;flex-shrink:0;color:var(--p)}
+.agent-tab-dot{width:6px;height:6px;border-radius:50%;background:var(--p);flex-shrink:0;animation:agentDot 1.2s ease-in-out infinite}
+.agent-tab-label{font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:140px}
+@keyframes agentDot{0%,100%{opacity:.3}50%{opacity:1}}
+
 .newtab{width:24px;height:24px;border-radius:5px;margin-bottom:2px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
 .newtab:hover{background:rgba(255,255,255,.08)}
 .tsp{flex:1;min-width:8px}
@@ -86,10 +95,24 @@ input,textarea,select{user-select:text}
   background:var(--card);
   display:flex;align-items:center;padding:0 10px;gap:6px;
 }
-.nb{width:32px;height:32px;border-radius:6px;border:1px solid var(--border);background:var(--panel);display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:13px;color:var(--muted);flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
+.nb{width:28px;height:28px;border-radius:6px;border:none;background:transparent;display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);flex-shrink:0;transition:background .15s,color .15s;-webkit-app-region:no-drag}
+.nb svg{width:16px;height:16px}
+.nb:hover{background:var(--border);color:var(--head)}
 .nb:hover{background:var(--border)}
 .url-wrap{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:7px;cursor:text;transition:border-color .15s;-webkit-app-region:no-drag}
 .url-wrap:focus-within{border-color:var(--p)}
+.url-wrap{position:relative}
+.url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
+.url-suggest.open{display:block}
+.url-suggest::-webkit-scrollbar{width:3px}
+.url-suggest::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
+.url-sg{padding:6px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background .1s}
+.url-sg:hover,.url-sg.sel{background:rgba(255,255,255,.06)}
+.url-sg img{width:14px;height:14px;border-radius:2px;flex-shrink:0}
+.url-sg-info{flex:1;min-width:0}
+.url-sg-title{font-size:11.5px;color:var(--head);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.url-sg-url{font-size:10px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.url-sg-match{color:var(--p);font-weight:600}
 .url-fav{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;visibility:hidden}
 .url-fav.show{visibility:visible}
 .lock{font-size:10px;color:var(--g);flex-shrink:0}
@@ -98,9 +121,12 @@ input,textarea,select{user-select:text}
 .addr-spinner{width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite;display:none}
 .addr-spinner.on{display:block}
 @keyframes spin{to{transform:rotate(360deg)}}
-.seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(70,128,255,.15);color:var(--p);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
-.seoz-pill:hover{background:rgba(70,128,255,.25)}
-.sdot{width:6px;height:6px;border-radius:50%;background:var(--p);animation:pulse 2s infinite}
+.seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(44,168,127,.12);color:var(--g);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
+.seoz-pill:hover{background:rgba(44,168,127,.22)}
+.seoz-pill.inactive{background:rgba(220,53,69,.10);color:var(--r)}
+.seoz-pill.inactive:hover{background:rgba(220,53,69,.18)}
+.seoz-pill.inactive .sdot{background:var(--r);animation:none}
+.sdot{width:6px;height:6px;border-radius:50%;background:var(--g);animation:pulse 2s infinite}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
 
 /* Shield (content blocker) in URL bar */
@@ -120,6 +146,14 @@ input,textarea,select{user-select:text}
   padding:0 3px;line-height:1;
 }
 .blocker-badge:empty{display:none}
+.flow-btn{
+  width:28px;height:28px;border-radius:6px;border:none;background:transparent;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex-shrink:0;transition:background .15s;
+  -webkit-app-region:no-drag;padding:0;overflow:hidden;
+}
+.flow-btn:hover{background:var(--border)}
+.flow-btn img{width:18px;height:18px;border-radius:4px}
 
 /* Blocker popup */
 .blocker-popup{
@@ -428,11 +462,12 @@ input,textarea,select{user-select:text}
 
 /* ── CHROME MENU (three-dot) ── */
 .chrome-menu-btn{
-  width:32px;height:32px;border-radius:6px;border:1px solid var(--border);background:var(--panel);
-  display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:16px;color:var(--muted);
-  flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag;letter-spacing:1px;line-height:1;padding:0;
+  width:28px;height:28px;border-radius:6px;border:none;background:transparent;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;color:var(--muted);
+  flex-shrink:0;transition:background .15s,color .15s;-webkit-app-region:no-drag;padding:0;
 }
-.chrome-menu-btn:hover{background:var(--border)}
+.chrome-menu-btn svg{width:16px;height:16px}
+.chrome-menu-btn:hover{background:var(--border);color:var(--head)}
 .chrome-dd{
   position:fixed;z-index:400;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
@@ -602,8 +637,8 @@ input,textarea,select{user-select:text}
   <div class="pp-card">
     <div class="pp-top">
       <div class="ac-logo">
-        <div class="ac-mark">SZ</div>
-        <div class="ac-word">SEOZ<span>.se</span></div>
+        <div class="ac-mark" style="font-size:20px;line-height:1">🙈</div>
+        <div class="ac-word">SEOZ</div>
       </div>
       <div class="pp-h">Vem surfar?</div>
       <div class="pp-sub">Välj din profil för att ladda dina bokmärken, historik och API-koppling.</div>
@@ -633,8 +668,8 @@ input,textarea,select{user-select:text}
   <div class="ac">
     <div class="ac-top">
       <div class="ac-logo">
-        <div class="ac-mark">SZ</div>
-        <div class="ac-word">SEOZ<span>.se</span></div>
+        <div class="ac-mark" style="font-size:20px;line-height:1">🙈</div>
+        <div class="ac-word">SEOZ</div>
       </div>
       <div class="ac-h">Anslut ditt konto</div>
       <div class="ac-sub">Gå till <strong>Inställningar → API</strong> i SEOZ, generera en nyckel och klistra in den nedan.</div>
@@ -660,17 +695,22 @@ input,textarea,select{user-select:text}
     <div class="tabbar" id="tabbar">
       <div id="newtabBtn" class="newtab" onclick="newTab()">+</div>
       <div class="tsp"></div>
+      <div class="agent-tab" id="agentTab">
+        <div class="agent-tab-dot"></div>
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 8V4H8"/><path d="M2 12a10 10 0 0 0 10 10 10 10 0 0 0 10-10A10 10 0 0 0 12 2a7.5 7.5 0 0 0-5.25 2.25L2 9"/></svg>
+        <span class="agent-tab-label" id="agentTabLabel">Claude</span>
+      </div>
       <div class="wc-wrap">
-        <div class="wc" onclick="SE.minimize()">─</div>
-        <div class="wc" onclick="SE.maximize()">□</div>
-        <div class="wc x" onclick="SE.close()">✕</div>
+        <div class="wc" onclick="SE.minimize()"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></div>
+        <div class="wc" onclick="SE.maximize()"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8" rx="1"/></svg></div>
+        <div class="wc x" onclick="SE.close()"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg></div>
       </div>
     </div>
     <!-- Address bar -->
     <div class="addrbar">
-      <div class="nb" onclick="wvBack()">←</div>
-      <div class="nb" onclick="wvFwd()">→</div>
-      <div class="nb" id="relBtn" onclick="wvReload()">↻</div>
+      <div class="nb" onclick="wvBack()" title="Bakåt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></div>
+      <div class="nb" onclick="wvFwd()" title="Framåt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></div>
+      <div class="nb" id="relBtn" onclick="wvReload()" title="Ladda om"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></div>
       <div class="url-wrap" onclick="document.getElementById('urlInput').focus()">
         <img class="url-fav" id="urlFav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
         <span class="lock" id="urlLock">🔒</span>
@@ -679,7 +719,9 @@ input,textarea,select{user-select:text}
                onfocus="this.select()">
         <div class="addr-spinner" id="spinner"></div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida">☆</button>
+        <div class="url-suggest" id="urlSuggest"></div>
       </div>
+      <button class="flow-btn" onclick="doNav('https://flow.seoz.se')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
         <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering">🛡️<span class="blocker-badge" id="blockerBadge"></span></button>
         <div class="blocker-popup" id="blockerPopup">
@@ -692,11 +734,11 @@ input,textarea,select{user-select:text}
           </div>
         </div>
       </div>
-      <div class="seoz-pill" onclick="togglePanel('seo')">
-        <div class="sdot"></div>
-        SEOZ aktiv
+      <div class="seoz-pill" id="seozPill" onclick="togglePanel('seo')">
+        <div class="sdot" id="seozDot"></div>
+        SEOZ
       </div>
-      <button class="chrome-menu-btn" id="chromeMenuBtn" onclick="toggleChromeMenu()" title="Inställningar">⋮</button>
+      <button class="chrome-menu-btn" id="chromeMenuBtn" onclick="toggleChromeMenu()" title="Inställningar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
     </div>
 
     <!-- Find bar -->
@@ -840,6 +882,10 @@ input,textarea,select{user-select:text}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
         <div class="dtt">Claude AI</div>
       </div>
+      <div class="di" id="di-voice" onclick="togglePanel('voice')" style="color:#a78bfa">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div class="dtt">Röstchatt</div>
+      </div>
       <div class="dock-sep"></div>
       <div class="dock-spacer"></div>
       <div class="di" id="di-settings" onclick="togglePanel('settings')">
@@ -906,7 +952,6 @@ const SE = window.seoz || {
   profileList:async()=>[], profileGetActive:async()=>({profile:null,id:null}),
   profileCreate:async()=>({}), profileUpdate:async()=>null,
   profileDelete:async()=>({ok:true}), profileSwitch:async()=>({ok:true}),
-  profilePickAvatar:async()=>({ok:false}), profileGetAvatar:async()=>null, profileRemoveAvatar:async()=>({ok:true}),
 }
 
 // ══════════════════════════════════════════════════════
@@ -931,43 +976,24 @@ async function renderProfilePicker() {
     return
   }
 
-  // Fetch avatar paths for all profiles
-  const avatarPaths = {}
-  for (const p of profiles) {
-    avatarPaths[p.id] = await SE.profileGetAvatar(p.id)
-  }
-
   grid.innerHTML = profiles.map(p => {
-    const avPath = avatarPaths[p.id]
-    const avatarHtml = avPath
+    const avatarHtml = p.avatarUrl
       ? `<div class="pp-avatar" style="background:${p.color || '#4680ff'};overflow:hidden;padding:0">
-           <img src="file://${avPath}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" onerror="this.parentElement.innerHTML='${getInitials(p.name)}'">
+           <img src="${esc(p.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:12px" onerror="this.style.display='none';this.parentElement.innerHTML='${getInitials(p.name)}'">
          </div>`
       : `<div class="pp-avatar" style="background:${p.color || '#4680ff'}">${getInitials(p.name)}</div>`
     return `
-      <div class="pp-profile" data-pid="${p.id}">
-        <div onclick="pickAvatarFor('${p.id}', event)" style="cursor:pointer;position:relative" title="Klicka för att byta bild">
-          ${avatarHtml}
-          <div style="position:absolute;bottom:-2px;right:-2px;width:16px;height:16px;border-radius:50%;background:var(--card);border:1.5px solid var(--border);display:flex;align-items:center;justify-content:center;font-size:8px">📷</div>
-        </div>
-        <div class="pp-info" onclick="selectProfile('${p.id}')" style="cursor:pointer;flex:1">
+      <div class="pp-profile" onclick="selectProfile('${p.id}')" data-pid="${p.id}">
+        ${avatarHtml}
+        <div class="pp-info">
           <div class="pp-name">${esc(p.name)}</div>
           ${p.email ? `<div class="pp-email">${esc(p.email)}</div>` : '<div class="pp-email">Ej ansluten</div>'}
         </div>
         ${p.id === activeId ? '<span class="pp-badge">Aktiv</span>' : ''}
-        <span class="pp-arrow" onclick="selectProfile('${p.id}')" style="cursor:pointer">›</span>
+        <span class="pp-arrow">›</span>
       </div>
     `
   }).join('')
-}
-
-async function pickAvatarFor(profileId, event) {
-  event.stopPropagation()
-  const res = await SE.profilePickAvatar(profileId)
-  if (res.ok) {
-    await renderProfilePicker()
-    updateProfileStatusBar()
-  }
 }
 
 async function showProfilePicker() {
@@ -986,17 +1012,19 @@ async function selectProfile(id) {
   hideProfilePicker()
   updateProfileStatusBar()
 
-  // Update the profile's name/email from SEOZ API after auth
+  // Update the profile's data from SEOZ API after auth
   const key = await SE.getApiKey()
   if (key) {
     document.getElementById('auth').classList.add('gone')
     await syncNow()
-    // Update profile name/email from synced user data
+    // Update profile name/email/avatar from synced user data
     if (synced.user) {
       await SE.profileUpdate(id, {
         name: synced.user.name || synced.user.email,
         email: synced.user.email || '',
+        avatarUrl: synced.user.avatarUrl || null,
       })
+      updateProfileStatusBar()
     }
   } else {
     // No API key for this profile — show auth overlay
@@ -1035,9 +1063,8 @@ async function updateProfileStatusBar() {
   const av = document.getElementById('sbProfileAvatar')
   if (el) el.textContent = profile.name || 'Profil'
   if (av) {
-    const avatarPath = await SE.profileGetAvatar(profile.id)
-    if (avatarPath) {
-      av.innerHTML = `<img src="file://${avatarPath}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" onerror="this.parentElement.textContent='${getInitials(profile.name)}'">`
+    if (profile.avatarUrl) {
+      av.innerHTML = `<img src="${esc(profile.avatarUrl)}" style="width:100%;height:100%;object-fit:cover;border-radius:4px" onerror="this.parentElement.textContent='${getInitials(profile.name)}'">`
       av.style.background = 'transparent'
       av.style.overflow = 'hidden'
     } else {
@@ -1064,6 +1091,7 @@ const synced = {
 //  WEBVIEW
 // ══════════════════════════════════════════════════════
 const wv = document.getElementById('wv')
+function getWV() { return wv }
 
 // Batched tab rendering — coalesce rapid events into one paint
 let _tabRenderPending = false
@@ -1076,13 +1104,15 @@ function scheduleRenderTabs() {
 wv.addEventListener('did-navigate', e => updateURL(e.url))
 wv.addEventListener('did-navigate-in-page', e => updateURL(e.url))
 wv.addEventListener('did-start-loading', () => {
+  _isLoading = true
   document.getElementById('spinner').classList.add('on')
-  document.getElementById('relBtn').textContent = '✕'
+  document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 6 6 18"/><path d="m6 6 12 12"/></svg>'
   const tab = getActive(); if (tab) { tab.loading = true; scheduleRenderTabs() }
 })
 wv.addEventListener('did-stop-loading', () => {
+  _isLoading = false
   document.getElementById('spinner').classList.remove('on')
-  document.getElementById('relBtn').textContent = '↻'
+  document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
   const tab = getActive(); if (tab) { tab.loading = false; scheduleRenderTabs() }
 })
 wv.addEventListener('page-title-updated', e => {
@@ -1147,8 +1177,9 @@ function doNav(raw) {
 
 function wvBack()   { wv.goBack() }
 function wvFwd()    { wv.goForward() }
+let _isLoading = false
 function wvReload() {
-  if (document.getElementById('relBtn').textContent === '✕') wv.stop()
+  if (_isLoading) wv.stop()
   else wv.reload()
 }
 
@@ -1201,9 +1232,7 @@ function renderTabs() {
 
     // Update icon (only if changed)
     const icoWrap = el.querySelector('.tab-ico-wrap')
-    if (tab.loading) {
-      if (!icoWrap.querySelector('.tab-spin')) icoWrap.innerHTML = '<div class="tab-spin"></div>'
-    } else if (tab.favicon) {
+    if (tab.favicon) {
       const img = icoWrap.querySelector('img.tab-ico')
       if (!img || img.src !== tab.favicon) {
         icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\\'tab-ico\\' style=\\'font-size:11px\\'>🌐</span>'">`
@@ -1230,6 +1259,9 @@ function newTab(url = 'https://www.google.com') {
   const id = nextId++
   tabs.push({ id, title:'Ny flik', url, loading:false, favicon:null })
   switchTab(id)
+  const urlInput = document.getElementById('urlInput')
+  urlInput.focus()
+  urlInput.select()
 }
 
 function switchTab(id) {
@@ -1429,6 +1461,63 @@ async function renderPanelContent(name) {
     } else {
       renderClaudeMessages()
     }
+  } else if (name === 'voice') {
+    icon.textContent = '🎙️'; title.textContent = 'Röstchatt'
+    const elKey = await SE.storeGet('elevenlabsApiKey', '')
+    const openaiKey = await SE.storeGet('openaiApiKey', '')
+    const anthropicKey = await SE.storeGet('anthropicApiKey', '')
+    const selectedProvider = await SE.storeGet('voiceAiProvider', 'claude')
+    const selectedVoiceId = await SE.storeGet('voiceElevenlabsVoiceId', '')
+    const hasEL = !!elKey
+    const hasAI = selectedProvider === 'claude' ? !!anthropicKey : !!openaiKey
+    body.innerHTML = `
+      <div id="voicePanel" style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:300px">
+        <!-- Voice messages -->
+        <div id="voiceMessages" style="flex:1;overflow-y:auto;padding:4px 0;display:flex;flex-direction:column;gap:6px"></div>
+
+        <!-- Visualizer + mic button -->
+        <div style="border-top:1px solid var(--border);padding:12px 0 0;display:flex;flex-direction:column;align-items:center;gap:8px">
+          <canvas id="voiceVisualizer" width="240" height="40" style="border-radius:8px;background:var(--panel);width:100%;height:40px"></canvas>
+          <div style="display:flex;align-items:center;gap:10px">
+            <button id="voiceMicBtn" onclick="toggleVoiceRecording()" style="width:48px;height:48px;border-radius:50%;border:2px solid var(--border);background:var(--panel);color:var(--p);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .2s">
+              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+            </button>
+            <button id="voiceStopTTSBtn" onclick="stopVoiceTTS()" style="display:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--r);cursor:pointer;font-size:14px" title="Stoppa uppläsning">◼</button>
+          </div>
+          <div id="voiceStatus" style="font-size:10px;color:var(--muted);text-align:center">Tryck på mikrofonen för att börja prata</div>
+        </div>
+
+        <!-- Settings row -->
+        <div style="border-top:1px solid var(--border);padding:8px 0 0;margin-top:8px">
+          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
+            <select id="voiceProviderSelect" onchange="onVoiceProviderChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
+              <option value="claude" ${selectedProvider === 'claude' ? 'selected' : ''}>Claude (Anthropic)</option>
+              <option value="openai" ${selectedProvider === 'openai' ? 'selected' : ''}>OpenAI (GPT-4o)</option>
+            </select>
+            <select id="voiceTTSSelect" onchange="onVoiceTTSChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
+              <option value="browser">TTS: Webbläsare (gratis)</option>
+              <option value="elevenlabs" ${hasEL ? 'selected' : ''}>TTS: ElevenLabs</option>
+            </select>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between">
+            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!hasAI ? '⚠️ Saknar AI-nyckel' : hasEL ? '✅ Redo' : '✅ Redo (browser-TTS)'}</span>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearVoiceChat()">Rensa</button>
+          </div>
+        </div>
+      </div>
+    `
+    // Show welcome if empty
+    if (!_voiceMessages.length) {
+      document.getElementById('voiceMessages').innerHTML = `
+        <div style="text-align:center;padding:20px 8px;color:var(--muted)">
+          <div style="font-size:28px;margin-bottom:6px">🎙️</div>
+          <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
+          <div style="font-size:10px;line-height:1.5">Prata med AI via rösten! Tryck på mikrofon-knappen, ställ din fråga, och få svar uppläst. Använder Web Speech API för igenkänning och ElevenLabs eller webbläsarens TTS för uppläsning.</div>
+        </div>
+      `
+    } else {
+      renderVoiceMessages()
+    }
   } else if (name === 'settings') {
     icon.textContent = '⚙️'; title.textContent = 'Inställningar'
     const key = await SE.getApiKey()
@@ -1457,6 +1546,24 @@ async function renderPanelContent(name) {
       </div>
       <button class="act-btn" style="margin-top:4px;color:var(--r);font-size:10px" onclick="removeAnthropicKey()">Ta bort nyckel</button>
       <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Nyckeln lagras lokalt och skickas bara till Anthropics API. Hämta din nyckel från <span style="color:var(--p);cursor:pointer" onclick="SE.openExternal('https://console.anthropic.com/account/keys')">console.anthropic.com</span></p>
+
+      <div class="sh" style="margin-top:18px">OPENAI</div>
+      <div class="mr"><span class="mrl">OpenAI API-nyckel</span><span class="mrv" id="settingsOpenaiKey" style="font-size:10px;font-family:monospace">Laddar...</span></div>
+      <div style="display:flex;gap:4px;margin-top:6px">
+        <input class="ac-inp" id="openaiKeyInput" type="password" placeholder="sk-..." style="flex:1;height:30px;font-size:10px;font-family:monospace">
+        <button class="act-btn" style="width:60px" onclick="saveOpenaiKey()">Spara</button>
+      </div>
+      <button class="act-btn" style="margin-top:4px;color:var(--r);font-size:10px" onclick="removeOpenaiKey()">Ta bort nyckel</button>
+      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Används för röstchatt med GPT-4o. Hämta din nyckel från <span style="color:var(--p);cursor:pointer" onclick="SE.openExternal('https://platform.openai.com/api-keys')">platform.openai.com</span></p>
+
+      <div class="sh" style="margin-top:18px">ELEVENLABS (RÖST)</div>
+      <div class="mr"><span class="mrl">ElevenLabs API-nyckel</span><span class="mrv" id="settingsElevenlabsKey" style="font-size:10px;font-family:monospace">Laddar...</span></div>
+      <div style="display:flex;gap:4px;margin-top:6px">
+        <input class="ac-inp" id="elevenlabsKeyInput" type="password" placeholder="xi-..." style="flex:1;height:30px;font-size:10px;font-family:monospace">
+        <button class="act-btn" style="width:60px" onclick="saveElevenlabsKey()">Spara</button>
+      </div>
+      <button class="act-btn" style="margin-top:4px;color:var(--r);font-size:10px" onclick="removeElevenlabsKey()">Ta bort nyckel</button>
+      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Valfritt — ger högkvalitativ röstsyntes i röstchatten. Utan nyckel används webbläsarens inbyggda TTS. Hämta från <span style="color:var(--p);cursor:pointer" onclick="SE.openExternal('https://elevenlabs.io/app/settings/api-keys')">elevenlabs.io</span></p>
 
       <div class="sh" style="margin-top:18px">MCP-SERVER</div>
       <div class="mr"><span class="mrl">Status</span><span class="mrv" style="color:var(--g)">Aktiv på port 19532</span></div>
@@ -1542,12 +1649,14 @@ async function init() {
     document.getElementById('auth').classList.add('gone')
     // Auto-sync on startup
     await syncNow()
-    // Keep profile name/email in sync with SEOZ account
+    // Keep profile name/email/avatar in sync with SEOZ account
     if (synced.user && currentProfileId) {
       await SE.profileUpdate(currentProfileId, {
         name: synced.user.name || synced.user.email,
         email: synced.user.email || '',
+        avatarUrl: synced.user.avatarUrl || null,
       })
+      updateProfileStatusBar()
     }
   }
   renderTabs()
@@ -1577,14 +1686,17 @@ async function doConnect(mode) {
       synced.user = res.user
       synced.workspace = res.workspace
       synced.clients = res.clients || []
-      // Update profile name/email from the SEOZ account
+      // Update profile name/email/avatar from the SEOZ account
       if (currentProfileId && res.user) {
         await SE.profileUpdate(currentProfileId, {
           name: res.user.name || res.user.email,
           email: res.user.email || '',
+          avatarUrl: res.user.avatarUrl || null,
         })
         updateProfileStatusBar()
       }
+      // Sync theme from SEOZ account
+      if (res.user?.theme) applySyncedTheme(res.user.theme)
       okEl.classList.add('show')
       setTimeout(() => {
         document.getElementById('auth').classList.add('gone')
@@ -1606,6 +1718,7 @@ async function doDisconnect() {
   synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.activeClientId = null
   document.getElementById('auth').classList.remove('gone')
   document.getElementById('sbSync').textContent = 'Ej synkad'
+  document.getElementById('seozPill').classList.add('inactive')
   renderBmBar()
   closePanel()
   toast('Konto frånkopplat', '#e58a00')
@@ -1622,6 +1735,8 @@ async function syncNow() {
       synced.workspace = res.workspace
       synced.clients = res.clients || []
       updateSyncUI()
+      // Sync theme from SEOZ account
+      if (res.user?.theme) applySyncedTheme(res.user.theme)
       // Restore active client
       const saved = await SE.storeGet('activeClientId')
       if (saved && synced.clients.find(c => c.id === saved)) {
@@ -1635,9 +1750,11 @@ async function syncNow() {
       if (currentPanel) renderPanelContent(currentPanel)
     } else {
       document.getElementById('sbSync').textContent = 'Synk misslyckades'
+      document.getElementById('seozPill').classList.add('inactive')
     }
   } catch(e) {
     document.getElementById('sbSync').textContent = 'Synk-fel'
+    document.getElementById('seozPill').classList.add('inactive')
   }
 }
 
@@ -1645,6 +1762,7 @@ function updateSyncUI() {
   const now = new Date()
   document.getElementById('sbSync').textContent = `Synkad ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`
   document.getElementById('sbDot').style.background = 'var(--g)'
+  document.getElementById('seozPill').classList.remove('inactive')
 }
 
 function openApiKeyPage() {
@@ -2348,6 +2466,82 @@ function clearHistory() {
 }
 
 // ══════════════════════════════════════════════════════
+//  URL AUTOCOMPLETE
+// ══════════════════════════════════════════════════════
+;(function(){
+  const input = document.getElementById('urlInput')
+  const box = document.getElementById('urlSuggest')
+  let selIdx = -1
+  let matches = []
+
+  function highlight(text, query) {
+    if (!query) return esc(text)
+    const i = text.toLowerCase().indexOf(query.toLowerCase())
+    if (i === -1) return esc(text)
+    return esc(text.slice(0, i)) + '<span class="url-sg-match">' + esc(text.slice(i, i + query.length)) + '</span>' + esc(text.slice(i + query.length))
+  }
+
+  function dedupe(arr) {
+    const seen = new Set()
+    return arr.filter(h => { if (seen.has(h.url)) return false; seen.add(h.url); return true })
+  }
+
+  function showSuggestions() {
+    const q = input.value.trim()
+    if (!q) { hideSuggestions(); return }
+    const lower = q.toLowerCase()
+    matches = dedupe(browsingHistory.filter(h =>
+      h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)
+    )).slice(0, 8)
+    if (!matches.length) { hideSuggestions(); return }
+    selIdx = -1
+    box.innerHTML = matches.map((h, i) =>
+      `<div class="url-sg" data-i="${i}" onmousedown="event.preventDefault();doNav('${esc(h.url)}');document.getElementById('urlSuggest').classList.remove('open')">
+        <img src="${esc(h.favicon)}" onerror="this.style.display='none'">
+        <div class="url-sg-info">
+          <div class="url-sg-title">${highlight(h.title, q)}</div>
+          <div class="url-sg-url">${highlight(h.url, q)}</div>
+        </div>
+      </div>`
+    ).join('')
+    box.classList.add('open')
+  }
+
+  function hideSuggestions() { box.classList.remove('open'); selIdx = -1 }
+
+  function updateSel() {
+    box.querySelectorAll('.url-sg').forEach((el, i) => el.classList.toggle('sel', i === selIdx))
+    if (selIdx >= 0 && matches[selIdx]) {
+      const el = box.querySelectorAll('.url-sg')[selIdx]
+      if (el) el.scrollIntoView({ block: 'nearest' })
+    }
+  }
+
+  input.addEventListener('input', showSuggestions)
+  input.addEventListener('focus', () => { if (input.value.trim()) showSuggestions() })
+  input.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
+
+  input.addEventListener('keydown', e => {
+    if (!box.classList.contains('open') || !matches.length) return
+    if (e.key === 'ArrowDown') {
+      e.preventDefault()
+      selIdx = (selIdx + 1) % matches.length
+      updateSel()
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault()
+      selIdx = selIdx <= 0 ? matches.length - 1 : selIdx - 1
+      updateSel()
+    } else if (e.key === 'Enter' && selIdx >= 0) {
+      e.preventDefault()
+      hideSuggestions()
+      doNav(matches[selIdx].url)
+    } else if (e.key === 'Escape') {
+      hideSuggestions()
+    }
+  })
+})()
+
+// ══════════════════════════════════════════════════════
 //  DOWNLOADS
 // ══════════════════════════════════════════════════════
 let downloads = [] // [{filename, url, time}]
@@ -2408,8 +2602,25 @@ function copyUrl() {
 }
 
 // ══════════════════════════════════════════════════════
-//  THEME TOGGLE
+//  THEME TOGGLE & SYNC
 // ══════════════════════════════════════════════════════
+
+/** Map SEOZ.se theme values to browser-supported themes */
+function mapSeozTheme(seozTheme) {
+  // Browser supports: 'dark', 'light'
+  // SEOZ.se has: 'dark', 'light', 'retro', 'neo', 'geocities'
+  if (seozTheme === 'light') return 'light'
+  return 'dark' // dark, retro, neo, geocities → dark
+}
+
+/** Apply theme from SEOZ sync data (called after auth/sync) */
+function applySyncedTheme(seozTheme) {
+  if (!seozTheme) return
+  const mapped = mapSeozTheme(seozTheme)
+  document.documentElement.dataset.theme = mapped
+  SE.setTheme(mapped)
+}
+
 function toggleTheme() {
   const current = document.documentElement.dataset.theme
   const next = current === 'dark' ? 'light' : 'dark'
@@ -2974,6 +3185,398 @@ async function removeAnthropicKey() {
 }
 
 // ══════════════════════════════════════════════════════
+//  VOICE CHAT — speech-to-text + AI + text-to-speech
+// ══════════════════════════════════════════════════════
+const _voiceMessages = [] // { role, content, ts }
+let _voiceRecording = false
+let _voiceProcessing = false
+let _voiceRecognition = null
+let _voiceAudioCtx = null
+let _voiceAnalyser = null
+let _voiceMediaStream = null
+let _voiceAnimFrame = null
+let _voiceCurrentAudio = null
+let _voiceTTSUtterance = null
+
+function updateVoiceStatus(text) {
+  const el = document.getElementById('voiceStatus')
+  if (el) el.textContent = text
+}
+
+function setMicBtnState(recording) {
+  const btn = document.getElementById('voiceMicBtn')
+  if (!btn) return
+  if (recording) {
+    btn.style.background = 'var(--r)'
+    btn.style.borderColor = 'var(--r)'
+    btn.style.color = '#fff'
+    btn.style.animation = 'voicePulse 1.5s ease-in-out infinite'
+  } else {
+    btn.style.background = 'var(--panel)'
+    btn.style.borderColor = 'var(--border)'
+    btn.style.color = 'var(--p)'
+    btn.style.animation = 'none'
+  }
+}
+
+// Visualizer animation
+function startVisualizer(stream) {
+  _voiceAudioCtx = new (window.AudioContext || window.webkitAudioContext)()
+  _voiceAnalyser = _voiceAudioCtx.createAnalyser()
+  _voiceAnalyser.fftSize = 256
+  const source = _voiceAudioCtx.createMediaStreamSource(stream)
+  source.connect(_voiceAnalyser)
+
+  const canvas = document.getElementById('voiceVisualizer')
+  if (!canvas) return
+  const ctx = canvas.getContext('2d')
+  const bufLen = _voiceAnalyser.frequencyBinCount
+  const dataArr = new Uint8Array(bufLen)
+
+  function draw() {
+    _voiceAnimFrame = requestAnimationFrame(draw)
+    _voiceAnalyser.getByteFrequencyData(dataArr)
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+
+    const barW = (canvas.width / bufLen) * 2.5
+    let x = 0
+    for (let i = 0; i < bufLen; i++) {
+      const barH = (dataArr[i] / 255) * canvas.height
+      const hue = 250 + (i / bufLen) * 40 // purple gradient
+      ctx.fillStyle = `hsla(${hue}, 70%, 65%, 0.8)`
+      ctx.fillRect(x, canvas.height - barH, barW - 1, barH)
+      x += barW
+    }
+  }
+  draw()
+}
+
+function stopVisualizer() {
+  if (_voiceAnimFrame) cancelAnimationFrame(_voiceAnimFrame)
+  _voiceAnimFrame = null
+  if (_voiceAudioCtx) { _voiceAudioCtx.close().catch(() => {}); _voiceAudioCtx = null }
+  _voiceAnalyser = null
+  const canvas = document.getElementById('voiceVisualizer')
+  if (canvas) {
+    const ctx = canvas.getContext('2d')
+    ctx.clearRect(0, 0, canvas.width, canvas.height)
+  }
+}
+
+async function toggleVoiceRecording() {
+  if (_voiceProcessing) return
+  if (_voiceRecording) {
+    stopVoiceRecording()
+  } else {
+    startVoiceRecording()
+  }
+}
+
+function startVoiceRecording() {
+  // Stop any playing TTS
+  stopVoiceTTS()
+
+  if (!('webkitSpeechRecognition' in window) && !('SpeechRecognition' in window)) {
+    toast('Taligenkänning stöds ej i denna version', '#dc2626')
+    return
+  }
+
+  const SpeechRec = window.SpeechRecognition || window.webkitSpeechRecognition
+  _voiceRecognition = new SpeechRec()
+  _voiceRecognition.lang = 'sv-SE'
+  _voiceRecognition.interimResults = true
+  _voiceRecognition.continuous = true
+  _voiceRecognition.maxAlternatives = 1
+
+  let finalTranscript = ''
+  let silenceTimer = null
+
+  _voiceRecognition.onresult = (event) => {
+    let interim = ''
+    for (let i = event.resultIndex; i < event.results.length; i++) {
+      if (event.results[i].isFinal) {
+        finalTranscript += event.results[i][0].transcript + ' '
+        // Reset silence timer on final result
+        clearTimeout(silenceTimer)
+        silenceTimer = setTimeout(() => {
+          // Auto-stop after 2s of silence with content
+          if (finalTranscript.trim()) {
+            stopVoiceRecording()
+          }
+        }, 2000)
+      } else {
+        interim += event.results[i][0].transcript
+      }
+    }
+    updateVoiceStatus(finalTranscript + (interim ? '...' + interim : '') || 'Lyssnar...')
+  }
+
+  _voiceRecognition.onend = () => {
+    if (_voiceRecording && !finalTranscript.trim()) {
+      // Restarted without content — try again
+      try { _voiceRecognition.start() } catch {}
+      return
+    }
+    _voiceRecording = false
+    setMicBtnState(false)
+    stopVisualizer()
+    if (_voiceMediaStream) {
+      _voiceMediaStream.getTracks().forEach(t => t.stop())
+      _voiceMediaStream = null
+    }
+    clearTimeout(silenceTimer)
+    if (finalTranscript.trim()) {
+      processVoiceInput(finalTranscript.trim())
+    } else {
+      updateVoiceStatus('Tryck på mikrofonen för att börja prata')
+    }
+  }
+
+  _voiceRecognition.onerror = (e) => {
+    console.warn('Voice recognition error:', e.error)
+    if (e.error === 'not-allowed') {
+      toast('Mikrofontillgång nekad. Tillåt i systeminställningar.', '#dc2626')
+    }
+    _voiceRecording = false
+    setMicBtnState(false)
+    stopVisualizer()
+    updateVoiceStatus('Fel: ' + e.error)
+  }
+
+  // Start mic for visualizer
+  navigator.mediaDevices.getUserMedia({ audio: true }).then(stream => {
+    _voiceMediaStream = stream
+    startVisualizer(stream)
+    _voiceRecognition.start()
+    _voiceRecording = true
+    setMicBtnState(true)
+    updateVoiceStatus('Lyssnar...')
+  }).catch(err => {
+    toast('Kunde inte aktivera mikrofonen: ' + err.message, '#dc2626')
+  })
+}
+
+function stopVoiceRecording() {
+  if (_voiceRecognition) {
+    _voiceRecording = false
+    try { _voiceRecognition.stop() } catch {}
+  }
+}
+
+async function processVoiceInput(text) {
+  _voiceProcessing = true
+  updateVoiceStatus('Tänker...')
+
+  // Add user message
+  _voiceMessages.push({ role: 'user', content: text, ts: Date.now() })
+  renderVoiceMessages()
+
+  // Get page context
+  const ctx = await getPageContext()
+  const systemPrompt = `Du är en AI-assistent inbyggd i SEOZ Browser — en SEO-fokuserad webbläsare. Användaren pratar med dig via röst, så svara kort och naturligt — som i en konversation. Svara på svenska om inte användaren pratar på ett annat språk. Max 2-3 meningar om inte frågan kräver mer detalj.
+
+${ctx ? `AKTUELL SIDA:
+URL: ${ctx.url}
+Titel: ${ctx.title}
+Meta description: ${ctx.meta?.description || 'Saknas'}
+H1: ${ctx.h1s?.join(', ') || 'Inga'}` : 'Ingen sida är laddad just nu.'}`
+
+  // Pick AI provider
+  const provider = await SE.storeGet('voiceAiProvider', 'claude')
+  const apiMessages = _voiceMessages.map(m => ({ role: m.role, content: m.content }))
+
+  let responseText = ''
+
+  try {
+    if (provider === 'openai') {
+      const apiKey = await SE.storeGet('openaiApiKey', '')
+      if (!apiKey) { responseText = 'Du behöver ange en OpenAI API-nyckel i Inställningar först.'; throw null }
+      const res = await SE.openaiChat({ messages: apiMessages, systemPrompt, apiKey })
+      if (res.error) throw new Error(res.error)
+      responseText = res.content
+    } else {
+      const apiKey = await SE.storeGet('anthropicApiKey', '')
+      if (!apiKey) { responseText = 'Du behöver ange en Anthropic API-nyckel i Inställningar först.'; throw null }
+      const res = await SE.claudeChat({ messages: apiMessages, systemPrompt, apiKey })
+      if (res.error) throw new Error(res.error)
+      responseText = res.content
+    }
+  } catch (err) {
+    if (err) responseText = responseText || ('Fel: ' + (err.message || err))
+  }
+
+  // Add assistant message
+  _voiceMessages.push({ role: 'assistant', content: responseText, ts: Date.now() })
+  renderVoiceMessages()
+
+  _voiceProcessing = false
+  updateVoiceStatus('Läser upp...')
+
+  // TTS
+  await speakVoiceResponse(responseText)
+  updateVoiceStatus('Tryck på mikrofonen för att fortsätta')
+}
+
+async function speakVoiceResponse(text) {
+  const ttsMode = await SE.storeGet('voiceTTSMode', 'browser')
+  const elKey = await SE.storeGet('elevenlabsApiKey', '')
+
+  if (ttsMode === 'elevenlabs' && elKey) {
+    const voiceId = await SE.storeGet('voiceElevenlabsVoiceId', '')
+    const res = await SE.elevenlabsTTS({ text, apiKey: elKey, voiceId: voiceId || undefined })
+    if (res.ok && res.audio) {
+      return playBase64Audio(res.audio)
+    }
+    // Fallback to browser TTS on error
+    console.warn('ElevenLabs TTS failed, falling back to browser:', res.error)
+  }
+
+  // Browser TTS fallback
+  return new Promise(resolve => {
+    if (!window.speechSynthesis) { resolve(); return }
+    const utter = new SpeechSynthesisUtterance(text)
+    utter.lang = 'sv-SE'
+    utter.rate = 1.0
+    utter.pitch = 1.0
+    _voiceTTSUtterance = utter
+    utter.onend = () => { _voiceTTSUtterance = null; resolve() }
+    utter.onerror = () => { _voiceTTSUtterance = null; resolve() }
+    // Show stop button
+    const stopBtn = document.getElementById('voiceStopTTSBtn')
+    if (stopBtn) stopBtn.style.display = 'flex'
+    window.speechSynthesis.speak(utter)
+  })
+}
+
+function playBase64Audio(base64) {
+  return new Promise(resolve => {
+    const binary = atob(base64)
+    const bytes = new Uint8Array(binary.length)
+    for (let i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i)
+    const blob = new Blob([bytes], { type: 'audio/mpeg' })
+    const url = URL.createObjectURL(blob)
+    const audio = new Audio(url)
+    _voiceCurrentAudio = audio
+    // Show stop button
+    const stopBtn = document.getElementById('voiceStopTTSBtn')
+    if (stopBtn) stopBtn.style.display = 'flex'
+    audio.onended = () => {
+      _voiceCurrentAudio = null
+      URL.revokeObjectURL(url)
+      if (stopBtn) stopBtn.style.display = 'none'
+      resolve()
+    }
+    audio.onerror = () => {
+      _voiceCurrentAudio = null
+      URL.revokeObjectURL(url)
+      if (stopBtn) stopBtn.style.display = 'none'
+      resolve()
+    }
+    audio.play().catch(() => resolve())
+  })
+}
+
+function stopVoiceTTS() {
+  if (_voiceCurrentAudio) {
+    _voiceCurrentAudio.pause()
+    _voiceCurrentAudio = null
+  }
+  if (_voiceTTSUtterance) {
+    window.speechSynthesis.cancel()
+    _voiceTTSUtterance = null
+  }
+  const stopBtn = document.getElementById('voiceStopTTSBtn')
+  if (stopBtn) stopBtn.style.display = 'none'
+}
+
+function clearVoiceChat() {
+  _voiceMessages.length = 0
+  stopVoiceTTS()
+  const el = document.getElementById('voiceMessages')
+  if (el) el.innerHTML = `
+    <div style="text-align:center;padding:20px 8px;color:var(--muted)">
+      <div style="font-size:28px;margin-bottom:6px">🎙️</div>
+      <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
+      <div style="font-size:10px;line-height:1.5">Chatt rensad. Tryck på mikrofonen för att börja!</div>
+    </div>
+  `
+  updateVoiceStatus('Tryck på mikrofonen för att börja prata')
+}
+
+function renderVoiceMessages() {
+  const container = document.getElementById('voiceMessages')
+  if (!container) return
+  container.innerHTML = ''
+
+  _voiceMessages.forEach(m => {
+    const div = document.createElement('div')
+    const isUser = m.role === 'user'
+    div.style.cssText = `padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.6;max-width:95%;word-break:break-word;white-space:pre-wrap;${
+      isUser
+        ? 'background:linear-gradient(135deg, #a78bfa, #7c3aed);color:#fff;align-self:flex-end;border-bottom-right-radius:2px'
+        : 'background:var(--panel);color:var(--txt);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:2px'
+    }`
+    const icon = isUser ? '🎤 ' : '🔊 '
+    let html = icon + esc(m.content)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:10px">$1</code>')
+    div.innerHTML = html
+    container.appendChild(div)
+  })
+
+  container.scrollTop = container.scrollHeight
+}
+
+async function onVoiceProviderChange(val) {
+  await SE.storeSet('voiceAiProvider', val)
+  toast('AI-modell ändrad till ' + (val === 'claude' ? 'Claude' : 'OpenAI'), '#4680ff')
+}
+
+async function onVoiceTTSChange(val) {
+  await SE.storeSet('voiceTTSMode', val)
+  toast('TTS ändrad till ' + (val === 'elevenlabs' ? 'ElevenLabs' : 'Webbläsare'), '#4680ff')
+}
+
+// Settings key helpers for OpenAI & ElevenLabs
+async function saveOpenaiKey() {
+  const input = document.getElementById('openaiKeyInput')
+  if (!input) return
+  const key = input.value.trim()
+  if (!key) { toast('Ange en API-nyckel', '#dc2626'); return }
+  await SE.storeSet('openaiApiKey', key)
+  input.value = ''
+  toast('OpenAI API-nyckel sparad!', '#2ca87f')
+  const el = document.getElementById('settingsOpenaiKey')
+  if (el) el.textContent = key.slice(0, 10) + '••••••••'
+}
+
+async function removeOpenaiKey() {
+  await SE.storeSet('openaiApiKey', '')
+  toast('OpenAI-nyckel borttagen', '#e58a00')
+  const el = document.getElementById('settingsOpenaiKey')
+  if (el) el.textContent = 'Ej konfigurerad'
+}
+
+async function saveElevenlabsKey() {
+  const input = document.getElementById('elevenlabsKeyInput')
+  if (!input) return
+  const key = input.value.trim()
+  if (!key) { toast('Ange en API-nyckel', '#dc2626'); return }
+  await SE.storeSet('elevenlabsApiKey', key)
+  input.value = ''
+  toast('ElevenLabs API-nyckel sparad!', '#2ca87f')
+  const el = document.getElementById('settingsElevenlabsKey')
+  if (el) el.textContent = key.slice(0, 10) + '••••••••'
+}
+
+async function removeElevenlabsKey() {
+  await SE.storeSet('elevenlabsApiKey', '')
+  toast('ElevenLabs-nyckel borttagen', '#e58a00')
+  const el = document.getElementById('settingsElevenlabsKey')
+  if (el) el.textContent = 'Ej konfigurerad'
+}
+
+// ══════════════════════════════════════════════════════
 //  MCP BRIDGE — lets Claude control the browser via MCP server
 // ══════════════════════════════════════════════════════
 const _mcpConsoleLogs = []
@@ -2990,18 +3593,63 @@ const _MCP_MAX_LOGS = 200
   })
 })()
 
+// ── Agent/MCP activity tracking ──
+let _agentActivity = new Map() // tabId → { lastSeen, toolName }
+let _agentTimer = null
+
+function markAgentActive(tool) {
+  const tab = getActive()
+  if (!tab) return
+  _agentActivity.set(tab.id, { lastSeen: Date.now(), toolName: tool })
+  updateAgentChip()
+  // Auto-clear after 3s of inactivity
+  clearTimeout(_agentTimer)
+  _agentTimer = setTimeout(() => {
+    _agentActivity.clear()
+    updateAgentChip()
+  }, 3000)
+}
+
+function updateAgentChip() {
+  const el = document.getElementById('agentTab')
+  const label = document.getElementById('agentTabLabel')
+  if (_agentActivity.size > 0) {
+    el.classList.add('active')
+    const last = [..._agentActivity.values()].pop()
+    label.textContent = 'Claude · ' + last.toolName
+  } else {
+    el.classList.remove('active')
+  }
+}
+
 window.__mcpExecute = async function(toolName, args) {
   const wv = getWV()
+  markAgentActive(toolName)
 
   switch (toolName) {
     case 'navigate': {
       let url = args.url || ''
       if (url && !url.match(/^https?:\/\//)) url = 'https://' + url
-      if (wv) wv.loadURL(url)
+      if (wv) {
+        const waitForLoad = args.wait !== false
+        if (waitForLoad) {
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(() => { cleanup(); resolve() }, 15000)
+            const onDone = () => { cleanup(); resolve() }
+            const onFail = (_e, code, desc) => { cleanup(); resolve() }
+            function cleanup() { clearTimeout(timeout); wv.removeEventListener('did-finish-load', onDone); wv.removeEventListener('did-fail-load', onFail) }
+            wv.addEventListener('did-finish-load', onDone)
+            wv.addEventListener('did-fail-load', onFail)
+            wv.loadURL(url)
+          })
+        } else {
+          wv.loadURL(url)
+        }
+      }
       const tab = getActive()
-      if (tab) { tab.url = url; tab.loading = true; scheduleRenderTabs() }
+      if (tab) { tab.url = url; tab.loading = false; scheduleRenderTabs() }
       document.getElementById('urlInput').value = url
-      return { ok: true, url }
+      return { ok: true, url, title: wv ? await wv.executeJavaScript('document.title') : '' }
     }
 
     case 'get_page_content': {
@@ -3074,12 +3722,16 @@ window.__mcpExecute = async function(toolName, args) {
       const tab = tabs.find(t => t.id === id)
       if (!tab) return { error: 'Tab not found: ' + id }
       switchTab(id)
+      _agentActivity.set(id, { lastSeen: Date.now(), toolName: 'switch_tab' })
+      scheduleRenderTabs(); updateAgentChip()
       return { ok: true, tab: { id: tab.id, title: tab.title, url: tab.url } }
     }
 
     case 'new_tab': {
       newTab(args.url || 'https://www.google.com')
       const tab = getActive()
+      _agentActivity.set(tab.id, { lastSeen: Date.now(), toolName: 'new_tab' })
+      scheduleRenderTabs(); updateAgentChip()
       return { ok: true, tab: { id: tab.id, url: tab.url } }
     }
 
@@ -3157,6 +3809,94 @@ window.__mcpExecute = async function(toolName, args) {
       if (!wv) return { error: 'No page loaded' }
       const r = await wv.findInPage(args.text)
       return { text: args.text, found: r }
+    }
+
+    case 'get_interactive_elements': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const filter = ${JSON.stringify(args.filter || 'all')};
+        let selector = 'a[href], button, input, select, textarea, [role="button"], [onclick], [tabindex]';
+        if (filter === 'links') selector = 'a[href]';
+        else if (filter === 'buttons') selector = 'button, [role="button"], input[type="submit"], input[type="button"]';
+        else if (filter === 'inputs') selector = 'input, select, textarea';
+        else if (filter === 'forms') selector = 'form';
+
+        const els = Array.from(document.querySelectorAll(selector));
+        const results = [];
+        for (const el of els) {
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) continue;
+          const style = getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden' || style.opacity === '0') continue;
+
+          const tag = el.tagName.toLowerCase();
+          const text = (el.textContent || '').trim().slice(0, 80);
+          const item = { tag, text };
+
+          // Build a usable selector
+          if (el.id) item.selector = '#' + el.id;
+          else if (el.name) item.selector = tag + '[name="' + el.name + '"]';
+          else if (el.className && typeof el.className === 'string') {
+            const cls = el.className.trim().split(/\\s+/).slice(0, 2).join('.');
+            if (cls) item.selector = tag + '.' + cls;
+          }
+          if (!item.selector && el.getAttribute('href')) item.selector = tag + '[href="' + el.getAttribute('href').slice(0, 100) + '"]';
+          if (!item.selector) item.selector = tag + ':nth-of-type(' + (Array.from(el.parentNode.children).filter(c => c.tagName === el.tagName).indexOf(el) + 1) + ')';
+
+          if (el.href) item.href = el.href.slice(0, 200);
+          if (el.type) item.type = el.type;
+          if (el.name) item.name = el.name;
+          if (el.placeholder) item.placeholder = el.placeholder;
+          if (el.value && tag === 'input') item.value = el.value.slice(0, 50);
+          if (el.getAttribute('aria-label')) item.ariaLabel = el.getAttribute('aria-label');
+          item.visible = rect.top < window.innerHeight && rect.bottom > 0;
+          results.push(item);
+          if (results.length >= 150) break;
+        }
+        return { count: results.length, elements: results };
+      }())`)
+    }
+
+    case 'click_text': {
+      if (!wv) return { error: 'No page loaded' }
+      return await wv.executeJavaScript(`(function(){
+        const search = ${JSON.stringify(args.text)}.toLowerCase();
+        const tagFilter = ${JSON.stringify(args.tag || null)};
+        const candidates = Array.from(document.querySelectorAll('a, button, [role="button"], input[type="submit"], input[type="button"], summary, label, [onclick], [tabindex]'));
+        let match = null;
+        for (const el of candidates) {
+          if (tagFilter && el.tagName.toLowerCase() !== tagFilter.toLowerCase()) continue;
+          const rect = el.getBoundingClientRect();
+          if (rect.width === 0 && rect.height === 0) continue;
+          const style = getComputedStyle(el);
+          if (style.display === 'none' || style.visibility === 'hidden') continue;
+          const text = (el.textContent || el.value || el.getAttribute('aria-label') || '').trim().toLowerCase();
+          if (text.includes(search)) { match = el; break; }
+        }
+        if (!match) return { error: 'No clickable element found with text: ' + ${JSON.stringify(args.text)} };
+        match.click();
+        return { ok: true, tag: match.tagName.toLowerCase(), text: match.textContent.trim().slice(0, 100) };
+      }())`)
+    }
+
+    case 'wait_for': {
+      if (args.delay) {
+        await new Promise(r => setTimeout(r, Math.min(args.delay, 10000)))
+        return { ok: true, waited: args.delay }
+      }
+      if (!args.selector) return { error: 'Provide selector or delay' }
+      if (!wv) return { error: 'No page loaded' }
+      const timeout = Math.min(args.timeout || 5000, 15000)
+      const found = await wv.executeJavaScript(`new Promise((resolve) => {
+        const sel = ${JSON.stringify(args.selector)};
+        if (document.querySelector(sel)) return resolve(true);
+        const obs = new MutationObserver(() => {
+          if (document.querySelector(sel)) { obs.disconnect(); resolve(true) }
+        });
+        obs.observe(document.body, { childList: true, subtree: true });
+        setTimeout(() => { obs.disconnect(); resolve(false) }, ${timeout});
+      })`)
+      return { ok: found, selector: args.selector, found }
     }
 
     default:

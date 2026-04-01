@@ -927,13 +927,13 @@ input,textarea,select{user-select:text}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <div class="dtt">SEO-analys</div>
       </div>
-      <div class="di" id="di-kw" onclick="togglePanel('kw')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M4 6h16M4 12h10M4 18h6"/></svg>
-        <div class="dtt">Keywords</div>
+      <div class="di" id="di-tracking" onclick="togglePanel('tracking')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
+        <div class="dtt">Tracking</div>
       </div>
-      <div class="di" id="di-ai" onclick="togglePanel('ai')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2a7 7 0 017 7c0 5-7 13-7 13S5 14 5 9a7 7 0 017-7z"/><circle cx="12" cy="9" r="2.5"/></svg>
-        <div class="dtt">AI-synlighet</div>
+      <div class="di" id="di-tasks" onclick="togglePanel('tasks')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
+        <div class="dtt">Tasks</div>
       </div>
       <div class="dock-sep"></div>
       <div class="di" id="di-cwv" onclick="togglePanel('cwv')">
@@ -1159,6 +1159,7 @@ const synced = {
   activeClientId: null,
   keywords: null,
   aiVisibility: null,
+  tasks: null,
 }
 
 // ══════════════════════════════════════════════════════
@@ -2115,47 +2116,112 @@ async function renderPanelContent(name) {
       <div id="seoPanelContent"><div style="text-align:center;padding:20px;color:var(--muted)">Laddar...</div></div>
     `
     renderSeoSubTab(window._seoTab)
-  } else if (name === 'kw') {
-    icon.textContent = '📊'; title.textContent = 'Keywords'
-    if (synced.keywords && synced.keywords.length) {
-      let html = '<div class="sh">SPÅRADE KEYWORDS</div>'
-      synced.keywords.forEach(k => {
-        const pos = k.position || '—'
-        const cls = pos <= 3 ? 'kpt' : pos <= 10 ? 'kpm' : 'kpl'
-        const trend = k.trend > 0 ? `<span class="kw-d up">▲${k.trend}</span>` : k.trend < 0 ? `<span class="kw-d dn">▼${Math.abs(k.trend)}</span>` : '<span class="kw-d">—</span>'
-        html += `<div class="kw"><div class="kp ${cls}">${pos}</div><span class="kw-w">${esc(k.keyword)}</span><span class="kw-v">${fmtNum(k.clicks)}</span>${trend}</div>`
-      })
-      body.innerHTML = html
+  } else if (name === 'tracking') {
+    icon.textContent = '📈'; title.textContent = 'Tracking'
+    if (!window._trackingTab) window._trackingTab = 'keywords'
+    body.innerHTML = `
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px">
+        <div class="seo-sub-tab ${window._trackingTab==='keywords'?'active':''}" onclick="window._trackingTab='keywords';renderPanelContent('tracking')">Keywords</div>
+        <div class="seo-sub-tab ${window._trackingTab==='ai'?'active':''}" onclick="window._trackingTab='ai';renderPanelContent('tracking')">AI-synlighet</div>
+      </div>
+      <div id="trackingContent"></div>
+    `
+    const tc = document.getElementById('trackingContent')
+    if (window._trackingTab === 'keywords') {
+      if (synced.keywords && synced.keywords.length) {
+        let html = '<div class="sh">SPÅRADE KEYWORDS</div>'
+        synced.keywords.forEach(k => {
+          const pos = k.position || '—'
+          const cls = pos <= 3 ? 'kpt' : pos <= 10 ? 'kpm' : 'kpl'
+          const trend = k.trend > 0 ? `<span class="kw-d up">▲${k.trend}</span>` : k.trend < 0 ? `<span class="kw-d dn">▼${Math.abs(k.trend)}</span>` : '<span class="kw-d">—</span>'
+          html += `<div class="kw"><div class="kp ${cls}">${pos}</div><span class="kw-w">${esc(k.keyword)}</span><span class="kw-v">${fmtNum(k.clicks)}</span>${trend}</div>`
+        })
+        tc.innerHTML = html
+      } else {
+        tc.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se keywords.</p>'
+      }
     } else {
-      body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se keywords.</p>'
-    }
-  } else if (name === 'ai') {
-    icon.textContent = '🤖'; title.textContent = 'AI-synlighet'
-    if (synced.aiVisibility) {
-      const ai = synced.aiVisibility
-      const score = Math.round(ai.overallScore || 0)
-      const col = score >= 70 ? 'var(--g)' : score >= 40 ? 'var(--w)' : 'var(--r)'
-      let html = `
-        <div style="display:flex;align-items:center;gap:12px;margin:8px 0 16px">
-          <div class="score-ring">
-            <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.26} 126" stroke-linecap="round"/></svg>
-            <div class="score-num" style="color:${col}">${score}</div>
+      if (synced.aiVisibility) {
+        const ai = synced.aiVisibility
+        const score = Math.round(ai.overallScore || 0)
+        const col = score >= 70 ? 'var(--g)' : score >= 40 ? 'var(--w)' : 'var(--r)'
+        let html = `
+          <div style="display:flex;align-items:center;gap:12px;margin:8px 0 16px">
+            <div class="score-ring">
+              <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.26} 126" stroke-linecap="round"/></svg>
+              <div class="score-num" style="color:${col}">${score}</div>
+            </div>
+            <div><div style="font-size:14px;font-weight:800;color:var(--head)">${score}%</div><div style="font-size:10px;color:var(--muted)">AI-synlighet</div></div>
           </div>
-          <div><div style="font-size:14px;font-weight:800;color:var(--head)">${score}%</div><div style="font-size:10px;color:var(--muted)">AI-synlighet</div></div>
-        </div>
-      `
-      if (ai.models && ai.models.length) {
-        html += '<div class="sh">PER MODELL</div>'
-        ai.models.forEach(m => {
-          const s = Math.round(m.score || 0)
-          const c = s >= 70 ? 'bg' : s >= 40 ? 'bw' : 'bb'
-          html += `<div class="mr"><span class="mrl"><span class="md db"></span>${esc(m.model)}</span><span class="bdg ${c}">${s}%</span></div>`
+        `
+        if (ai.models && ai.models.length) {
+          html += '<div class="sh">PER MODELL</div>'
+          ai.models.forEach(m => {
+            const s = Math.round(m.score || 0)
+            const c = s >= 70 ? 'bg' : s >= 40 ? 'bw' : 'bb'
+            html += `<div class="mr"><span class="mrl"><span class="md db"></span>${esc(m.model)}</span><span class="bdg ${c}">${s}%</span></div>`
+          })
+        }
+        tc.innerHTML = html
+      } else {
+        tc.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se AI-synlighet.</p>'
+      }
+    }
+  } else if (name === 'tasks') {
+    icon.textContent = '✅'; title.textContent = 'Tasks'
+    const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
+    const cName = clientObj ? clientObj.name : null
+    if (!window._tasksFilter) window._tasksFilter = 'open'
+
+    let html = ''
+    if (!synced.activeClientId) {
+      html = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient först för att hantera tasks.</p>'
+    } else {
+      const tasks = synced.tasks || []
+      const filtered = window._tasksFilter === 'all' ? tasks : tasks.filter(t => t.status === window._tasksFilter)
+      html += `<div class="sh">TASKS — ${esc(cName || '')}</div>`
+      html += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 -14px 10px;padding:0 14px">
+        <div class="seo-sub-tab ${window._tasksFilter==='open'?'active':''}" onclick="window._tasksFilter='open';renderPanelContent('tasks')">Öppna</div>
+        <div class="seo-sub-tab ${window._tasksFilter==='done'?'active':''}" onclick="window._tasksFilter='done';renderPanelContent('tasks')">Klara</div>
+        <div class="seo-sub-tab ${window._tasksFilter==='all'?'active':''}" onclick="window._tasksFilter='all';renderPanelContent('tasks')">Alla</div>
+      </div>`
+      html += `<div style="display:flex;gap:4px;margin-bottom:10px">
+        <input class="ac-inp" id="newTaskInput" placeholder="Ny task..." style="flex:1;height:30px;font-size:11px" onkeydown="if(event.key==='Enter')addTask()">
+        <button class="act-btn" style="width:30px;height:30px;flex-shrink:0;font-size:16px;padding:0" onclick="addTask()">+</button>
+      </div>`
+      html += '<div id="tasksList">'
+      if (filtered.length === 0) {
+        html += `<p style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0">${window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks ännu.'} Lägg till en ovan.</p>`
+      } else {
+        filtered.forEach(t => {
+          const done = t.status === 'done' ? 'checked' : ''
+          const strike = t.status === 'done' ? 'text-decoration:line-through;opacity:.5' : ''
+          const priCol = t.priority === 'high' ? 'var(--r)' : t.priority === 'medium' ? 'var(--w)' : 'var(--muted)'
+          const priLabel = t.priority === 'high' ? 'Hög' : t.priority === 'medium' ? 'Medium' : 'Låg'
+          const catBadge = t.category ? `<span style="font-size:8px;background:var(--panel);color:var(--muted);padding:1px 5px;border-radius:3px;margin-left:4px">${esc(t.category)}</span>` : ''
+          const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleDateString('sv-SE') : ''
+          html += `<div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">
+            <input type="checkbox" ${done} onchange="toggleTask('${esc(t.id)}')" style="margin-top:2px;cursor:pointer;accent-color:var(--p)">
+            <div style="flex:1;min-width:0">
+              <div style="font-size:11px;color:var(--head);${strike}">${esc(t.title)}</div>
+              ${t.description ? `<div style="font-size:9px;color:var(--txt);margin-top:1px;${strike}">${esc(t.description).substring(0,80)}</div>` : ''}
+              <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px">
+                <span style="color:${priCol}">${priLabel}</span>${catBadge}<span>${dateStr}</span>
+              </div>
+            </div>
+            <button onclick="deleteTask('${esc(t.id)}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="Ta bort">✕</button>
+          </div>`
         })
       }
-      body.innerHTML = html
-    } else {
-      body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se AI-synlighet.</p>'
+      html += '</div>'
+      const openCount = tasks.filter(t => t.status === 'open').length
+      const doneCount = tasks.filter(t => t.status === 'done').length
+      html += `<div style="margin-top:8px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
+        <span>${doneCount} klara / ${openCount} öppna</span>
+        <button class="act-btn" style="font-size:9px;padding:2px 8px;height:auto" onclick="refreshTasks()">↻ Synka</button>
+      </div>`
     }
+    body.innerHTML = html
   } else if (name === 'clients') {
     icon.textContent = '👥'; title.textContent = 'Klienter'
     if (synced.clients.length) {
@@ -2447,12 +2513,16 @@ async function fetchClientData(clientId) {
   if (!apiKey || !clientId) return
 
   try {
-    const [kwRes, aiRes] = await Promise.all([
+    const [kwRes, aiRes, tasksRes] = await Promise.all([
       SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
       SE.fetchApi({ endpoint: '/ai-visibility', apiKey, params: { clientId } }),
+      SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId, status: 'all' } }).catch(() => null),
     ])
     if (kwRes && kwRes.keywords) synced.keywords = kwRes.keywords
     if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
+    if (Array.isArray(tasksRes)) synced.tasks = tasksRes
+    else if (tasksRes && Array.isArray(tasksRes.tasks)) synced.tasks = tasksRes.tasks
+    else synced.tasks = []
   } catch(e) {
     console.error('fetchClientData error:', e)
   }
@@ -2557,7 +2627,7 @@ async function doConnect(mode) {
 
 async function doDisconnect() {
   await SE.delApiKey()
-  synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.activeClientId = null
+  synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.tasks = null; synced.activeClientId = null
   document.getElementById('auth').classList.remove('gone')
   document.getElementById('sbSync').textContent = 'Ej synkad'
   document.getElementById('seozPill').classList.add('inactive')
@@ -3793,6 +3863,85 @@ function copyCreativeOutput() {
 }
 
 // ══════════════════════════════════════════════════════
+//  TASKS — per-client, synced with seoz.se
+// ══════════════════════════════════════════════════════
+async function addTask() {
+  const inp = document.getElementById('newTaskInput')
+  if (!inp) return
+  const text = inp.value.trim()
+  if (!text) return
+  inp.value = ''
+  try {
+    const apiKey = await SE.getApiKey()
+    if (!apiKey) { toast('Ingen API-nyckel', 'var(--r)'); return }
+    const res = await _flowApiPost('/tasks', {
+      title: text,
+      priority: 'medium',
+      category: '',
+      url: document.getElementById('urlInput').value || '',
+    })
+    // Add to local cache
+    if (res && res.id) {
+      if (!synced.tasks) synced.tasks = []
+      synced.tasks.unshift(res)
+    } else {
+      await refreshTasks()
+    }
+    toast('Task skapad', 'var(--g)')
+    renderPanelContent('tasks')
+  } catch(e) {
+    console.error('addTask error:', e)
+    toast('Kunde inte skapa task: ' + e.message, 'var(--r)')
+  }
+}
+
+async function toggleTask(taskId) {
+  const task = (synced.tasks || []).find(t => t.id === taskId)
+  if (!task) return
+  const newStatus = task.status === 'done' ? 'open' : 'done'
+  try {
+    const apiKey = await SE.getApiKey()
+    if (!apiKey) return
+    await _flowApiPost('/tasks/' + taskId, { status: newStatus })
+    task.status = newStatus
+    renderPanelContent('tasks')
+  } catch(e) {
+    console.error('toggleTask error:', e)
+    toast('Kunde inte uppdatera task', 'var(--r)')
+  }
+}
+
+async function deleteTask(taskId) {
+  try {
+    const apiKey = await SE.getApiKey()
+    if (!apiKey) return
+    await _flowApiPost('/tasks/' + taskId, { status: 'deleted' })
+    synced.tasks = (synced.tasks || []).filter(t => t.id !== taskId)
+    renderPanelContent('tasks')
+    toast('Task borttagen', 'var(--g)')
+  } catch(e) {
+    console.error('deleteTask error:', e)
+    toast('Kunde inte ta bort task', 'var(--r)')
+  }
+}
+
+async function refreshTasks() {
+  try {
+    const apiKey = await SE.getApiKey()
+    const clientId = synced.activeClientId
+    if (!apiKey || !clientId) return
+    const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId, status: 'all' } })
+    if (Array.isArray(res)) synced.tasks = res
+    else if (res && Array.isArray(res.tasks)) synced.tasks = res.tasks
+    renderPanelContent('tasks')
+    toast('Tasks synkade', 'var(--g)')
+  } catch(e) {
+    console.error('refreshTasks error:', e)
+    toast('Kunde inte hämta tasks', 'var(--r)')
+  }
+}
+
+// ══════════════════════════════════════════════════════
 //  COMPETITOR ADS — Ad Network Scanner + Research
 // ══════════════════════════════════════════════════════
 async function scanAdNetworks() {
@@ -4487,9 +4636,9 @@ SEOZ-FUNKTIONER (lokala):
 - {"type":"seo_audit"} — kör full SEO-analys på sidan (title, meta, h-tags, bilder, länkar, schema)
 - {"type":"inspector"} — öppna SEOZ Inspector
 - {"type":"panel","name":"seo"} — öppna SEO-panelen
-- {"type":"panel","name":"kw"} — öppna Keywords-panelen
+- {"type":"panel","name":"tracking"} — öppna Tracking (Keywords + AI-synlighet)
+- {"type":"panel","name":"tasks"} — öppna Tasks
 - {"type":"panel","name":"cwv"} — öppna Core Web Vitals
-- {"type":"panel","name":"ai"} — öppna AI-synlighet
 - {"type":"panel","name":"compads"} — öppna Konkurrentannonser
 - {"type":"panel","name":"settings"} — öppna Inställningar
 - {"type":"screenshot"} — ta en screenshot av sidan

@@ -12,7 +12,7 @@
   --w:#e58a00; --r:#dc2626;
   --bg:#131920; --card:#1b232d; --panel:#151d27;
   --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
-  --tab-h:38px; --addr-h:42px; --bm-h:28px; --chrome-h:108px;
+  --tab-h:38px; --addr-h:46px; --bm-h:28px; --chrome-h:112px;
   --dock-w:48px; --panel-w:280px; --status-h:22px;
 }
 [data-theme="light"] {
@@ -110,7 +110,7 @@ input,textarea,select{user-select:text}
 .nb svg{width:16px;height:16px}
 .nb:hover{background:var(--border);color:var(--head)}
 .nb:hover{background:var(--border)}
-.url-wrap{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:7px;cursor:text;transition:border-color .15s;-webkit-app-region:no-drag}
+.url-wrap{flex:1;height:34px;background:var(--panel);border:1px solid var(--border);border-radius:8px;display:flex;align-items:center;padding:0 10px;gap:7px;cursor:text;transition:border-color .15s;-webkit-app-region:no-drag}
 .url-wrap:focus-within{border-color:var(--p)}
 .url-wrap{position:relative}
 .url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
@@ -437,6 +437,16 @@ input,textarea,select{user-select:text}
 }
 .sb{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px}
 .sb-dot{width:5px;height:5px;border-radius:50%;background:var(--g)}
+.hover-url{
+  position:fixed;bottom:var(--status-h);left:0;
+  max-width:50%;padding:4px 12px;
+  font-size:11px;color:var(--muted);
+  background:var(--card);border:1px solid var(--border);border-left:none;border-bottom:none;
+  border-radius:0 6px 0 0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  pointer-events:none;opacity:0;transition:opacity .15s;z-index:200;
+}
+.hover-url.show{opacity:1}
 
 /* ── AUTH ── */
 #auth{position:fixed;inset:0;z-index:9999;background:var(--bg);display:flex;align-items:center;justify-content:center}
@@ -923,28 +933,28 @@ input,textarea,select{user-select:text}
 
     <!-- DOCK -->
     <div class="dock">
-      <div class="di" id="di-seo" onclick="togglePanel('seo')">
+      <div class="di" id="di-seo" onclick="togglePanel('seo')" style="color:#4680ff">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <div class="dtt">SEO-analys</div>
       </div>
-      <div class="di" id="di-tracking" onclick="togglePanel('tracking')">
+      <div class="di" id="di-tracking" onclick="togglePanel('tracking')" style="color:#2ca87f">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
         <div class="dtt">Tracking</div>
       </div>
-      <div class="di" id="di-tasks" onclick="togglePanel('tasks')">
+      <div class="di" id="di-tasks" onclick="togglePanel('tasks')" style="color:#e58a00">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div class="dtt">Tasks</div>
       </div>
       <div class="dock-sep"></div>
-      <div class="di" id="di-cwv" onclick="togglePanel('cwv')">
+      <div class="di" id="di-cwv" onclick="togglePanel('cwv')" style="color:#f59e0b">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
         <div class="dtt">Core Web Vitals</div>
       </div>
-      <div class="di" id="di-creative" onclick="togglePanel('creative')">
+      <div class="di" id="di-creative" onclick="togglePanel('creative')" style="color:#d946ef">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         <div class="dtt">Creative AI</div>
       </div>
-      <div class="di" id="di-compads" onclick="togglePanel('compads')">
+      <div class="di" id="di-compads" onclick="togglePanel('compads')" style="color:#06b6d4">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
         <div class="dtt">Konkurrentannonser</div>
       </div>
@@ -962,7 +972,7 @@ input,textarea,select{user-select:text}
         <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         <div class="dtt">Röstsamtal</div>
       </div>
-      <div class="di" id="di-settings" onclick="togglePanel('settings')">
+      <div class="di" id="di-settings" onclick="togglePanel('settings')" style="color:#94a3b8">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <div class="dtt">Inställningar</div>
       </div>
@@ -980,6 +990,7 @@ input,textarea,select{user-select:text}
     <div class="sb" id="sbDomain">—</div>
     <div class="sb" id="sbVersion" style="opacity:.5">v—</div>
   </div>
+  <div id="hoverUrl" class="hover-url"></div>
 </div>
 
 <!-- CHROME DROPDOWN MENU -->
@@ -1284,6 +1295,12 @@ const WV_CONTEXT_MENU_SCRIPT = `
   document.addEventListener('click', () => {
     console.log('[SEOZ-CLICK]')
   })
+
+  // Hover over links — show URL preview in parent
+  document.addEventListener('mouseover', (e) => {
+    const a = e.target.closest('a[href]')
+    console.log('[SEOZ-HOVER]' + (a ? a.href : ''))
+  })
 `
 
 // ── Webview right-click context menu builder ──
@@ -1397,7 +1414,10 @@ function _attachWebviewListeners(el, tabId) {
       if (_isActive()) setUrlFavicon(e.favicons[0])
     }
   })
-  el.addEventListener('new-window', e => newTab(e.url))
+  el.addEventListener('new-window', e => {
+    e.preventDefault()
+    if (e.url && /^https?:\/\//i.test(e.url)) newTab(e.url)
+  })
 
   // Find-in-page results
   el.addEventListener('found-in-page', e => {
@@ -1420,6 +1440,19 @@ function _attachWebviewListeners(el, tabId) {
         const ctx = JSON.parse(e.message.slice(10))
         _showWebviewContextMenu(el, ctx)
       } catch(_) {}
+      return
+    }
+    // ── Link hover preview ──
+    if (e.message && e.message.startsWith('[SEOZ-HOVER]')) {
+      if (!_isActive()) return
+      const url = e.message.slice(12)
+      const hoverEl = document.getElementById('hoverUrl')
+      if (url) {
+        hoverEl.textContent = url
+        hoverEl.classList.add('show')
+      } else {
+        hoverEl.classList.remove('show')
+      }
       return
     }
     // ── Ctrl+scroll zoom from webview ──
@@ -2067,13 +2100,16 @@ function toggleDock() {
   dockVisible = !dockVisible
   const dock = document.querySelector('.dock')
   const panel = document.getElementById('seozPanel')
+  const pill = document.getElementById('seozPill')
   if (dockVisible) {
     dock.style.display = ''
     panel.style.display = ''
+    pill.classList.remove('inactive')
   } else {
     closePanel()
     dock.style.display = 'none'
     panel.style.display = 'none'
+    pill.classList.add('inactive')
   }
 }
 
@@ -6679,7 +6715,9 @@ document.addEventListener('keydown', e => {
   else if (ctrl && key === 'w') { e.preventDefault(); if (tabs.length > 1) { const _cid = activeId; const idx = tabs.findIndex(t => t.id === _cid); tabs = tabs.filter(t => t.id !== _cid); const closedWv = _tabWebviews.get(_cid); if (closedWv) { closedWv.remove(); _tabWebviews.delete(_cid) } switchTab(tabs[Math.min(idx, tabs.length-1)].id) } }
   // Ctrl+L or F6 → Focus URL bar
   else if ((ctrl && key === 'l') || e.key === 'F6') { e.preventDefault(); document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }
-  // Ctrl+R or F5 → Reload
+  // Ctrl+Shift+R → Hard reload active tab only (bypass cache)
+  else if (ctrl && e.shiftKey && key === 'r') { e.preventDefault(); if (wv) wv.reloadIgnoringCache() }
+  // Ctrl+R or F5 → Reload active tab
   else if ((ctrl && key === 'r') || e.key === 'F5') { e.preventDefault(); wvReload() }
   // Ctrl+F → Find in page
   else if (ctrl && key === 'f') { e.preventDefault(); openFindBar() }

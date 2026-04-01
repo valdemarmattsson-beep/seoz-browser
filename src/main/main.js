@@ -192,6 +192,22 @@ function createWindow() {
     return allowed.includes(permission)
   })
 
+  // Block Ctrl+Shift+R / F5 from reloading the entire Electron renderer
+  // (handled in renderer to only reload the active webview tab)
+  win.webContents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const ctrl = input.control || input.meta
+    if (ctrl && input.shift && input.key.toLowerCase() === 'r') event.preventDefault()
+    if (input.shift && input.key === 'F5') event.preventDefault()
+  })
+
+  // Intercept any window.open / target="_blank" from webview guest pages
+  // and redirect to renderer so it opens as a new tab instead of a new OS window
+  win.webContents.setWindowOpenHandler(({ url }) => {
+    win.webContents.send('open-url', url)
+    return { action: 'deny' }
+  })
+
   win.loadFile(path.join(__dirname, '../renderer/index.html'))
   win.once('ready-to-show', () => {
     win.show()

@@ -846,6 +846,9 @@ ipcMain.on('update-jump-list', () => {
 
 // ── Lifecycle ──
 app.whenReady().then(() => {
+  // Force web content to always see light mode — prevents OS dark mode from affecting websites
+  nativeTheme.themeSource = 'light'
+
   // Migrate legacy single-user data to first profile (runs once)
   PM.migrateLegacyData(store)
 

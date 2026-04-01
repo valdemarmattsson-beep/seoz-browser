@@ -1251,22 +1251,98 @@ const CHROME_SPOOF_SCRIPT = `
   }
 `
 
-// Context menu script — injected into webview pages to store context on right-click
+// Context menu + zoom script — injected into webview pages
 const WV_CONTEXT_MENU_SCRIPT = `
+  // Right-click context menu — prevent default and send data via console
   document.addEventListener('contextmenu', (e) => {
+    e.preventDefault()
     const sel = window.getSelection().toString()
     const a = e.target.closest('a')
     const img = e.target.closest('img')
     const input = e.target.closest('input, textarea, [contenteditable="true"]')
-    window.__seozCtx = {
+    console.log('[SEOZ-CTX]' + JSON.stringify({
+      x: e.screenX,
+      y: e.screenY,
       selectedText: sel || '',
       linkUrl: a ? a.href : '',
       linkText: a ? (a.textContent || '').trim().slice(0, 100) : '',
       imgSrc: img ? img.src : '',
       isEditable: !!(input || e.target.isContentEditable),
-    }
+    }))
   })
+
+  // Ctrl+scroll zoom — prevent default and send via console
+  document.addEventListener('wheel', (e) => {
+    if (!e.ctrlKey) return
+    e.preventDefault()
+    console.log('[SEOZ-ZOOM]' + (e.deltaY < 0 ? 'in' : 'out'))
+  }, { passive: false })
 `
+
+// ── Webview right-click context menu builder ──
+function _showWebviewContextMenu(el, ctx) {
+  const items = []
+  const currentUrl = document.getElementById('urlInput').value
+
+  // Navigation
+  items.push({ label: '← Tillbaka', action: () => wvBack(), disabled: !el.canGoBack() })
+  items.push({ label: '→ Framåt', action: () => wvFwd(), disabled: !el.canGoForward() })
+  items.push({ label: '↻ Ladda om', action: () => wvReload() })
+  items.push('---')
+
+  // Link actions
+  if (ctx.linkUrl) {
+    items.push({ label: 'Öppna länk i ny flik', action: () => newTab(ctx.linkUrl) })
+    items.push({ label: 'Kopiera länkadress', action: () => navigator.clipboard.writeText(ctx.linkUrl) })
+    items.push('---')
+  }
+
+  // Image actions
+  if (ctx.imgSrc) {
+    items.push({ label: 'Öppna bild i ny flik', action: () => newTab(ctx.imgSrc) })
+    items.push({ label: 'Kopiera bildadress', action: () => navigator.clipboard.writeText(ctx.imgSrc) })
+    items.push('---')
+  }
+
+  // Text selection actions
+  if (ctx.selectedText) {
+    const short = ctx.selectedText.length > 40 ? ctx.selectedText.slice(0, 37) + '...' : ctx.selectedText
+    items.push({ label: 'Kopiera', action: () => el.executeJavaScript('document.execCommand("copy")') })
+    items.push({ label: 'Sök "' + short + '" på Google', action: () => newTab('https://www.google.com/search?q=' + encodeURIComponent(ctx.selectedText)) })
+    items.push('---')
+  }
+
+  // Edit actions (input/textarea)
+  if (ctx.isEditable) {
+    if (!ctx.selectedText) {
+      items.push({ label: 'Klipp ut', action: () => el.executeJavaScript('document.execCommand("cut")') })
+      items.push({ label: 'Kopiera', action: () => el.executeJavaScript('document.execCommand("copy")') })
+    }
+    items.push({ label: 'Klistra in', action: () => el.executeJavaScript('document.execCommand("paste")') })
+    items.push({ label: 'Markera allt', action: () => el.executeJavaScript('document.execCommand("selectAll")') })
+    items.push('---')
+  }
+
+  // Page actions
+  items.push({ label: 'Visa sidkälla', action: () => newTab('view-source:' + currentUrl) })
+  items.push({ label: 'SEOZ Inspector', action: () => toggleInspector() })
+
+  // Remove trailing separator
+  while (items.length && items[items.length - 1] === '---') items.pop()
+
+  // Position menu at screen coords converted to client coords
+  const wvRect = el.getBoundingClientRect()
+  const fakeEvent = {
+    clientX: ctx.x - window.screenX - (window.outerWidth - window.innerWidth),
+    clientY: ctx.y - window.screenY - (window.outerHeight - window.innerHeight),
+  }
+  // Fallback: center of webview if coords are off
+  if (fakeEvent.clientX < 0 || fakeEvent.clientY < 0) {
+    fakeEvent.clientX = wvRect.left + wvRect.width / 2
+    fakeEvent.clientY = wvRect.top + wvRect.height / 2
+  }
+  showCtx(fakeEvent, items)
+}
 
 // Attach all standard listeners to a webview (called for every new tab's webview)
 function _attachWebviewListeners(el, tabId) {
@@ -1316,67 +1392,6 @@ function _attachWebviewListeners(el, tabId) {
   })
   el.addEventListener('new-window', e => newTab(e.url))
 
-  // ── Webview right-click context menu (Chrome-style) ──
-  el.addEventListener('contextmenu', async (ev) => {
-    ev.preventDefault()
-    ev.stopPropagation()
-    let ctx = { selectedText: '', linkUrl: '', linkText: '', imgSrc: '', isEditable: false }
-    try {
-      ctx = await el.executeJavaScript('window.__seozCtx || {}')
-    } catch(_) {}
-
-    const items = []
-    const currentUrl = document.getElementById('urlInput').value
-
-    // Navigation
-    items.push({ label: '← Tillbaka', action: () => wvBack(), disabled: !el.canGoBack() })
-    items.push({ label: '→ Framåt', action: () => wvFwd(), disabled: !el.canGoForward() })
-    items.push({ label: '↻ Ladda om', action: () => wvReload() })
-    items.push('---')
-
-  // Link actions
-  if (ctx.linkUrl) {
-    items.push({ label: 'Öppna länk i ny flik', action: () => newTab(ctx.linkUrl) })
-    items.push({ label: 'Kopiera länkadress', action: () => navigator.clipboard.writeText(ctx.linkUrl) })
-    items.push('---')
-  }
-
-  // Image actions
-  if (ctx.imgSrc) {
-    items.push({ label: 'Öppna bild i ny flik', action: () => newTab(ctx.imgSrc) })
-    items.push({ label: 'Kopiera bildadress', action: () => navigator.clipboard.writeText(ctx.imgSrc) })
-    items.push('---')
-  }
-
-  // Text selection actions
-  if (ctx.selectedText) {
-    const short = ctx.selectedText.length > 40 ? ctx.selectedText.slice(0, 37) + '...' : ctx.selectedText
-    items.push({ label: 'Kopiera', action: () => wv.executeJavaScript('document.execCommand("copy")') })
-    items.push({ label: `Sök "${short}" på Google`, action: () => newTab('https://www.google.com/search?q=' + encodeURIComponent(ctx.selectedText)) })
-    items.push('---')
-  }
-
-  // Edit actions (input/textarea)
-  if (ctx.isEditable) {
-    if (!ctx.selectedText) {
-      items.push({ label: 'Klipp ut', action: () => wv.executeJavaScript('document.execCommand("cut")') })
-      items.push({ label: 'Kopiera', action: () => wv.executeJavaScript('document.execCommand("copy")') })
-    }
-    items.push({ label: 'Klistra in', action: () => wv.executeJavaScript('document.execCommand("paste")') })
-    items.push({ label: 'Markera allt', action: () => wv.executeJavaScript('document.execCommand("selectAll")') })
-    items.push('---')
-  }
-
-  // Page actions
-  items.push({ label: 'Visa sidkälla', action: () => newTab('view-source:' + currentUrl) })
-  items.push({ label: 'SEOZ Inspector', action: () => toggleInspector() })
-
-    // Remove trailing separator
-    while (items.length && items[items.length - 1] === '---') items.pop()
-
-    showCtx(ev, items)
-  })
-
   // Find-in-page results
   el.addEventListener('found-in-page', e => {
     if (!_isActive()) return
@@ -1384,8 +1399,24 @@ function _attachWebviewListeners(el, tabId) {
     if (r) document.getElementById('findCount').textContent = `${r.activeMatchOrdinal}/${r.matches}`
   })
 
-  // Console message capture (errors + SEOZ-PICK element picker)
+  // Console message capture (context menu, zoom, SEOZ-PICK, errors)
   el.addEventListener('console-message', e => {
+    // ── Right-click context menu from webview ──
+    if (e.message && e.message.startsWith('[SEOZ-CTX]')) {
+      if (!_isActive()) return
+      try {
+        const ctx = JSON.parse(e.message.slice(10))
+        _showWebviewContextMenu(el, ctx)
+      } catch(_) {}
+      return
+    }
+    // ── Ctrl+scroll zoom from webview ──
+    if (e.message && e.message.startsWith('[SEOZ-ZOOM]')) {
+      if (!_isActive()) return
+      const dir = e.message.slice(11)
+      doZoom(dir === 'in' ? 10 : -10)
+      return
+    }
     if (e.message && e.message.startsWith('[SEOZ-PICK]')) {
       if (!_isActive()) return
       try {

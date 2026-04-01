@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog } = require('electron')
 const path = require('path')
 const https = require('https')
 const Store = require('electron-store')
@@ -550,6 +550,19 @@ ipcMain.on('updater-install', () => {
   autoUpdater.quitAndInstall(false, true)
 })
 ipcMain.handle('updater-get-version', () => app.getVersion())
+
+// ── Screenshot save dialog ──
+ipcMain.handle('save-screenshot', async (_, buffer) => {
+  const ts = new Date().toISOString().replace(/[:.]/g, '-').slice(0, 19)
+  const result = await dialog.showSaveDialog(win, {
+    defaultPath: `skärmbild-${ts}.png`,
+    filters: [{ name: 'PNG', extensions: ['png'] }],
+  })
+  if (result.canceled || !result.filePath) return { ok: false }
+  const fs = require('fs')
+  fs.writeFileSync(result.filePath, Buffer.from(buffer))
+  return { ok: true, path: result.filePath }
+})
 
 // ── Auto-sync every 30 s (profile-scoped) ──
 function startSync() {

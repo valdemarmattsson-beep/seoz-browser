@@ -1303,6 +1303,102 @@ const WV_CONTEXT_MENU_SCRIPT = `
   })
 `
 
+// ── Screenshot capture ──
+async function captureFullPage() {
+  if (!wv) return
+  toast('Tar skärmbild...', 'var(--p)')
+  try {
+    const nativeImg = await wv.capturePage()
+    const pngBuffer = nativeImg.toPNG()
+    const res = await SE.saveScreenshot(pngBuffer)
+    if (res && res.ok) {
+      toast('Skärmbild sparad!', 'var(--g)')
+    }
+  } catch(e) {
+    console.error('captureFullPage error:', e)
+    toast('Kunde inte ta skärmbild', 'var(--r)')
+  }
+}
+
+let _areaOverlay = null
+function captureArea() {
+  if (!wv) return
+  // Create overlay on top of webview for area selection
+  const container = document.getElementById('wvStack')
+  if (_areaOverlay) { _areaOverlay.remove(); _areaOverlay = null }
+
+  const overlay = document.createElement('div')
+  overlay.style.cssText = 'position:absolute;inset:0;z-index:9999;cursor:crosshair;background:rgba(0,0,0,.15)'
+  _areaOverlay = overlay
+
+  const selBox = document.createElement('div')
+  selBox.style.cssText = 'position:absolute;border:2px dashed var(--p);background:rgba(70,128,255,.08);display:none;pointer-events:none;border-radius:2px'
+  overlay.appendChild(selBox)
+
+  const hint = document.createElement('div')
+  hint.textContent = 'Dra för att markera område — Esc för att avbryta'
+  hint.style.cssText = 'position:absolute;top:12px;left:50%;transform:translateX(-50%);background:var(--card);color:var(--head);font-size:11px;font-weight:600;padding:6px 16px;border-radius:6px;border:1px solid var(--border);box-shadow:0 4px 12px rgba(0,0,0,.3);pointer-events:none;white-space:nowrap'
+  overlay.appendChild(hint)
+
+  let startX = 0, startY = 0, dragging = false
+
+  function cleanup() {
+    overlay.remove()
+    _areaOverlay = null
+    document.removeEventListener('keydown', onEsc)
+  }
+
+  function onEsc(e) { if (e.key === 'Escape') cleanup() }
+  document.addEventListener('keydown', onEsc)
+
+  overlay.addEventListener('mousedown', e => {
+    startX = e.offsetX; startY = e.offsetY; dragging = true
+    selBox.style.left = startX + 'px'; selBox.style.top = startY + 'px'
+    selBox.style.width = '0'; selBox.style.height = '0'
+    selBox.style.display = 'block'
+  })
+
+  overlay.addEventListener('mousemove', e => {
+    if (!dragging) return
+    const x = Math.min(startX, e.offsetX), y = Math.min(startY, e.offsetY)
+    const w = Math.abs(e.offsetX - startX), h = Math.abs(e.offsetY - startY)
+    selBox.style.left = x + 'px'; selBox.style.top = y + 'px'
+    selBox.style.width = w + 'px'; selBox.style.height = h + 'px'
+  })
+
+  overlay.addEventListener('mouseup', async e => {
+    if (!dragging) return
+    dragging = false
+    const rect = {
+      x: Math.min(startX, e.offsetX),
+      y: Math.min(startY, e.offsetY),
+      width: Math.abs(e.offsetX - startX),
+      height: Math.abs(e.offsetY - startY),
+    }
+    cleanup()
+    if (rect.width < 5 || rect.height < 5) return
+
+    toast('Tar skärmbild av område...', 'var(--p)')
+    try {
+      const nativeImg = await wv.capturePage()
+      const cropped = nativeImg.crop({
+        x: Math.round(rect.x),
+        y: Math.round(rect.y),
+        width: Math.round(rect.width),
+        height: Math.round(rect.height),
+      })
+      const pngBuffer = cropped.toPNG()
+      const res = await SE.saveScreenshot(pngBuffer)
+      if (res && res.ok) toast('Skärmbild sparad!', 'var(--g)')
+    } catch(e2) {
+      console.error('captureArea error:', e2)
+      toast('Kunde inte ta skärmbild', 'var(--r)')
+    }
+  })
+
+  container.appendChild(overlay)
+}
+
 // ── Webview right-click context menu builder ──
 function _showWebviewContextMenu(el, ctx) {
   const items = []
@@ -1346,6 +1442,11 @@ function _showWebviewContextMenu(el, ctx) {
     items.push({ label: 'Markera allt', action: () => el.executeJavaScript('document.execCommand("selectAll")') })
     items.push('---')
   }
+
+  // Screenshot
+  items.push({ label: 'Skärmbild — hela sidan', action: () => captureFullPage() })
+  items.push({ label: 'Skärmbild — markera område', action: () => captureArea() })
+  items.push('---')
 
   // Page actions
   items.push({ label: 'Visa sidkälla', action: () => newTab('view-source:' + currentUrl) })
@@ -3463,7 +3564,8 @@ function clearHistory() {
     if (!q) { hideSuggestions(); return }
     const lower = q.toLowerCase()
     matches = dedupe(browsingHistory.filter(h =>
-      h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)
+      (h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)) &&
+      !/google\.\w+\/search\?/i.test(h.url)
     )).sort((a, b) => {
       // Prioritize root/main pages over subpages
       try {

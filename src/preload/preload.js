@@ -69,6 +69,9 @@ contextBridge.exposeInMainWorld('seoz', {
   blockerGetStats:   () => ipcRenderer.invoke('blocker-get-stats'),
   blockerResetStats: () => ipcRenderer.send('blocker-reset-stats'),
 
+  // Screenshot save dialog
+  saveScreenshot: (buffer) => ipcRenderer.invoke('save-screenshot', buffer),
+
   // Auto-updater
   updaterCheck:     () => ipcRenderer.send('updater-check'),
   updaterDownload:  () => ipcRenderer.send('updater-download'),

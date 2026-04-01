@@ -142,7 +142,7 @@ input,textarea,select{user-select:text}
 .zoom-bar-pct:hover{color:var(--p)}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(44,168,127,.4)}50%{box-shadow:0 0 0 12px rgba(44,168,127,0)}}
-#voiceFab:hover{transform:scale(1.1);box-shadow:0 6px 24px rgba(0,0,0,.5)}
+#voiceFab.recording{color:var(--r);animation:voicePulse 1.5s ease-in-out infinite}
 .seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(44,168,127,.12);color:var(--g);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
 .seoz-pill:hover{background:rgba(44,168,127,.22)}
 .seoz-pill.inactive{background:rgba(220,53,69,.10);color:var(--r)}
@@ -863,17 +863,7 @@ input,textarea,select{user-select:text}
                  allowpopups style="position:absolute;inset:0;width:100%;height:100%;border:none;outline:none">
         </webview>
       </div>
-      <!-- Floating voice button -->
-      <div id="voiceFab" onclick="toggleVoiceRecording()" title="Röstsamtal" style="
-        position:absolute;bottom:24px;right:24px;z-index:100;
-        width:48px;height:48px;border-radius:50%;
-        background:var(--card);border:2px solid var(--border);
-        display:flex;align-items:center;justify-content:center;
-        cursor:pointer;box-shadow:0 4px 16px rgba(0,0,0,.4);
-        transition:all .2s;color:#a78bfa;
-      ">
-        <svg id="voiceFabIcon" width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-      </div>
+      <!-- Voice button moved to dock sidebar -->
       <!-- SEOZ Inspector drawer -->
       <div class="inspector-drawer" id="inspectorDrawer">
         <div class="inspector-hdr" id="inspectorHdr">
@@ -951,6 +941,10 @@ input,textarea,select{user-select:text}
       </div>
       <div class="dock-sep"></div>
       <div class="dock-spacer"></div>
+      <div class="di" id="voiceFab" onclick="toggleVoiceRecording()" style="color:#a78bfa">
+        <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div class="dtt">Röstsamtal</div>
+      </div>
       <div class="di" id="di-settings" onclick="togglePanel('settings')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <div class="dtt">Inställningar</div>
@@ -4135,11 +4129,11 @@ function setMicBtnState(state) {
       btn.innerHTML = micSvg
     }
     if (fab) {
-      fab.style.background = 'var(--card)'
-      fab.style.borderColor = 'var(--border)'
+      fab.style.background = ''
+      fab.style.borderColor = ''
       fab.style.color = '#a78bfa'
-      fab.style.animation = 'none'
-      fab.innerHTML = micSvg
+      fab.style.animation = ''
+      fab.innerHTML = micSvg + '<div class="dtt">Röstsamtal</div>'
     }
   }
 }

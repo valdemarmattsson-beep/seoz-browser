@@ -2850,9 +2850,20 @@ async function selectClient(clientId) {
 }
 
 async function fetchClientData(clientId) {
-  const apiKey = await SE.getApiKey()
-  if (!apiKey || !clientId) return
+  if (!clientId) return
 
+  // Load tasks from local storage (per client) — always, even without API key
+  try {
+    const saved = await SE.storeGet('tasks_' + clientId, '[]')
+    synced.tasks = JSON.parse(saved)
+    console.log('[SEOZ] Tasks loaded for', clientId, ':', synced.tasks.length)
+  } catch(_) {
+    synced.tasks = []
+  }
+
+  // Fetch keywords & AI visibility from API
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) return
   try {
     const [kwRes, aiRes] = await Promise.all([
       SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
@@ -2862,13 +2873,6 @@ async function fetchClientData(clientId) {
     if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
   } catch(e) {
     console.error('fetchClientData error:', e)
-  }
-  // Load tasks from local storage (per client)
-  try {
-    const saved = await SE.storeGet('tasks_' + clientId, '[]')
-    synced.tasks = JSON.parse(saved)
-  } catch(_) {
-    synced.tasks = []
   }
 }
 

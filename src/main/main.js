@@ -3,9 +3,11 @@
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog } = require('electron')
 const path = require('path')
 const https = require('https')
+const os = require('os')
+const { exec, spawn } = require('child_process')
 const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
-const { startMCPServer, stopMCPServer, setWindowGetter } = require('./mcp-server')
+const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch } = require('./mcp-server')
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
@@ -25,9 +27,16 @@ const store = new Store({
   }
 })
 
+// Session history database — stores terminal commands + outputs for cross-session search
+const historyStore = new Store({
+  name: 'session-history',
+  defaults: { entries: [] }
+})
+
 let win = null
 let syncInterval = null
 let launchUrl = null // URL passed via command line or protocol activation
+let terminalProc = null   // Persistent interactive terminal process
 
 // ══════════════════════════════════════════════════════════════════════════════
 //  DEFAULT BROWSER — register as handler for http/https
@@ -571,6 +580,142 @@ ipcMain.handle('save-screenshot', async (_, buffer) => {
   return { ok: true, path: result.filePath }
 })
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  TERMINAL — command execution + persistent shell + session history
+// ══════════════════════════════════════════════════════════════════════════════
+
+// Execute a single command and return clean output (used by MCP + UI)
+ipcMain.handle('terminal-exec', async (_, { command, cwd, source }) => {
+  const workDir = cwd || os.homedir()
+  // Use cmd.exe on Windows — PowerShell ignores cwd and doesn't support &&
+  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash'
+
+  return new Promise((resolve) => {
+    const startTime = Date.now()
+    exec(command, {
+      cwd: workDir,
+      shell,
+      maxBuffer: 1024 * 1024 * 10, // 10 MB
+      timeout: 120000, // 2 min
+      env: { ...process.env, TERM: 'dumb' },
+    }, (error, stdout, stderr) => {
+      const duration = Date.now() - startTime
+      const entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        timestamp: new Date().toISOString(),
+        command,
+        cwd: workDir,
+        stdout: (stdout || '').toString().slice(0, 50000),  // cap at 50 KB
+        stderr: (stderr || '').toString().slice(0, 10000),
+        exitCode: error ? (error.code ?? 1) : 0,
+        duration,
+        source: source || 'terminal',
+      }
+      _saveHistoryEntry(entry)
+      // Notify renderer about new history entry
+      win?.webContents.send('terminal-history-new', entry)
+      resolve({
+        ok: !error,
+        stdout: entry.stdout,
+        stderr: entry.stderr,
+        exitCode: entry.exitCode,
+        duration,
+      })
+    })
+  })
+})
+
+// Spawn persistent interactive terminal (cmd / bash)
+ipcMain.handle('terminal-spawn', () => {
+  if (terminalProc) return { ok: true, msg: 'Already running' }
+  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash'
+  const args = process.platform === 'win32' ? ['/Q'] : ['--norc']
+  terminalProc = spawn(shell, args, {
+    cwd: os.homedir(),
+    env: { ...process.env, TERM: 'dumb' },
+    stdio: ['pipe', 'pipe', 'pipe'],
+  })
+  terminalProc.stdout.on('data', d => win?.webContents.send('terminal-data', d.toString()))
+  terminalProc.stderr.on('data', d => win?.webContents.send('terminal-data', d.toString()))
+  terminalProc.on('exit', (code) => {
+    terminalProc = null
+    win?.webContents.send('terminal-exit', code)
+  })
+  return { ok: true }
+})
+ipcMain.on('terminal-write', (_, data) => {
+  if (terminalProc && terminalProc.stdin.writable) terminalProc.stdin.write(data)
+})
+ipcMain.on('terminal-kill', () => {
+  if (terminalProc) { terminalProc.kill(); terminalProc = null }
+})
+
+// ── Session history database ──
+function _saveHistoryEntry(entry) {
+  const entries = historyStore.get('entries', [])
+  entries.push(entry)
+  // Keep max 5000 entries — trim oldest
+  if (entries.length > 5000) entries.splice(0, entries.length - 5000)
+  historyStore.set('entries', entries)
+}
+
+function _searchHistory(query, limit) {
+  const entries = historyStore.get('entries', [])
+  if (!query) return entries.slice(-limit)
+  const q = query.toLowerCase()
+  return entries
+    .filter(e =>
+      e.command.toLowerCase().includes(q) ||
+      e.stdout.toLowerCase().includes(q) ||
+      e.stderr.toLowerCase().includes(q) ||
+      (e.cwd && e.cwd.toLowerCase().includes(q))
+    )
+    .slice(-limit)
+}
+
+ipcMain.handle('terminal-history-search', (_, { query, limit }) => {
+  return _searchHistory(query, limit || 50)
+})
+ipcMain.handle('terminal-history-recent', (_, { limit }) => {
+  const entries = historyStore.get('entries', [])
+  return entries.slice(-(limit || 20))
+})
+ipcMain.handle('terminal-history-clear', () => {
+  historyStore.set('entries', [])
+  return { ok: true }
+})
+// Expose for MCP server (direct access, no IPC round-trip)
+function terminalExecDirect(command, cwd, source) {
+  const workDir = cwd || os.homedir()
+  const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
+  return new Promise((resolve) => {
+    const startTime = Date.now()
+    exec(command, {
+      cwd: workDir,
+      shell,
+      maxBuffer: 1024 * 1024 * 10,
+      timeout: 120000,
+      env: { ...process.env, TERM: 'dumb' },
+    }, (error, stdout, stderr) => {
+      const duration = Date.now() - startTime
+      const entry = {
+        id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+        timestamp: new Date().toISOString(),
+        command,
+        cwd: workDir,
+        stdout: (stdout || '').toString().slice(0, 50000),
+        stderr: (stderr || '').toString().slice(0, 10000),
+        exitCode: error ? (error.code ?? 1) : 0,
+        duration,
+        source: source || 'mcp',
+      }
+      _saveHistoryEntry(entry)
+      win?.webContents.send('terminal-history-new', entry)
+      resolve(entry)
+    })
+  })
+}
+
 // ── Auto-sync every 30 s (profile-scoped) ──
 function startSync() {
   stopSync()
@@ -707,8 +852,10 @@ app.whenReady().then(() => {
   createWindow()
   startSync()
   updateJumpList()
-  // MCP server — lets Claude control the browser
+  // MCP server — lets Claude control the browser + terminal
   setWindowGetter(() => win)
+  setTerminalExec(terminalExecDirect)
+  setHistorySearch(_searchHistory)
   startMCPServer()
   // Check for updates 3s after launch (silent)
   setTimeout(() => { autoUpdater.checkForUpdates().catch(() => {}) }, 3000)

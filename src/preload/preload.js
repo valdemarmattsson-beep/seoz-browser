@@ -72,6 +72,15 @@ contextBridge.exposeInMainWorld('seoz', {
   // Screenshot save dialog
   saveScreenshot: (buffer) => ipcRenderer.invoke('save-screenshot', buffer),
 
+  // Terminal — command execution + interactive shell + history
+  terminalExec:          (opts) => ipcRenderer.invoke('terminal-exec', opts),
+  terminalSpawn:         ()     => ipcRenderer.invoke('terminal-spawn'),
+  terminalWrite:         (data) => ipcRenderer.send('terminal-write', data),
+  terminalKill:          ()     => ipcRenderer.send('terminal-kill'),
+  terminalHistorySearch: (opts) => ipcRenderer.invoke('terminal-history-search', opts),
+  terminalHistoryRecent: (opts) => ipcRenderer.invoke('terminal-history-recent', opts),
+  terminalHistoryClear:  ()     => ipcRenderer.invoke('terminal-history-clear'),
+
   // Auto-updater
   updaterCheck:     () => ipcRenderer.send('updater-check'),
   updaterDownload:  () => ipcRenderer.send('updater-download'),
@@ -80,7 +89,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

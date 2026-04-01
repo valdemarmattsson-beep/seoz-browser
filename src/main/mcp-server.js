@@ -18,9 +18,19 @@ const PROTOCOL_VERSION = '2024-11-05'
 let server = null
 let win = null
 let getWinFn = null
+let terminalExecFn = null
+let historySearchFn = null
 
 function setWindowGetter(fn) {
   getWinFn = fn
+}
+
+function setTerminalExec(fn) {
+  terminalExecFn = fn
+}
+
+function setHistorySearch(fn) {
+  historySearchFn = fn
 }
 
 function getWindow() {
@@ -29,7 +39,31 @@ function getWindow() {
 }
 
 // ── Tool definitions ──
+// NOTE: Cowork has a ~19 tool limit per MCP server — keep the most important tools first!
 const TOOLS = [
+  {
+    name: 'run_command',
+    description: 'Execute a shell command on the user\'s local machine and return stdout/stderr. Runs in PowerShell on Windows, bash on Mac/Linux. Use for git, npm, build, deploy, file operations, etc. Commands are logged to session history for future reference.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        command: { type: 'string', description: 'Shell command to execute' },
+        cwd: { type: 'string', description: 'Working directory (defaults to user home directory)' }
+      },
+      required: ['command']
+    }
+  },
+  {
+    name: 'search_session_history',
+    description: 'Search the session history database for past terminal commands and their output. Useful for finding what was done in previous sessions, recalling error messages, checking deployment history, etc.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        query: { type: 'string', description: 'Search query — matches against commands, stdout, stderr, and working directory' },
+        limit: { type: 'number', description: 'Max number of results to return (default 20)' }
+      }
+    }
+  },
   {
     name: 'navigate',
     description: 'Navigate the active browser tab to a URL and wait for the page to finish loading before returning',
@@ -257,12 +291,32 @@ const TOOLS = [
   },
 ]
 
-// ── Execute MCP tool via IPC to renderer ──
+// ── Execute MCP tool via IPC to renderer (or directly for terminal) ──
 async function executeTool(name, args) {
+  // Terminal tools run directly in main process — no renderer round-trip
+  if (name === 'run_command') {
+    if (!terminalExecFn) throw new Error('Terminal not initialised')
+    const entry = await terminalExecFn(args.command, args.cwd, 'mcp')
+    const parts = [`$ ${entry.command}`, '']
+    if (entry.stdout) parts.push(entry.stdout.trimEnd())
+    if (entry.stderr) parts.push('[stderr] ' + entry.stderr.trimEnd())
+    parts.push(`\n[exit ${entry.exitCode}] ${entry.duration}ms`)
+    return parts.join('\n')
+  }
+
+  if (name === 'search_session_history') {
+    if (!historySearchFn) throw new Error('History not initialised')
+    const results = historySearchFn(args.query, args.limit || 20)
+    if (!results.length) return 'No matching history entries found.'
+    return results.map(e =>
+      `[${e.timestamp}] (${e.source}) ${e.cwd}\n$ ${e.command}\n→ exit ${e.exitCode} (${e.duration}ms)${e.stdout ? '\n' + e.stdout.slice(0, 500) : ''}${e.stderr ? '\n[stderr] ' + e.stderr.slice(0, 200) : ''}`
+    ).join('\n\n---\n\n')
+  }
+
   const w = getWindow()
   if (!w) throw new Error('Browser window not available')
 
-  // Most tools execute JS in the webview via renderer
+  // Browser tools execute JS in the webview via renderer
   const result = await w.webContents.executeJavaScript(
     `window.__mcpExecute(${JSON.stringify(name)}, ${JSON.stringify(args)})`
   )
@@ -302,8 +356,9 @@ async function handleRequest(body) {
       const { name, arguments: args } = params || {}
       try {
         const result = await executeTool(name, args || {})
+        const text = result == null ? String(result) : (typeof result === 'string' ? result : JSON.stringify(result, null, 2))
         return jsonrpcResult(id, {
-          content: [{ type: 'text', text: typeof result === 'string' ? result : JSON.stringify(result, null, 2) }]
+          content: [{ type: 'text', text }]
         })
       } catch (err) {
         return jsonrpcResult(id, {
@@ -415,4 +470,4 @@ function stopMCPServer() {
   if (server) { server.close(); server = null }
 }
 
-module.exports = { startMCPServer, stopMCPServer, setWindowGetter }
+module.exports = { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch }

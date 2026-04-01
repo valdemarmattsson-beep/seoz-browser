@@ -2792,6 +2792,25 @@ async function renderPanelContent(name) {
       <div class="sh" style="margin-top:18px">UPPDATERINGAR</div>
       <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
       <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">🔄 Sök efter uppdateringar</button>
+
+      <div class="sh" style="margin-top:18px;cursor:pointer;user-select:none" onclick="toggleTerminalSection()">
+        TERMINAL <span id="termToggleIcon" style="font-size:10px;color:var(--muted)">▼</span>
+      </div>
+      <div id="terminalSection" style="display:block">
+        <p style="font-size:9px;color:var(--muted);margin-bottom:6px;line-height:1.4">Kör kommandon direkt i browsern. Exponeras även via MCP så Claude kan köra kommandon åt dig.</p>
+        <div id="termOutput" style="background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:11px;color:#c9d1d9;height:240px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;margin-bottom:6px"></div>
+        <div style="display:flex;gap:4px">
+          <span style="font-family:monospace;font-size:12px;color:#58a6ff;line-height:28px;padding:0 4px">$</span>
+          <input id="termInput" type="text" placeholder="Skriv kommando..." style="flex:1;height:28px;font-size:11px;font-family:monospace;background:#0d1117;border:1px solid var(--border);border-radius:4px;color:#c9d1d9;padding:0 8px;outline:none" onkeydown="if(event.key==='Enter')termRunCmd()">
+          <button class="act-btn" style="width:50px;height:28px;font-size:10px" onclick="termRunCmd()">Kör</button>
+        </div>
+        <div style="display:flex;gap:4px;margin-top:6px">
+          <input id="termSearchInput" type="text" placeholder="Sök historik..." style="flex:1;height:24px;font-size:10px;font-family:monospace;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 6px;outline:none" onkeydown="if(event.key==='Enter')termSearchHistory()">
+          <button class="act-btn" style="height:24px;font-size:9px;padding:0 8px" onclick="termSearchHistory()">Sök</button>
+          <button class="act-btn" style="height:24px;font-size:9px;padding:0 8px;color:var(--r)" onclick="termClearHistory()">Rensa</button>
+        </div>
+        <div class="mr" style="margin-top:6px"><span class="mrl">Historik</span><span class="mrv" id="termHistoryCount">—</span></div>
+      </div>
     `
     SE.updaterGetVersion().then(v => {
       const el = document.getElementById('settingsVersion')
@@ -5775,6 +5794,164 @@ async function removeElevenlabsKey() {
   const el = document.getElementById('settingsElevenlabsKey')
   if (el) el.textContent = 'Ej konfigurerad'
 }
+
+// ══════════════════════════════════════════════════════
+//  TERMINAL — embedded command execution + history
+// ══════════════════════════════════════════════════════
+let _termOpen = true
+const _termHistory = []   // command recall buffer
+let _termHistoryIdx = -1
+
+function toggleTerminalSection() {
+  _termOpen = !_termOpen
+  const sec = document.getElementById('terminalSection')
+  const ico = document.getElementById('termToggleIcon')
+  if (sec) sec.style.display = _termOpen ? 'block' : 'none'
+  if (ico) ico.textContent = _termOpen ? '▼' : '▶'
+  if (_termOpen) termLoadRecent()
+}
+
+async function termLoadRecent() {
+  try {
+    const recent = await SE.terminalHistoryRecent({ limit: 30 })
+    const out = document.getElementById('termOutput')
+    if (!out) return
+    out.innerHTML = ''
+    if (recent && recent.length) {
+      for (const e of recent) {
+        termAppendEntry(e)
+      }
+      out.scrollTop = out.scrollHeight
+    } else {
+      out.innerHTML = '<span style="color:#8b949e">Ingen historik ännu. Kör ett kommando nedan.</span>'
+    }
+    // Update count
+    const all = await SE.terminalHistoryRecent({ limit: 99999 })
+    const countEl = document.getElementById('termHistoryCount')
+    if (countEl) countEl.textContent = (all ? all.length : 0) + ' poster'
+  } catch (_) {}
+}
+
+function termAppendEntry(entry) {
+  const out = document.getElementById('termOutput')
+  if (!out) return
+  const srcColor = entry.source === 'mcp' ? '#d4a574' : '#58a6ff'
+  const srcLabel = entry.source === 'mcp' ? 'MCP' : 'USR'
+  const time = entry.timestamp ? new Date(entry.timestamp).toLocaleTimeString('sv-SE') : ''
+  let html = '<div style="margin-bottom:8px;border-bottom:1px solid #21262d;padding-bottom:6px">'
+  html += '<span style="color:#8b949e;font-size:9px">' + esc(time) + ' [' + '<span style="color:' + srcColor + '">' + srcLabel + '</span>]</span> '
+  html += '<span style="color:#79c0ff">' + esc(entry.cwd || '') + '</span>\n'
+  html += '<span style="color:#58a6ff">$ </span><span style="color:#f0f6fc">' + esc(entry.command) + '</span>\n'
+  if (entry.stdout) html += '<span style="color:#c9d1d9">' + esc(entry.stdout) + '</span>'
+  if (entry.stderr) html += '<span style="color:#f85149">' + esc(entry.stderr) + '</span>'
+  html += '<span style="color:#8b949e;font-size:9px">exit ' + entry.exitCode + ' · ' + entry.duration + 'ms</span>'
+  html += '</div>'
+  out.innerHTML += html
+}
+
+async function termRunCmd() {
+  const input = document.getElementById('termInput')
+  if (!input) return
+  const cmd = input.value.trim()
+  if (!cmd) return
+  input.value = ''
+  _termHistory.push(cmd)
+  _termHistoryIdx = _termHistory.length
+
+  // Show running indicator
+  const out = document.getElementById('termOutput')
+  if (out) {
+    // Remove placeholder text if present
+    if (out.querySelector('span') && out.children.length === 1 && out.textContent.includes('Ingen historik')) out.innerHTML = ''
+    out.innerHTML += '<div id="termRunning" style="color:#e3b341">⏳ Kör: ' + esc(cmd) + '...</div>'
+    out.scrollTop = out.scrollHeight
+  }
+
+  try {
+    const result = await SE.terminalExec({ command: cmd, source: 'terminal' })
+    // Remove running indicator
+    const running = document.getElementById('termRunning')
+    if (running) running.remove()
+    // The history-new event will add the entry, but in case it's slow, add manually
+    const entry = {
+      timestamp: new Date().toISOString(),
+      command: cmd,
+      cwd: '',
+      stdout: result.stdout || '',
+      stderr: result.stderr || '',
+      exitCode: result.exitCode ?? 0,
+      duration: result.duration || 0,
+      source: 'terminal'
+    }
+    termAppendEntry(entry)
+    if (out) out.scrollTop = out.scrollHeight
+  } catch (err) {
+    const running = document.getElementById('termRunning')
+    if (running) running.remove()
+    if (out) {
+      out.innerHTML += '<div style="color:#f85149">Fel: ' + esc(err.message || String(err)) + '</div>'
+      out.scrollTop = out.scrollHeight
+    }
+  }
+}
+
+async function termSearchHistory() {
+  const input = document.getElementById('termSearchInput')
+  if (!input) return
+  const query = input.value.trim()
+  try {
+    const results = await SE.terminalHistorySearch({ query, limit: 50 })
+    const out = document.getElementById('termOutput')
+    if (!out) return
+    out.innerHTML = ''
+    if (!results || !results.length) {
+      out.innerHTML = '<span style="color:#8b949e">Inga träffar för "' + esc(query) + '"</span>'
+      return
+    }
+    out.innerHTML = '<div style="color:#e3b341;margin-bottom:8px;font-size:10px">Sökresultat: ' + results.length + ' träffar för "' + esc(query) + '"</div>'
+    for (const e of results) termAppendEntry(e)
+    out.scrollTop = 0
+  } catch (_) {}
+}
+
+async function termClearHistory() {
+  if (!confirm('Rensa all terminalhistorik?')) return
+  await SE.terminalHistoryClear()
+  const out = document.getElementById('termOutput')
+  if (out) out.innerHTML = '<span style="color:#8b949e">Historik rensad.</span>'
+  const countEl = document.getElementById('termHistoryCount')
+  if (countEl) countEl.textContent = '0 poster'
+}
+
+// Listen for MCP-triggered terminal entries (so UI stays in sync)
+SE.on('terminal-history-new', (entry) => {
+  // Only append if terminal section is open and entry is from MCP
+  if (_termOpen && entry.source === 'mcp') {
+    termAppendEntry(entry)
+    const out = document.getElementById('termOutput')
+    if (out) out.scrollTop = out.scrollHeight
+  }
+})
+
+// Arrow up/down for command recall in terminal input
+document.addEventListener('keydown', (e) => {
+  const input = document.getElementById('termInput')
+  if (document.activeElement !== input || !_termHistory.length) return
+  if (e.key === 'ArrowUp') {
+    e.preventDefault()
+    if (_termHistoryIdx > 0) _termHistoryIdx--
+    input.value = _termHistory[_termHistoryIdx] || ''
+  } else if (e.key === 'ArrowDown') {
+    e.preventDefault()
+    if (_termHistoryIdx < _termHistory.length - 1) {
+      _termHistoryIdx++
+      input.value = _termHistory[_termHistoryIdx] || ''
+    } else {
+      _termHistoryIdx = _termHistory.length
+      input.value = ''
+    }
+  }
+})
 
 // ══════════════════════════════════════════════════════
 //  MCP BRIDGE — lets Claude control the browser via MCP server

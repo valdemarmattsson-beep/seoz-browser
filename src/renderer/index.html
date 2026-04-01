@@ -1343,7 +1343,6 @@ const WV_CONTEXT_MENU_SCRIPT = `
 // ══════════════════════════════════════════════════════
 //  SCREENSHOT — capture, preview, crop, copy, save
 // ══════════════════════════════════════════════════════
-let _ssImageData = null  // current screenshot as ImageData on canvas
 let _ssCropping = false
 let _ssCropCleanup = null
 
@@ -1352,11 +1351,15 @@ async function captureFullPage() {
   toast('Tar skärmbild...', 'var(--p)')
   try {
     const nativeImg = await wv.capturePage()
-    const pngBuffer = nativeImg.toPNG()
-    ssOpenEditor(pngBuffer)
+    const dataUrl = nativeImg.toDataURL()
+    if (!dataUrl || dataUrl.length < 50) {
+      toast('Tom skärmbild — försök igen', 'var(--r)')
+      return
+    }
+    ssOpenEditor(dataUrl)
   } catch(e) {
     console.error('captureFullPage error:', e)
-    toast('Kunde inte ta skärmbild', 'var(--r)')
+    toast('Kunde inte ta skärmbild: ' + e.message, 'var(--r)')
   }
 }
 
@@ -1408,6 +1411,7 @@ function captureArea() {
   overlay.addEventListener('mouseup', async e => {
     if (!dragging) return
     dragging = false
+    const ox = overlay.getBoundingClientRect()
     const rect = {
       x: Math.min(startX, e.offsetX),
       y: Math.min(startY, e.offsetY),
@@ -1416,46 +1420,55 @@ function captureArea() {
     }
     cleanup()
     if (rect.width < 5 || rect.height < 5) return
+    toast('Tar skärmbild...', 'var(--p)')
     try {
       const nativeImg = await wv.capturePage()
+      // Account for device pixel ratio
+      const dpr = window.devicePixelRatio || 1
       const cropped = nativeImg.crop({
-        x: Math.round(rect.x), y: Math.round(rect.y),
-        width: Math.round(rect.width), height: Math.round(rect.height),
+        x: Math.round(rect.x * dpr),
+        y: Math.round(rect.y * dpr),
+        width: Math.round(rect.width * dpr),
+        height: Math.round(rect.height * dpr),
       })
-      ssOpenEditor(cropped.toPNG())
+      const dataUrl = cropped.toDataURL()
+      if (!dataUrl || dataUrl.length < 50) {
+        toast('Tom skärmbild', 'var(--r)')
+        return
+      }
+      ssOpenEditor(dataUrl)
     } catch(e2) {
       console.error('captureArea error:', e2)
-      toast('Kunde inte ta skärmbild', 'var(--r)')
+      toast('Kunde inte ta skärmbild: ' + e2.message, 'var(--r)')
     }
   })
 
   container.appendChild(overlay)
 }
 
-function ssOpenEditor(pngBuffer) {
-  const blob = new Blob([pngBuffer], { type: 'image/png' })
-  const url = URL.createObjectURL(blob)
+function ssOpenEditor(dataUrl) {
   const img = new Image()
   img.onload = () => {
     const canvas = document.getElementById('ssCanvas')
-    canvas.width = img.width
-    canvas.height = img.height
+    canvas.width = img.naturalWidth
+    canvas.height = img.naturalHeight
     const ctx = canvas.getContext('2d')
     ctx.drawImage(img, 0, 0)
-    _ssImageData = pngBuffer
-    URL.revokeObjectURL(url)
-    document.getElementById('ssSize').textContent = img.width + ' × ' + img.height + ' px'
+    document.getElementById('ssSize').textContent = img.naturalWidth + ' × ' + img.naturalHeight + ' px'
     document.getElementById('ssEditor').classList.add('open')
     document.getElementById('ssCropInfo').style.display = 'none'
-    document.getElementById('ssCropBtn').style.background = ''
+    const btn = document.getElementById('ssCropBtn')
+    btn.style.background = ''; btn.style.color = ''
     _ssCropping = false
   }
-  img.src = url
+  img.onerror = () => {
+    toast('Kunde inte läsa skärmbilden', 'var(--r)')
+  }
+  img.src = dataUrl
 }
 
 function ssClose() {
   document.getElementById('ssEditor').classList.remove('open')
-  _ssImageData = null
   if (_ssCropCleanup) { _ssCropCleanup(); _ssCropCleanup = null }
   _ssCropping = false
 }
@@ -1468,7 +1481,7 @@ async function ssCopyClipboard() {
     toast('Kopierad till urklipp!', 'var(--g)')
   } catch(e) {
     console.error('ssCopyClipboard error:', e)
-    toast('Kunde inte kopiera', 'var(--r)')
+    toast('Kunde inte kopiera: ' + e.message, 'var(--r)')
   }
 }
 
@@ -1484,13 +1497,12 @@ async function ssSaveFile() {
     }
   } catch(e) {
     console.error('ssSaveFile error:', e)
-    toast('Kunde inte spara', 'var(--r)')
+    toast('Kunde inte spara: ' + e.message, 'var(--r)')
   }
 }
 
 function ssCropMode() {
   if (_ssCropping) {
-    // Cancel crop
     if (_ssCropCleanup) { _ssCropCleanup(); _ssCropCleanup = null }
     _ssCropping = false
     document.getElementById('ssCropInfo').style.display = 'none'
@@ -1504,19 +1516,13 @@ function ssCropMode() {
 
   const canvas = document.getElementById('ssCanvas')
   const wrap = canvas.parentElement
-  // Create crop overlay on top of canvas
-  const cropOverlay = document.createElement('div')
-  cropOverlay.style.cssText = 'position:absolute;inset:0;cursor:crosshair;z-index:10'
 
-  // Position relative to canvas within the scrollable wrap
-  const positionOverlay = () => {
-    cropOverlay.style.left = canvas.offsetLeft + 'px'
-    cropOverlay.style.top = canvas.offsetTop + 'px'
-    cropOverlay.style.width = canvas.offsetWidth + 'px'
-    cropOverlay.style.height = canvas.offsetHeight + 'px'
-    cropOverlay.style.inset = 'auto'
-  }
-  positionOverlay()
+  const cropOverlay = document.createElement('div')
+  cropOverlay.style.cssText = 'position:absolute;cursor:crosshair;z-index:10'
+  cropOverlay.style.left = canvas.offsetLeft + 'px'
+  cropOverlay.style.top = canvas.offsetTop + 'px'
+  cropOverlay.style.width = canvas.offsetWidth + 'px'
+  cropOverlay.style.height = canvas.offsetHeight + 'px'
 
   const cropSel = document.createElement('div')
   cropSel.style.cssText = 'position:absolute;border:2px dashed #fff;background:rgba(70,128,255,.15);display:none;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.4)'
@@ -1537,15 +1543,12 @@ function ssCropMode() {
     cropSel.style.width = Math.abs(e.offsetX - sx) + 'px'
     cropSel.style.height = Math.abs(e.offsetY - sy) + 'px'
   })
-  cropOverlay.addEventListener('mouseup', e => {
-    dragging = false
-  })
+  cropOverlay.addEventListener('mouseup', () => { dragging = false })
 
   function onKey(ev) {
     if (ev.key === 'Escape') {
       cleanup()
     } else if (ev.key === 'Enter') {
-      // Apply crop
       const scaleX = canvas.width / canvas.offsetWidth
       const scaleY = canvas.height / canvas.offsetHeight
       const r = {
@@ -1556,7 +1559,6 @@ function ssCropMode() {
       }
       cleanup()
       if (r.width < 2 || r.height < 2) return
-      // Crop the canvas
       const ctx = canvas.getContext('2d')
       const imgData = ctx.getImageData(r.x, r.y, r.width, r.height)
       canvas.width = r.width
@@ -1586,7 +1588,7 @@ function ssCropMode() {
 // Keyboard shortcuts in screenshot editor
 document.addEventListener('keydown', e => {
   if (!document.getElementById('ssEditor').classList.contains('open')) return
-  if (_ssCropping) return // handled by crop mode
+  if (_ssCropping) return
   const ctrl = e.ctrlKey || e.metaKey
   if (ctrl && e.key === 'c') { e.preventDefault(); ssCopyClipboard() }
   else if (ctrl && e.key === 's') { e.preventDefault(); ssSaveFile() }

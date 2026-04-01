@@ -437,6 +437,21 @@ input,textarea,select{user-select:text}
 }
 .sb{font-size:10px;color:var(--muted);display:flex;align-items:center;gap:4px}
 .sb-dot{width:5px;height:5px;border-radius:50%;background:var(--g)}
+/* ── Screenshot editor ── */
+.ss-editor-bg{position:fixed;inset:0;z-index:400;background:rgba(0,0,0,.7);display:none;align-items:center;justify-content:center;flex-direction:column}
+.ss-editor-bg.open{display:flex}
+.ss-editor{background:var(--card);border-radius:12px;border:1px solid var(--border);box-shadow:0 12px 40px rgba(0,0,0,.5);max-width:90vw;max-height:85vh;display:flex;flex-direction:column;overflow:hidden}
+.ss-toolbar{display:flex;align-items:center;gap:6px;padding:10px 14px;border-bottom:1px solid var(--border);flex-shrink:0}
+.ss-toolbar-title{font-size:12px;font-weight:700;color:var(--head);flex:1}
+.ss-btn{height:28px;padding:0 12px;border-radius:6px;font-size:10px;font-weight:700;cursor:pointer;font-family:inherit;border:1px solid var(--border);background:none;color:var(--txt);display:flex;align-items:center;gap:4px;transition:background .15s}
+.ss-btn:hover{background:var(--border)}
+.ss-btn.primary{border:none;background:var(--p);color:#fff}
+.ss-btn.primary:hover{opacity:.9}
+.ss-btn.danger{border-color:rgba(220,38,38,.3);color:var(--r)}
+.ss-btn.danger:hover{background:rgba(220,38,38,.1)}
+.ss-canvas-wrap{flex:1;overflow:auto;display:flex;align-items:center;justify-content:center;padding:16px;min-height:0;background:repeating-conic-gradient(rgba(128,128,128,.08) 0% 25%, transparent 0% 50%) 0 0/16px 16px}
+.ss-canvas-wrap canvas{max-width:100%;max-height:100%;object-fit:contain;border-radius:4px;box-shadow:0 2px 8px rgba(0,0,0,.2)}
+.ss-info{font-size:10px;color:var(--muted);padding:6px 14px;border-top:1px solid var(--border);display:flex;gap:12px;flex-shrink:0}
 .hover-url{
   position:fixed;bottom:var(--status-h);left:0;
   max-width:50%;padding:4px 12px;
@@ -880,6 +895,28 @@ input,textarea,select{user-select:text}
     </div>
   </div>
 
+  <!-- SCREENSHOT EDITOR -->
+  <div class="ss-editor-bg" id="ssEditor">
+    <div class="ss-editor">
+      <div class="ss-toolbar">
+        <span class="ss-toolbar-title">Skärmbild</span>
+        <button class="ss-btn" onclick="ssCropMode()" id="ssCropBtn">✂ Beskär</button>
+        <button class="ss-btn" onclick="ssCopyClipboard()">📋 Kopiera</button>
+        <button class="ss-btn primary" onclick="ssSaveFile()">💾 Spara</button>
+        <button class="ss-btn danger" onclick="ssClose()">✕</button>
+      </div>
+      <div class="ss-canvas-wrap">
+        <canvas id="ssCanvas"></canvas>
+      </div>
+      <div class="ss-info">
+        <span id="ssSize">—</span>
+        <span id="ssCropInfo" style="color:var(--p);display:none">Dra för att markera — Enter för att beskära, Esc för att avbryta</span>
+        <span style="flex:1"></span>
+        <span style="opacity:.5">Ctrl+C kopiera · Ctrl+S spara</span>
+      </div>
+    </div>
+  </div>
+
   <!-- BODY -->
   <div class="body-row">
     <!-- Webview container (holds webview + inspector drawer) -->
@@ -1303,17 +1340,20 @@ const WV_CONTEXT_MENU_SCRIPT = `
   })
 `
 
-// ── Screenshot capture ──
+// ══════════════════════════════════════════════════════
+//  SCREENSHOT — capture, preview, crop, copy, save
+// ══════════════════════════════════════════════════════
+let _ssImageData = null  // current screenshot as ImageData on canvas
+let _ssCropping = false
+let _ssCropCleanup = null
+
 async function captureFullPage() {
   if (!wv) return
   toast('Tar skärmbild...', 'var(--p)')
   try {
     const nativeImg = await wv.capturePage()
     const pngBuffer = nativeImg.toPNG()
-    const res = await SE.saveScreenshot(pngBuffer)
-    if (res && res.ok) {
-      toast('Skärmbild sparad!', 'var(--g)')
-    }
+    ssOpenEditor(pngBuffer)
   } catch(e) {
     console.error('captureFullPage error:', e)
     toast('Kunde inte ta skärmbild', 'var(--r)')
@@ -1323,7 +1363,6 @@ async function captureFullPage() {
 let _areaOverlay = null
 function captureArea() {
   if (!wv) return
-  // Create overlay on top of webview for area selection
   const container = document.getElementById('wvStack')
   if (_areaOverlay) { _areaOverlay.remove(); _areaOverlay = null }
 
@@ -1377,19 +1416,13 @@ function captureArea() {
     }
     cleanup()
     if (rect.width < 5 || rect.height < 5) return
-
-    toast('Tar skärmbild av område...', 'var(--p)')
     try {
       const nativeImg = await wv.capturePage()
       const cropped = nativeImg.crop({
-        x: Math.round(rect.x),
-        y: Math.round(rect.y),
-        width: Math.round(rect.width),
-        height: Math.round(rect.height),
+        x: Math.round(rect.x), y: Math.round(rect.y),
+        width: Math.round(rect.width), height: Math.round(rect.height),
       })
-      const pngBuffer = cropped.toPNG()
-      const res = await SE.saveScreenshot(pngBuffer)
-      if (res && res.ok) toast('Skärmbild sparad!', 'var(--g)')
+      ssOpenEditor(cropped.toPNG())
     } catch(e2) {
       console.error('captureArea error:', e2)
       toast('Kunde inte ta skärmbild', 'var(--r)')
@@ -1398,6 +1431,167 @@ function captureArea() {
 
   container.appendChild(overlay)
 }
+
+function ssOpenEditor(pngBuffer) {
+  const blob = new Blob([pngBuffer], { type: 'image/png' })
+  const url = URL.createObjectURL(blob)
+  const img = new Image()
+  img.onload = () => {
+    const canvas = document.getElementById('ssCanvas')
+    canvas.width = img.width
+    canvas.height = img.height
+    const ctx = canvas.getContext('2d')
+    ctx.drawImage(img, 0, 0)
+    _ssImageData = pngBuffer
+    URL.revokeObjectURL(url)
+    document.getElementById('ssSize').textContent = img.width + ' × ' + img.height + ' px'
+    document.getElementById('ssEditor').classList.add('open')
+    document.getElementById('ssCropInfo').style.display = 'none'
+    document.getElementById('ssCropBtn').style.background = ''
+    _ssCropping = false
+  }
+  img.src = url
+}
+
+function ssClose() {
+  document.getElementById('ssEditor').classList.remove('open')
+  _ssImageData = null
+  if (_ssCropCleanup) { _ssCropCleanup(); _ssCropCleanup = null }
+  _ssCropping = false
+}
+
+async function ssCopyClipboard() {
+  const canvas = document.getElementById('ssCanvas')
+  try {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    await navigator.clipboard.write([new ClipboardItem({ 'image/png': blob })])
+    toast('Kopierad till urklipp!', 'var(--g)')
+  } catch(e) {
+    console.error('ssCopyClipboard error:', e)
+    toast('Kunde inte kopiera', 'var(--r)')
+  }
+}
+
+async function ssSaveFile() {
+  const canvas = document.getElementById('ssCanvas')
+  try {
+    const blob = await new Promise(resolve => canvas.toBlob(resolve, 'image/png'))
+    const arrBuf = await blob.arrayBuffer()
+    const res = await SE.saveScreenshot(new Uint8Array(arrBuf))
+    if (res && res.ok) {
+      toast('Skärmbild sparad!', 'var(--g)')
+      ssClose()
+    }
+  } catch(e) {
+    console.error('ssSaveFile error:', e)
+    toast('Kunde inte spara', 'var(--r)')
+  }
+}
+
+function ssCropMode() {
+  if (_ssCropping) {
+    // Cancel crop
+    if (_ssCropCleanup) { _ssCropCleanup(); _ssCropCleanup = null }
+    _ssCropping = false
+    document.getElementById('ssCropInfo').style.display = 'none'
+    document.getElementById('ssCropBtn').style.background = ''
+    return
+  }
+  _ssCropping = true
+  document.getElementById('ssCropInfo').style.display = ''
+  document.getElementById('ssCropBtn').style.background = 'var(--p)'
+  document.getElementById('ssCropBtn').style.color = '#fff'
+
+  const canvas = document.getElementById('ssCanvas')
+  const wrap = canvas.parentElement
+  // Create crop overlay on top of canvas
+  const cropOverlay = document.createElement('div')
+  cropOverlay.style.cssText = 'position:absolute;inset:0;cursor:crosshair;z-index:10'
+
+  // Position relative to canvas within the scrollable wrap
+  const positionOverlay = () => {
+    cropOverlay.style.left = canvas.offsetLeft + 'px'
+    cropOverlay.style.top = canvas.offsetTop + 'px'
+    cropOverlay.style.width = canvas.offsetWidth + 'px'
+    cropOverlay.style.height = canvas.offsetHeight + 'px'
+    cropOverlay.style.inset = 'auto'
+  }
+  positionOverlay()
+
+  const cropSel = document.createElement('div')
+  cropSel.style.cssText = 'position:absolute;border:2px dashed #fff;background:rgba(70,128,255,.15);display:none;pointer-events:none;box-shadow:0 0 0 9999px rgba(0,0,0,.4)'
+  cropOverlay.appendChild(cropSel)
+
+  let sx = 0, sy = 0, dragging = false
+
+  cropOverlay.addEventListener('mousedown', e => {
+    sx = e.offsetX; sy = e.offsetY; dragging = true
+    cropSel.style.left = sx + 'px'; cropSel.style.top = sy + 'px'
+    cropSel.style.width = '0'; cropSel.style.height = '0'
+    cropSel.style.display = 'block'
+  })
+  cropOverlay.addEventListener('mousemove', e => {
+    if (!dragging) return
+    const x = Math.min(sx, e.offsetX), y = Math.min(sy, e.offsetY)
+    cropSel.style.left = x + 'px'; cropSel.style.top = y + 'px'
+    cropSel.style.width = Math.abs(e.offsetX - sx) + 'px'
+    cropSel.style.height = Math.abs(e.offsetY - sy) + 'px'
+  })
+  cropOverlay.addEventListener('mouseup', e => {
+    dragging = false
+  })
+
+  function onKey(ev) {
+    if (ev.key === 'Escape') {
+      cleanup()
+    } else if (ev.key === 'Enter') {
+      // Apply crop
+      const scaleX = canvas.width / canvas.offsetWidth
+      const scaleY = canvas.height / canvas.offsetHeight
+      const r = {
+        x: Math.round(parseInt(cropSel.style.left) * scaleX),
+        y: Math.round(parseInt(cropSel.style.top) * scaleY),
+        width: Math.round(parseInt(cropSel.style.width) * scaleX),
+        height: Math.round(parseInt(cropSel.style.height) * scaleY),
+      }
+      cleanup()
+      if (r.width < 2 || r.height < 2) return
+      // Crop the canvas
+      const ctx = canvas.getContext('2d')
+      const imgData = ctx.getImageData(r.x, r.y, r.width, r.height)
+      canvas.width = r.width
+      canvas.height = r.height
+      ctx.putImageData(imgData, 0, 0)
+      document.getElementById('ssSize').textContent = r.width + ' × ' + r.height + ' px'
+      toast('Beskuren!', 'var(--g)')
+    }
+  }
+  document.addEventListener('keydown', onKey)
+
+  function cleanup() {
+    cropOverlay.remove()
+    document.removeEventListener('keydown', onKey)
+    _ssCropping = false
+    _ssCropCleanup = null
+    document.getElementById('ssCropInfo').style.display = 'none'
+    const btn = document.getElementById('ssCropBtn')
+    btn.style.background = ''; btn.style.color = ''
+  }
+  _ssCropCleanup = cleanup
+
+  wrap.style.position = 'relative'
+  wrap.appendChild(cropOverlay)
+}
+
+// Keyboard shortcuts in screenshot editor
+document.addEventListener('keydown', e => {
+  if (!document.getElementById('ssEditor').classList.contains('open')) return
+  if (_ssCropping) return // handled by crop mode
+  const ctrl = e.ctrlKey || e.metaKey
+  if (ctrl && e.key === 'c') { e.preventDefault(); ssCopyClipboard() }
+  else if (ctrl && e.key === 's') { e.preventDefault(); ssSaveFile() }
+  else if (e.key === 'Escape') { ssClose() }
+})
 
 // ── Webview right-click context menu builder ──
 function _showWebviewContextMenu(el, ctx) {

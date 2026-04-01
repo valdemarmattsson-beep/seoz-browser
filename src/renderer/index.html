@@ -6003,8 +6003,41 @@ function updateAgentChip() {
   }
 }
 
-window.__mcpExecute = async function(toolName, args) {
-  const wv = getWV()
+
+// ── MCP Background Webviews ──
+// Each MCP session gets its own hidden webview so Claude doesn't interfere with user browsing
+const _mcpWebviews = new Map() // sessionId -> webview element
+const _mcpContainer = document.createElement('div')
+_mcpContainer.id = 'mcp-webview-container'
+_mcpContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:1920px;height:1080px;overflow:hidden;pointer-events:none;z-index:-1;'
+document.body.appendChild(_mcpContainer)
+
+function _getOrCreateMcpWebview(sessionId) {
+  if (_mcpWebviews.has(sessionId)) return _mcpWebviews.get(sessionId)
+  const el = document.createElement('webview')
+  el.setAttribute('useragent', CHROME_UA_WV)
+  el.setAttribute('allowpopups', '')
+  el.style.cssText = 'width:1920px;height:1080px;border:none;'
+  el.src = 'about:blank'
+  _mcpContainer.appendChild(el)
+  _mcpWebviews.set(sessionId, el)
+  console.log('[MCP] Created background webview for session:', sessionId)
+  return el
+}
+
+window.__mcpCleanupSession = function(sessionId) {
+  const el = _mcpWebviews.get(sessionId)
+  if (el) {
+    try { el.remove() } catch(e) {}
+    _mcpWebviews.delete(sessionId)
+    console.log('[MCP] Destroyed background webview for session:', sessionId)
+  }
+}
+
+window.__mcpExecute = async function(toolName, args, sessionId) {
+  // Use dedicated hidden webview for MCP sessions, user's active tab otherwise
+  const wv = sessionId ? _getOrCreateMcpWebview(sessionId) : getWV()
+  const isMcpSession = !!sessionId
   markAgentActive(toolName)
 
   switch (toolName) {
@@ -6027,9 +6060,11 @@ window.__mcpExecute = async function(toolName, args) {
           wv.loadURL(url)
         }
       }
-      const tab = getActive()
-      if (tab) { tab.url = url; tab.loading = false; scheduleRenderTabs() }
-      document.getElementById('urlInput').value = url
+      if (!isMcpSession) {
+        const tab = getActive()
+        if (tab) { tab.url = url; tab.loading = false; scheduleRenderTabs() }
+        document.getElementById('urlInput').value = url
+      }
       return { ok: true, url, title: wv ? await wv.executeJavaScript('document.title') : '' }
     }
 
@@ -6095,10 +6130,16 @@ window.__mcpExecute = async function(toolName, args) {
     }
 
     case 'get_tabs': {
+      if (isMcpSession) {
+        return { mcpSession: sessionId, info: 'This MCP session has its own background webview. User tabs are not affected.', url: wv.getURL ? wv.getURL() : wv.src }
+      }
       return tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.id === activeId, loading: t.loading }))
     }
 
     case 'switch_tab': {
+      if (isMcpSession) {
+        return { ok: true, info: 'MCP session uses its own background webview — switch_tab is not needed' }
+      }
       const id = args.tabId
       const tab = tabs.find(t => t.id === id)
       if (!tab) return { error: 'Tab not found: ' + id }
@@ -6109,6 +6150,12 @@ window.__mcpExecute = async function(toolName, args) {
     }
 
     case 'new_tab': {
+      if (isMcpSession) {
+        // In MCP mode, navigate the session's background webview instead
+        const url = args.url || 'https://www.google.com'
+        wv.loadURL(url)
+        return { ok: true, info: 'MCP session uses dedicated background webview', url }
+      }
       newTab(args.url || 'https://www.google.com')
       const tab = getActive()
       _agentActivity.set(tab.id, { lastSeen: Date.now(), toolName: 'new_tab' })

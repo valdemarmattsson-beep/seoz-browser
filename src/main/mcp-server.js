@@ -17,6 +17,7 @@ const PROTOCOL_VERSION = '2024-11-05'
 
 let server = null
 let win = null
+const mcpSessions = new Map() // sessionId -> { createdAt }
 let getWinFn = null
 let terminalExecFn = null
 let historySearchFn = null
@@ -292,7 +293,7 @@ const TOOLS = [
 ]
 
 // ── Execute MCP tool via IPC to renderer (or directly for terminal) ──
-async function executeTool(name, args) {
+async function executeTool(name, args, sessionId) {
   // Terminal tools run directly in main process — no renderer round-trip
   if (name === 'run_command') {
     if (!terminalExecFn) throw new Error('Terminal not initialised')
@@ -318,7 +319,7 @@ async function executeTool(name, args) {
 
   // Browser tools execute JS in the webview via renderer
   const result = await w.webContents.executeJavaScript(
-    `window.__mcpExecute(${JSON.stringify(name)}, ${JSON.stringify(args)})`
+    `window.__mcpExecute(${JSON.stringify(name)}, ${JSON.stringify(args)}, ${JSON.stringify(sessionId)})`
   )
   return result
 }
@@ -332,7 +333,7 @@ function jsonrpcError(id, code, message) {
 }
 
 // ── Handle JSON-RPC requests ──
-async function handleRequest(body) {
+async function handleRequest(body, sessionId) {
   let req
   try { req = JSON.parse(body) } catch { return jsonrpcError(null, -32700, 'Parse error') }
 
@@ -355,7 +356,7 @@ async function handleRequest(body) {
     case 'tools/call': {
       const { name, arguments: args } = params || {}
       try {
-        const result = await executeTool(name, args || {})
+        const result = await executeTool(name, args || {}, sessionId)
         const text = result == null ? String(result) : (typeof result === 'string' ? result : JSON.stringify(result, null, 2))
         return jsonrpcResult(id, {
           content: [{ type: 'text', text }]
@@ -408,17 +409,27 @@ function startMCPServer() {
 
       // Keep alive
       const keepAlive = setInterval(() => { res.write(':keepalive\n\n') }, 15000)
-      req.on('close', () => clearInterval(keepAlive))
+      mcpSessions.set(sessionId, { createdAt: Date.now() })
+      req.on('close', () => {
+        clearInterval(keepAlive)
+        mcpSessions.delete(sessionId)
+        // Tell renderer to destroy the MCP webview for this session
+        const w = getWindow()
+        if (w) w.webContents.executeJavaScript(`window.__mcpCleanupSession(${JSON.stringify(sessionId)})`).catch(() => {})
+      })
       return
     }
 
     // JSON-RPC message endpoint
     if (req.method === 'POST' && (req.url === '/message' || req.url?.startsWith('/message?'))) {
+      // Extract sessionId from query string
+      const msgUrl = new URL(req.url, 'http://localhost')
+      const sessionId = msgUrl.searchParams.get('sessionId') || null
       let body = ''
       req.on('data', chunk => body += chunk)
       req.on('end', async () => {
         try {
-          const response = await handleRequest(body)
+          const response = await handleRequest(body, sessionId)
           if (response === null) {
             res.writeHead(202); res.end(); return
           }

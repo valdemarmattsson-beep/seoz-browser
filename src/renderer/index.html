@@ -2516,13 +2516,20 @@ async function fetchClientData(clientId) {
     const [kwRes, aiRes, tasksRes] = await Promise.all([
       SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
       SE.fetchApi({ endpoint: '/ai-visibility', apiKey, params: { clientId } }),
-      SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId, status: 'all' } }).catch(() => null),
     ])
     if (kwRes && kwRes.keywords) synced.keywords = kwRes.keywords
     if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
-    if (Array.isArray(tasksRes)) synced.tasks = tasksRes
-    else if (tasksRes && Array.isArray(tasksRes.tasks)) synced.tasks = tasksRes.tasks
-    else synced.tasks = []
+    // Fetch tasks separately via renderer fetch (needs GET with clientId)
+    try {
+      const tasksRes = await _flowApiCall('/tasks', { clientId, status: 'all' })
+      if (Array.isArray(tasksRes)) synced.tasks = tasksRes
+      else if (tasksRes && Array.isArray(tasksRes.tasks)) synced.tasks = tasksRes.tasks
+      else synced.tasks = []
+      console.log('[SEOZ] Tasks loaded:', synced.tasks.length)
+    } catch(te) {
+      console.warn('[SEOZ] Tasks fetch failed:', te.message)
+      synced.tasks = []
+    }
   } catch(e) {
     console.error('fetchClientData error:', e)
   }
@@ -3872,18 +3879,19 @@ async function addTask() {
   if (!text) return
   inp.value = ''
   try {
-    const apiKey = await SE.getApiKey()
-    if (!apiKey) { toast('Ingen API-nyckel', 'var(--r)'); return }
     const res = await _flowApiPost('/tasks', {
       title: text,
       priority: 'medium',
       category: '',
       url: document.getElementById('urlInput').value || '',
     })
-    // Add to local cache
+    // Add to local cache or refresh from server
     if (res && res.id) {
       if (!synced.tasks) synced.tasks = []
       synced.tasks.unshift(res)
+    } else if (res && res.task && res.task.id) {
+      if (!synced.tasks) synced.tasks = []
+      synced.tasks.unshift(res.task)
     } else {
       await refreshTasks()
     }
@@ -3900,44 +3908,41 @@ async function toggleTask(taskId) {
   if (!task) return
   const newStatus = task.status === 'done' ? 'open' : 'done'
   try {
-    const apiKey = await SE.getApiKey()
-    if (!apiKey) return
-    await _flowApiPost('/tasks/' + taskId, { status: newStatus })
+    await _flowApiPatch('/tasks/' + taskId, { status: newStatus })
     task.status = newStatus
     renderPanelContent('tasks')
   } catch(e) {
     console.error('toggleTask error:', e)
-    toast('Kunde inte uppdatera task', 'var(--r)')
+    toast('Kunde inte uppdatera task: ' + e.message, 'var(--r)')
   }
 }
 
 async function deleteTask(taskId) {
   try {
-    const apiKey = await SE.getApiKey()
-    if (!apiKey) return
-    await _flowApiPost('/tasks/' + taskId, { status: 'deleted' })
+    await _flowApiPatch('/tasks/' + taskId, { status: 'deleted' })
     synced.tasks = (synced.tasks || []).filter(t => t.id !== taskId)
     renderPanelContent('tasks')
     toast('Task borttagen', 'var(--g)')
   } catch(e) {
     console.error('deleteTask error:', e)
-    toast('Kunde inte ta bort task', 'var(--r)')
+    toast('Kunde inte ta bort task: ' + e.message, 'var(--r)')
   }
 }
 
 async function refreshTasks() {
   try {
-    const apiKey = await SE.getApiKey()
     const clientId = synced.activeClientId
-    if (!apiKey || !clientId) return
-    const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId, status: 'all' } })
+    if (!clientId) return
+    const res = await _flowApiCall('/tasks', { clientId, status: 'all' })
     if (Array.isArray(res)) synced.tasks = res
     else if (res && Array.isArray(res.tasks)) synced.tasks = res.tasks
+    else synced.tasks = []
+    console.log('[SEOZ] Tasks refreshed:', synced.tasks.length)
     renderPanelContent('tasks')
     toast('Tasks synkade', 'var(--g)')
   } catch(e) {
     console.error('refreshTasks error:', e)
-    toast('Kunde inte hämta tasks', 'var(--r)')
+    toast('Kunde inte hämta tasks: ' + e.message, 'var(--r)')
   }
 }
 
@@ -5143,6 +5148,22 @@ async function _flowApiPost(path, body = {}) {
 
   const res = await fetch('https://seoz.se/api' + path, {
     method: 'POST',
+    headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
+    body: JSON.stringify(body)
+  })
+  if (!res.ok) {
+    const txt = await res.text().catch(() => '')
+    throw new Error(`API ${res.status}: ${txt.slice(0, 100)}`)
+  }
+  return res.json()
+}
+
+async function _flowApiPatch(path, body = {}) {
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) throw new Error('Ingen SEOZ API-nyckel konfigurerad')
+
+  const res = await fetch('https://seoz.se/api' + path, {
+    method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify(body)
   })

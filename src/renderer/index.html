@@ -1711,7 +1711,15 @@ function _attachWebviewListeners(el, tabId) {
   })
   el.addEventListener('new-window', e => {
     e.preventDefault()
-    if (e.url && /^https?:\/\//i.test(e.url)) newTab(e.url)
+    if (!e.url || !/^https?:\/\//i.test(e.url)) return
+    // disposition: 'foreground-tab' = Ctrl+click/middle-click, 'background-tab' = Ctrl+Shift+click
+    // 'new-window'/'default' = target="_blank" or window.open() — navigate in same tab
+    if (e.disposition === 'foreground-tab' || e.disposition === 'background-tab') {
+      newTab(e.url)
+    } else {
+      // Stay in current tab — regular target="_blank" links, ads, popups
+      el.loadURL(e.url)
+    }
   })
 
   // Find-in-page results
@@ -3529,6 +3537,13 @@ SE.on('open-url', url => {
   }
 })
 
+// Navigate current tab (for target="_blank" / window.open that should stay in same tab)
+SE.on('navigate-current', url => {
+  if (url && /^https?:\/\//i.test(url) && wv) {
+    wv.loadURL(url)
+  }
+})
+
 // Close popup on outside click
 document.addEventListener('click', e => {
   if (!e.target.closest('#blockerWrap')) {
@@ -3759,7 +3774,8 @@ function clearHistory() {
     const lower = q.toLowerCase()
     matches = dedupe(browsingHistory.filter(h =>
       (h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)) &&
-      !/google\.\w+\/search\?/i.test(h.url)
+      !/google\.\w+\/search/i.test(h.url) &&
+      !h.title.toLowerCase().includes('sök på google')
     )).sort((a, b) => {
       // Prioritize root/main pages over subpages
       try {

@@ -182,13 +182,13 @@ function createWindow() {
     icon: APP_ICON,
   })
 
-  // Grant microphone permission for voice chat (getUserMedia)
+  // Grant permissions for voice chat, clipboard, notifications etc.
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'audioCapture']
+    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications']
     callback(allowed.includes(permission))
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    const allowed = ['media', 'microphone', 'audioCapture']
+    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications']
     return allowed.includes(permission)
   })
 
@@ -201,10 +201,17 @@ function createWindow() {
     if (input.shift && input.key === 'F5') event.preventDefault()
   })
 
-  // Intercept any window.open / target="_blank" from webview guest pages
-  // and redirect to renderer so it opens as a new tab instead of a new OS window
-  win.webContents.setWindowOpenHandler(({ url }) => {
-    win.webContents.send('open-url', url)
+  // Intercept any window.open / target="_blank" that escapes webview
+  // Navigate in same tab instead of opening a new OS window
+  win.webContents.setWindowOpenHandler(({ url, disposition }) => {
+    if (url && /^https?:\/\//i.test(url)) {
+      // Only open as new tab for explicit user actions (Ctrl+click etc)
+      if (disposition === 'foreground-tab' || disposition === 'background-tab') {
+        win.webContents.send('open-url', url)
+      } else {
+        win.webContents.send('navigate-current', url)
+      }
+    }
     return { action: 'deny' }
   })
 

@@ -2549,25 +2549,21 @@ async function fetchClientData(clientId) {
   if (!apiKey || !clientId) return
 
   try {
-    const [kwRes, aiRes, tasksRes] = await Promise.all([
+    const [kwRes, aiRes] = await Promise.all([
       SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
       SE.fetchApi({ endpoint: '/ai-visibility', apiKey, params: { clientId } }),
     ])
     if (kwRes && kwRes.keywords) synced.keywords = kwRes.keywords
     if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
-    // Fetch tasks separately via renderer fetch (needs GET with clientId)
-    try {
-      const tasksRes = await _flowApiCall('/tasks', { clientId, status: 'all' })
-      if (Array.isArray(tasksRes)) synced.tasks = tasksRes
-      else if (tasksRes && Array.isArray(tasksRes.tasks)) synced.tasks = tasksRes.tasks
-      else synced.tasks = []
-      console.log('[SEOZ] Tasks loaded:', synced.tasks.length)
-    } catch(te) {
-      console.warn('[SEOZ] Tasks fetch failed:', te.message)
-      synced.tasks = []
-    }
   } catch(e) {
     console.error('fetchClientData error:', e)
+  }
+  // Load tasks from local storage (per client)
+  try {
+    const saved = await SE.storeGet('tasks_' + clientId, '[]')
+    synced.tasks = JSON.parse(saved)
+  } catch(_) {
+    synced.tasks = []
   }
 }
 
@@ -3906,80 +3902,62 @@ function copyCreativeOutput() {
 }
 
 // ══════════════════════════════════════════════════════
-//  TASKS — per-client, synced with seoz.se
+//  TASKS — per-client, stored locally
 // ══════════════════════════════════════════════════════
+async function _saveTasks() {
+  const clientId = synced.activeClientId
+  if (!clientId) return
+  await SE.storeSet('tasks_' + clientId, JSON.stringify(synced.tasks || []))
+}
+
 async function addTask() {
   const inp = document.getElementById('newTaskInput')
   if (!inp) return
   const text = inp.value.trim()
   if (!text) return
   inp.value = ''
-  try {
-    const res = await _flowApiPost('/tasks', {
-      title: text,
-      priority: 'medium',
-      category: '',
-      url: document.getElementById('urlInput').value || '',
-    })
-    // Add to local cache or refresh from server
-    if (res && res.id) {
-      if (!synced.tasks) synced.tasks = []
-      synced.tasks.unshift(res)
-    } else if (res && res.task && res.task.id) {
-      if (!synced.tasks) synced.tasks = []
-      synced.tasks.unshift(res.task)
-    } else {
-      await refreshTasks()
-    }
-    toast('Task skapad', 'var(--g)')
-    renderPanelContent('tasks')
-  } catch(e) {
-    console.error('addTask error:', e)
-    toast('Kunde inte skapa task: ' + e.message, 'var(--r)')
-  }
+  if (!synced.tasks) synced.tasks = []
+  synced.tasks.unshift({
+    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    title: text,
+    description: '',
+    priority: 'medium',
+    category: '',
+    url: document.getElementById('urlInput').value || '',
+    status: 'open',
+    createdAt: new Date().toISOString(),
+  })
+  await _saveTasks()
+  toast('Task skapad', 'var(--g)')
+  renderPanelContent('tasks')
 }
 
 async function toggleTask(taskId) {
   const task = (synced.tasks || []).find(t => t.id === taskId)
   if (!task) return
-  const newStatus = task.status === 'done' ? 'open' : 'done'
-  try {
-    await _flowApiPatch('/tasks/' + taskId, { status: newStatus })
-    task.status = newStatus
-    renderPanelContent('tasks')
-  } catch(e) {
-    console.error('toggleTask error:', e)
-    toast('Kunde inte uppdatera task: ' + e.message, 'var(--r)')
-  }
+  task.status = task.status === 'done' ? 'open' : 'done'
+  await _saveTasks()
+  renderPanelContent('tasks')
 }
 
 async function deleteTask(taskId) {
-  try {
-    await _flowApiPatch('/tasks/' + taskId, { status: 'deleted' })
-    synced.tasks = (synced.tasks || []).filter(t => t.id !== taskId)
-    renderPanelContent('tasks')
-    toast('Task borttagen', 'var(--g)')
-  } catch(e) {
-    console.error('deleteTask error:', e)
-    toast('Kunde inte ta bort task: ' + e.message, 'var(--r)')
-  }
+  synced.tasks = (synced.tasks || []).filter(t => t.id !== taskId)
+  await _saveTasks()
+  renderPanelContent('tasks')
+  toast('Task borttagen', 'var(--g)')
 }
 
 async function refreshTasks() {
+  const clientId = synced.activeClientId
+  if (!clientId) return
   try {
-    const clientId = synced.activeClientId
-    if (!clientId) return
-    const res = await _flowApiCall('/tasks', { clientId, status: 'all' })
-    if (Array.isArray(res)) synced.tasks = res
-    else if (res && Array.isArray(res.tasks)) synced.tasks = res.tasks
-    else synced.tasks = []
-    console.log('[SEOZ] Tasks refreshed:', synced.tasks.length)
-    renderPanelContent('tasks')
-    toast('Tasks synkade', 'var(--g)')
-  } catch(e) {
-    console.error('refreshTasks error:', e)
-    toast('Kunde inte hämta tasks: ' + e.message, 'var(--r)')
+    const saved = await SE.storeGet('tasks_' + clientId, '[]')
+    synced.tasks = JSON.parse(saved)
+  } catch(_) {
+    synced.tasks = []
   }
+  renderPanelContent('tasks')
+  toast('Tasks laddade', 'var(--g)')
 }
 
 // ══════════════════════════════════════════════════════

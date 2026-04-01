@@ -2519,43 +2519,48 @@ async function renderPanelContent(name) {
       html = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient först för att hantera tasks.</p>'
     } else {
       const tasks = synced.tasks || []
-      const filtered = window._tasksFilter === 'all' ? tasks : tasks.filter(t => t.status === window._tasksFilter)
+      // Map filter: 'open' = new + in_progress, 'done' = done, 'all' = everything
+      const filtered = window._tasksFilter === 'all' ? tasks
+        : window._tasksFilter === 'done' ? tasks.filter(t => t.status === 'done')
+        : tasks.filter(t => t.status === 'new' || t.status === 'in_progress')
       html += `<div class="sh">TASKS — ${esc(cName || '')}</div>`
       html += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 -14px 10px;padding:0 14px">
         <div class="seo-sub-tab ${window._tasksFilter==='open'?'active':''}" onclick="window._tasksFilter='open';renderPanelContent('tasks')">Öppna</div>
         <div class="seo-sub-tab ${window._tasksFilter==='done'?'active':''}" onclick="window._tasksFilter='done';renderPanelContent('tasks')">Klara</div>
         <div class="seo-sub-tab ${window._tasksFilter==='all'?'active':''}" onclick="window._tasksFilter='all';renderPanelContent('tasks')">Alla</div>
       </div>`
-      html += `<div style="display:flex;gap:4px;margin-bottom:10px">
-        <input class="ac-inp" id="newTaskInput" placeholder="Ny task..." style="flex:1;height:30px;font-size:11px" onkeydown="if(event.key==='Enter')addTask()">
-        <button class="act-btn" style="width:30px;height:30px;flex-shrink:0;font-size:16px;padding:0" onclick="addTask()">+</button>
-      </div>`
-      html += '<div id="tasksList">'
+      html += '<div id="tasksList" style="max-height:calc(100vh - 280px);overflow-y:auto">'
       if (filtered.length === 0) {
-        html += `<p style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0">${window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks ännu.'} Lägg till en ovan.</p>`
+        html += `<p style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0">${window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks.'}</p>`
       } else {
         filtered.forEach(t => {
           const done = t.status === 'done' ? 'checked' : ''
           const strike = t.status === 'done' ? 'text-decoration:line-through;opacity:.5' : ''
-          const priCol = t.priority === 'high' ? 'var(--r)' : t.priority === 'medium' ? 'var(--w)' : 'var(--muted)'
-          const priLabel = t.priority === 'high' ? 'Hög' : t.priority === 'medium' ? 'Medium' : 'Låg'
-          const catBadge = t.category ? `<span style="font-size:8px;background:var(--panel);color:var(--muted);padding:1px 5px;border-radius:3px;margin-left:4px">${esc(t.category)}</span>` : ''
-          const dateStr = t.createdAt ? new Date(t.createdAt).toLocaleDateString('sv-SE') : ''
+          const sevCol = t.severity === 'critical' ? '#ef4444' : t.severity === 'high' ? 'var(--r)' : t.severity === 'medium' ? 'var(--w)' : 'var(--muted)'
+          const sevLabel = t.severity === 'critical' ? 'Kritisk' : t.severity === 'high' ? 'Hög' : t.severity === 'medium' ? 'Medium' : 'Låg'
+          const skillBadge = t.skill_type ? `<span style="font-size:8px;background:var(--panel);color:var(--muted);padding:1px 5px;border-radius:3px;margin-left:4px">${esc(t.skill_type)}</span>` : ''
+          const statusBadge = t.status === 'in_progress' ? `<span style="font-size:8px;background:#3b82f620;color:#3b82f6;padding:1px 5px;border-radius:3px;margin-left:4px">pågår</span>` : ''
+          const effortStr = t.effort_h ? `${t.effort_h}h` : ''
+          const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString('sv-SE') : ''
+          const scoreStr = t.priority_score ? `P${Math.round(t.priority_score)}` : ''
           html += `<div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">
             <input type="checkbox" ${done} onchange="toggleTask('${esc(t.id)}')" style="margin-top:2px;cursor:pointer;accent-color:var(--p)">
             <div style="flex:1;min-width:0">
               <div style="font-size:11px;color:var(--head);${strike}">${esc(t.title)}</div>
-              ${t.description ? `<div style="font-size:9px;color:var(--txt);margin-top:1px;${strike}">${esc(t.description).substring(0,80)}</div>` : ''}
-              <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px">
-                <span style="color:${priCol}">${priLabel}</span>${catBadge}<span>${dateStr}</span>
+              ${t.description ? `<div style="font-size:9px;color:var(--txt);margin-top:1px;${strike}">${esc(t.description).substring(0,100)}</div>` : ''}
+              ${t.url ? `<div style="font-size:8px;color:var(--p);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;cursor:pointer" onclick="document.getElementById('urlInput').value='${esc(t.url)}';wv.loadURL('${esc(t.url)}')" title="${esc(t.url)}">${esc(t.url)}</div>` : ''}
+              <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                <span style="color:${sevCol};font-weight:600">${sevLabel}</span>${skillBadge}${statusBadge}
+                ${scoreStr ? `<span title="Prioritetspoäng">${scoreStr}</span>` : ''}
+                ${effortStr ? `<span title="Uppskattad tid">⏱${effortStr}</span>` : ''}
+                <span>${dateStr}</span>
               </div>
             </div>
-            <button onclick="deleteTask('${esc(t.id)}')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0 2px;flex-shrink:0" title="Ta bort">✕</button>
           </div>`
         })
       }
       html += '</div>'
-      const openCount = tasks.filter(t => t.status === 'open').length
+      const openCount = tasks.filter(t => t.status !== 'done').length
       const doneCount = tasks.filter(t => t.status === 'done').length
       html += `<div style="margin-top:8px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
         <span>${doneCount} klara / ${openCount} öppna</span>
@@ -2871,27 +2876,41 @@ async function selectClient(clientId) {
 async function fetchClientData(clientId) {
   if (!clientId) return
 
-  // Load tasks from local storage (per client) — always, even without API key
-  try {
-    const saved = await SE.storeGet('tasks_' + clientId, '[]')
-    synced.tasks = JSON.parse(saved)
-    console.log('[SEOZ] Tasks loaded for', clientId, ':', synced.tasks.length)
-  } catch(_) {
-    synced.tasks = []
-  }
-
-  // Fetch keywords & AI visibility from API
+  // Fetch keywords, AI visibility & tasks from API
   const apiKey = await SE.getApiKey()
-  if (!apiKey) return
+  if (!apiKey) {
+    // Fallback: load tasks from local storage if no API key
+    try {
+      const saved = await SE.storeGet('tasks_' + clientId, '[]')
+      synced.tasks = JSON.parse(saved)
+    } catch(_) { synced.tasks = [] }
+    return
+  }
   try {
-    const [kwRes, aiRes] = await Promise.all([
+    const [kwRes, aiRes, taskRes] = await Promise.all([
       SE.fetchApi({ endpoint: '/keywords', apiKey, params: { clientId, days: 28 } }),
       SE.fetchApi({ endpoint: '/ai-visibility', apiKey, params: { clientId } }),
+      SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId } }),
     ])
     if (kwRes && kwRes.keywords) synced.keywords = kwRes.keywords
     if (aiRes && aiRes.overallScore != null) synced.aiVisibility = aiRes
+    if (taskRes && taskRes.tasks) {
+      synced.tasks = taskRes.tasks
+      console.log('[SEOZ] Tasks synced from API for', clientId, ':', synced.tasks.length)
+    } else {
+      // Fallback to local storage
+      try {
+        const saved = await SE.storeGet('tasks_' + clientId, '[]')
+        synced.tasks = JSON.parse(saved)
+      } catch(_) { synced.tasks = [] }
+    }
   } catch(e) {
     console.error('fetchClientData error:', e)
+    // Fallback to local storage for tasks on error
+    try {
+      const saved = await SE.storeGet('tasks_' + clientId, '[]')
+      synced.tasks = JSON.parse(saved)
+    } catch(_) { synced.tasks = [] }
   }
 }
 
@@ -4239,62 +4258,47 @@ function copyCreativeOutput() {
 }
 
 // ══════════════════════════════════════════════════════
-//  TASKS — per-client, stored locally
+//  TASKS — synced with seoz.se backend
 // ══════════════════════════════════════════════════════
-async function _saveTasks() {
-  const clientId = synced.activeClientId
-  if (!clientId) return
-  await SE.storeSet('tasks_' + clientId, JSON.stringify(synced.tasks || []))
-}
-
-async function addTask() {
-  const inp = document.getElementById('newTaskInput')
-  if (!inp) return
-  const text = inp.value.trim()
-  if (!text) return
-  inp.value = ''
-  if (!synced.tasks) synced.tasks = []
-  synced.tasks.unshift({
-    id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
-    title: text,
-    description: '',
-    priority: 'medium',
-    category: '',
-    url: document.getElementById('urlInput').value || '',
-    status: 'open',
-    createdAt: new Date().toISOString(),
-  })
-  await _saveTasks()
-  toast('Task skapad', 'var(--g)')
-  renderPanelContent('tasks')
-}
 
 async function toggleTask(taskId) {
   const task = (synced.tasks || []).find(t => t.id === taskId)
   if (!task) return
-  task.status = task.status === 'done' ? 'open' : 'done'
-  await _saveTasks()
+  const newStatus = task.status === 'done' ? 'new' : 'done'
+  const apiKey = await SE.getApiKey()
+  if (apiKey) {
+    try {
+      await SE.fetchApi({ endpoint: '/tasks', apiKey, method: 'PATCH', body: { taskId, status: newStatus } })
+      task.status = newStatus
+      if (newStatus === 'done') task.completed_at = new Date().toISOString()
+    } catch(e) {
+      console.error('[SEOZ] Toggle task error:', e)
+      toast('Kunde inte uppdatera task', 'var(--r)')
+      return
+    }
+  } else {
+    task.status = newStatus
+  }
   renderPanelContent('tasks')
-}
-
-async function deleteTask(taskId) {
-  synced.tasks = (synced.tasks || []).filter(t => t.id !== taskId)
-  await _saveTasks()
-  renderPanelContent('tasks')
-  toast('Task borttagen', 'var(--g)')
 }
 
 async function refreshTasks() {
   const clientId = synced.activeClientId
   if (!clientId) return
-  try {
-    const saved = await SE.storeGet('tasks_' + clientId, '[]')
-    synced.tasks = JSON.parse(saved)
-  } catch(_) {
-    synced.tasks = []
+  const apiKey = await SE.getApiKey()
+  if (apiKey) {
+    try {
+      const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, params: { clientId } })
+      if (res && res.tasks) {
+        synced.tasks = res.tasks
+        toast(`${res.tasks.length} tasks synkade`, 'var(--g)')
+      }
+    } catch(e) {
+      console.error('[SEOZ] Refresh tasks error:', e)
+      toast('Kunde inte hämta tasks', 'var(--r)')
+    }
   }
   renderPanelContent('tasks')
-  toast('Tasks laddade', 'var(--g)')
 }
 
 // ══════════════════════════════════════════════════════

@@ -86,20 +86,13 @@ class SeozApiClient {
   }
 
   // ── Tasks ─────────────────────────────────────────────────────────────────
-  async getTasks({ url, status = 'open' } = {}) {
-    return this._get('/tasks', { clientId: this._clientId, url, status });
-    // Returns: [{ id, title, description, priority, category, url, status, createdAt }]
-  }
-
-  async createTask({ title, description, priority, category, url }) {
-    return this._post('/tasks', {
-      clientId: this._clientId,
-      title, description, priority, category, url,
-    });
+  async getTasks({ status } = {}) {
+    return this._get('/browser/tasks', { clientId: this._clientId, status });
+    // Returns: { ok, tasks: [{ id, title, description, url, severity, status, skill_type, effort_h, priority_score, ... }] }
   }
 
   async updateTask(taskId, updates) {
-    return this._patch(`/tasks/${taskId}`, updates);
+    return this._patch('/browser/tasks', { taskId, ...updates });
   }
 
   // ── AI Visibility ─────────────────────────────────────────────────────────

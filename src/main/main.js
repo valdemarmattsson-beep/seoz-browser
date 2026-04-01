@@ -487,16 +487,20 @@ ipcMain.on('send-notification', (_, { title, body }) => {
 const API_BASE = 'https://seoz.se/api/browser'
 
 async function apiFetch(endpoint, apiKey, options = {}) {
-  const { method = 'GET', params = {} } = options
+  const { method = 'GET', params = {}, body } = options
   const url = new URL(API_BASE + endpoint)
   Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, String(v)))
-  const res = await net.fetch(url.toString(), {
+  const fetchOpts = {
     method,
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
     },
-  })
+  }
+  if (body && method !== 'GET') {
+    fetchOpts.body = JSON.stringify(body)
+  }
+  const res = await net.fetch(url.toString(), fetchOpts)
   if (!res.ok) {
     const text = await res.text().catch(() => 'Unknown error')
     return { ok: false, error: text, status: res.status }
@@ -527,8 +531,8 @@ async function doAPISync(apiKey) {
 
 ipcMain.handle('trigger-sync', async (_, apiKey) => doAPISync(apiKey))
 
-ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params }) => {
-  return apiFetch(endpoint, apiKey, { params })
+ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params, method, body }) => {
+  return apiFetch(endpoint, apiKey, { params, method, body })
 })
 
 // ══════════════════════════════════════════════════════════════════════════════

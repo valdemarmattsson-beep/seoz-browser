@@ -687,7 +687,7 @@ ipcMain.handle('terminal-history-clear', () => {
 // Expose for MCP server (direct access, no IPC round-trip)
 function terminalExecDirect(command, cwd, source) {
   const workDir = cwd || os.homedir()
-  const shell = process.platform === 'win32' ? 'powershell.exe' : '/bin/bash'
+  const shell = process.platform === 'win32' ? 'cmd.exe' : '/bin/bash'
   return new Promise((resolve) => {
     const startTime = Date.now()
     exec(command, {

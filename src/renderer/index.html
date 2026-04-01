@@ -747,7 +747,7 @@ input,textarea,select{user-select:text}
       <div class="wc-wrap">
         <div class="wc" onclick="SE.minimize()"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></div>
         <div class="wc" onclick="SE.maximize()"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8" rx="1"/></svg></div>
-        <div class="wc x" onclick="SE.close()"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg></div>
+        <div class="wc x" onclick="requestClose()"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg></div>
       </div>
     </div>
     <!-- Address bar -->
@@ -849,6 +849,22 @@ input,textarea,select{user-select:text}
         <div style="flex:1"></div>
         <button class="bm-cancel" onclick="resolvePrompt(null)">Avbryt</button>
         <button class="bm-save" onclick="resolvePrompt(document.getElementById('promptInput').value)">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Save tabs modal -->
+  <div class="bm-modal-bg" id="saveTabsModal">
+    <div class="bm-modal" style="width:340px">
+      <div class="bm-modal-hdr">
+        <h3>Spara öppna flikar?</h3>
+      </div>
+      <div class="bm-modal-body" style="font-size:12px;color:var(--txt);line-height:1.5">
+        Du har <span id="saveTabsCount">0</span> öppna flikar. Vill du spara dem så de öppnas igen nästa gång?
+      </div>
+      <div class="bm-modal-foot">
+        <button class="bm-cancel" onclick="closeSaveTabs(false)">Stäng utan att spara</button>
+        <button class="bm-save" onclick="closeSaveTabs(true)">Spara flikar</button>
       </div>
     </div>
   </div>
@@ -6478,6 +6494,69 @@ function cycleTab(dir) {
   const next = (idx + dir + tabs.length) % tabs.length
   switchTab(tabs[next].id)
 }
+
+// ══════════════════════════════════════════════════════
+//  SAVE / RESTORE TABS
+// ══════════════════════════════════════════════════════
+let _closeResolve = null
+
+function requestClose() {
+  // If only one blank tab, just close
+  const realTabs = tabs.filter(t => t.url && t.url !== 'about:blank')
+  if (realTabs.length <= 1) {
+    SE.close()
+    return
+  }
+  document.getElementById('saveTabsCount').textContent = realTabs.length
+  document.getElementById('saveTabsModal').classList.add('open')
+}
+
+async function closeSaveTabs(save) {
+  document.getElementById('saveTabsModal').classList.remove('open')
+  if (save) {
+    const tabData = tabs
+      .filter(t => t.url && t.url !== 'about:blank')
+      .map(t => ({ url: t.url, title: t.title, favicon: t.favicon }))
+    await SE.storeSet('savedTabs', JSON.stringify(tabData))
+    await SE.storeSet('savedTabsActiveUrl', tabs.find(t => t.id === activeId)?.url || '')
+  } else {
+    await SE.storeSet('savedTabs', '[]')
+  }
+  SE.close()
+}
+
+async function restoreSavedTabs() {
+  try {
+    const raw = await SE.storeGet('savedTabs', '[]')
+    const saved = typeof raw === 'string' ? JSON.parse(raw) : (raw || [])
+    if (!saved.length) return
+    const activeUrl = await SE.storeGet('savedTabsActiveUrl', '')
+    // Clear saved tabs so they don't restore again on crash
+    await SE.storeSet('savedTabs', '[]')
+    // Load first saved tab into tab 1
+    const first = saved[0]
+    tabs[0].url = first.url
+    tabs[0].title = first.title || 'Ny flik'
+    tabs[0].favicon = first.favicon
+    wv.loadURL(first.url)
+    // Create remaining tabs
+    for (let i = 1; i < saved.length; i++) {
+      const s = saved[i]
+      const id = nextId++
+      tabs.push({ id, title: s.title || 'Ny flik', url: s.url, loading: false, favicon: s.favicon, _zoom: 100 })
+      createWebviewForTab(id, s.url)
+    }
+    // Switch to previously active tab
+    if (activeUrl) {
+      const match = tabs.find(t => t.url === activeUrl)
+      if (match) switchTab(match.id)
+    }
+    renderTabs()
+  } catch(_) {}
+}
+
+// Restore tabs on startup
+restoreSavedTabs()
 
 // ══════════════════════════════════════════════════════
 //  HOOK: Track history on navigation

@@ -698,6 +698,21 @@ input,textarea,select{user-select:text}
 #toast{position:fixed;bottom:20px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:11px;font-weight:600;color:var(--head);box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:7px;z-index:1000;transform:translateY(40px);opacity:0;transition:all .25s ease;pointer-events:none}
 #toast.on{transform:translateY(0);opacity:1}
 .td{width:7px;height:7px;border-radius:50%;flex-shrink:0}
+
+    /* MCP session tab styles */
+    .tab.mcp-tab { opacity: 0.85; position: relative; }
+    .tab.mcp-tab::after {
+      content: '';
+      position: absolute;
+      bottom: 0;
+      left: 0;
+      right: 0;
+      height: 2px;
+      background: var(--mcp-color, #7c3aed);
+      border-radius: 0 0 4px 4px;
+    }
+    .tab.mcp-tab .tab-title { font-style: italic; }
+    .tab.mcp-tab:hover { opacity: 1; }
 </style>
 </head>
 <body>
@@ -1932,16 +1947,30 @@ function renderTabs() {
     // Update active state
     el.classList.toggle('active', tab.id === activeId)
 
+    // MCP session tab styling — colored left border + label
+    if (tab.isMcp) {
+      el.style.borderLeft = '3px solid ' + (tab.mcpColor || '#7c3aed')
+      el.classList.add('mcp-tab')
+    } else {
+      el.style.borderLeft = ''
+      el.classList.remove('mcp-tab')
+    }
+
     // Update icon (only if changed)
     const icoWrap = el.querySelector('.tab-ico-wrap')
-    if (tab.favicon) {
+    if (tab.isMcp) {
+      // MCP tabs get a robot/Claude icon
+      if (!icoWrap.querySelector('.mcp-ico')) {
+        icoWrap.innerHTML = '<span class="mcp-ico" style="font-size:11px;filter:none;">&#x1F916;</span>'
+      }
+    } else if (tab.favicon) {
       const img = icoWrap.querySelector('img.tab-ico')
       if (!img || img.src !== tab.favicon) {
         icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\\'tab-ico\\' style=\\'font-size:11px\\'>🌐</span>'">`
       }
     } else {
       if (!icoWrap.querySelector('span.tab-ico')) icoWrap.innerHTML = '<span class="tab-ico" style="font-size:11px">🌐</span>'
-    }
+    } // end icon update
 
     // Update title (only if changed)
     const titleEl = el.querySelector('.tab-title')
@@ -5978,10 +6007,16 @@ const _MCP_MAX_LOGS = 200
 let _agentActivity = new Map() // tabId → { lastSeen, toolName }
 let _agentTimer = null
 
-function markAgentActive(tool) {
-  const tab = getActive()
-  if (!tab) return
-  _agentActivity.set(tab.id, { lastSeen: Date.now(), toolName: tool })
+function markAgentActive(tool, sessionId) {
+  let tabId
+  if (sessionId && _mcpSessionToTab.has(sessionId)) {
+    tabId = _mcpSessionToTab.get(sessionId)
+  } else {
+    const tab = getActive()
+    if (!tab) return
+    tabId = tab.id
+  }
+  _agentActivity.set(tabId, { lastSeen: Date.now(), toolName: tool })
   updateAgentChip()
   // Auto-clear after 3s of inactivity
   clearTimeout(_agentTimer)
@@ -6004,33 +6039,51 @@ function updateAgentChip() {
 }
 
 
-// ── MCP Background Webviews ──
-// Each MCP session gets its own hidden webview so Claude doesn't interfere with user browsing
-const _mcpWebviews = new Map() // sessionId -> webview element
-const _mcpContainer = document.createElement('div')
-_mcpContainer.id = 'mcp-webview-container'
-_mcpContainer.style.cssText = 'position:fixed;left:-9999px;top:0;width:1920px;height:1080px;overflow:hidden;pointer-events:none;z-index:-1;'
-document.body.appendChild(_mcpContainer)
+// ── MCP Visible Session Tabs ──
+// Each MCP session gets its own colored tab so user can see active Claude sessions
+const _mcpSessionToTab = new Map() // sessionId -> tabId
+const _mcpTabToSession = new Map() // tabId -> sessionId
+const _mcpSessionColors = ['#7c3aed','#0891b2','#059669','#d97706','#dc2626','#be185d','#4f46e5','#0d9488']
+let _mcpColorIdx = 0
 
 function _getOrCreateMcpWebview(sessionId) {
-  if (_mcpWebviews.has(sessionId)) return _mcpWebviews.get(sessionId)
-  const el = document.createElement('webview')
-  el.setAttribute('useragent', CHROME_UA_WV)
-  el.setAttribute('allowpopups', '')
-  el.style.cssText = 'width:1920px;height:1080px;border:none;'
-  el.src = 'about:blank'
-  _mcpContainer.appendChild(el)
-  _mcpWebviews.set(sessionId, el)
-  console.log('[MCP] Created background webview for session:', sessionId)
-  return el
+  // If session already has a tab, return its webview
+  if (_mcpSessionToTab.has(sessionId)) {
+    const tabId = _mcpSessionToTab.get(sessionId)
+    return _tabWebviews.get(tabId)
+  }
+  // Create a new visible tab for this MCP session
+  const tabId = nextId++
+  const color = _mcpSessionColors[_mcpColorIdx % _mcpSessionColors.length]
+  _mcpColorIdx++
+  const shortId = sessionId ? sessionId.slice(0, 6) : '?'
+  tabs.push({ id: tabId, title: 'Claude · ' + shortId, url: 'about:blank', loading: false, favicon: null, _zoom: 100, isMcp: true, mcpSessionId: sessionId, mcpColor: color })
+  createWebviewForTab(tabId, 'about:blank')
+  _mcpSessionToTab.set(sessionId, tabId)
+  _mcpTabToSession.set(tabId, sessionId)
+  scheduleRenderTabs()
+  console.log('[MCP] Created visible tab', tabId, 'for session:', sessionId, 'color:', color)
+  return _tabWebviews.get(tabId)
 }
 
 window.__mcpCleanupSession = function(sessionId) {
-  const el = _mcpWebviews.get(sessionId)
-  if (el) {
-    try { el.remove() } catch(e) {}
-    _mcpWebviews.delete(sessionId)
-    console.log('[MCP] Destroyed background webview for session:', sessionId)
+  const tabId = _mcpSessionToTab.get(sessionId)
+  if (tabId != null) {
+    // Remove the webview
+    const wvEl = _tabWebviews.get(tabId)
+    if (wvEl) { try { wvEl.remove() } catch(e) {} _tabWebviews.delete(tabId) }
+    // Remove the tab from tabs array
+    tabs = tabs.filter(t => t.id !== tabId)
+    // Clean up maps
+    _mcpSessionToTab.delete(sessionId)
+    _mcpTabToSession.delete(tabId)
+    // If user was viewing this tab, switch to another
+    if (activeId === tabId && tabs.length > 0) {
+      switchTab(tabs[tabs.length - 1].id)
+    } else {
+      scheduleRenderTabs()
+    }
+    console.log('[MCP] Removed tab', tabId, 'for session:', sessionId)
   }
 }
 
@@ -6038,7 +6091,7 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
   // Use dedicated hidden webview for MCP sessions, user's active tab otherwise
   const wv = sessionId ? _getOrCreateMcpWebview(sessionId) : getWV()
   const isMcpSession = !!sessionId
-  markAgentActive(toolName)
+  markAgentActive(toolName, sessionId)
 
   switch (toolName) {
     case 'navigate': {
@@ -6060,12 +6113,23 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
           wv.loadURL(url)
         }
       }
-      if (!isMcpSession) {
+      if (isMcpSession) {
+        // Update the MCP tab's url and title without touching activeId
+        const mcpTabId = _mcpSessionToTab.get(sessionId)
+        const mcpTab = mcpTabId != null ? tabs.find(t => t.id === mcpTabId) : null
+        if (mcpTab) {
+          mcpTab.url = url
+          mcpTab.loading = false
+          const t = wv ? await wv.executeJavaScript('document.title').catch(() => '') : ''
+          if (t) mcpTab.title = 'Claude \u00b7 ' + t.slice(0, 30)
+          scheduleRenderTabs()
+        }
+      } else {
         const tab = getActive()
         if (tab) { tab.url = url; tab.loading = false; scheduleRenderTabs() }
         document.getElementById('urlInput').value = url
       }
-      return { ok: true, url, title: wv ? await wv.executeJavaScript('document.title') : '' }
+      return { ok: true, url, title: wv ? await wv.executeJavaScript('document.title').catch(() => '') : '' }
     }
 
     case 'get_page_content': {
@@ -6131,14 +6195,15 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
 
     case 'get_tabs': {
       if (isMcpSession) {
-        return { mcpSession: sessionId, info: 'This MCP session has its own background webview. User tabs are not affected.', url: wv.getURL ? wv.getURL() : wv.src }
+        const mcpTabId = _mcpSessionToTab.get(sessionId)
+        return { mcpSession: sessionId, tabId: mcpTabId, info: 'This MCP session has its own tab. User tabs are not affected.', url: wv.getURL ? wv.getURL() : wv.src }
       }
-      return tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.id === activeId, loading: t.loading }))
+      return tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.id === activeId, loading: t.loading, isMcp: !!t.isMcp }))
     }
 
     case 'switch_tab': {
       if (isMcpSession) {
-        return { ok: true, info: 'MCP session uses its own background webview — switch_tab is not needed' }
+        return { ok: true, info: 'MCP session has its own tab — switch_tab is not needed' }
       }
       const id = args.tabId
       const tab = tabs.find(t => t.id === id)
@@ -6151,10 +6216,10 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
 
     case 'new_tab': {
       if (isMcpSession) {
-        // In MCP mode, navigate the session's background webview instead
+        // In MCP mode, navigate the session's tab webview instead of creating a new tab
         const url = args.url || 'https://www.google.com'
         wv.loadURL(url)
-        return { ok: true, info: 'MCP session uses dedicated background webview', url }
+        return { ok: true, info: 'MCP session navigated its own tab', url }
       }
       newTab(args.url || 'https://www.google.com')
       const tab = getActive()

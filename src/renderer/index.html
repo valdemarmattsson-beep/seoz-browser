@@ -574,6 +574,7 @@ input,textarea,select{user-select:text}
   background:var(--card);border-top:2px solid var(--p);
   display:flex;flex-direction:column;
   transition:height .2s ease;
+  user-select:text;-webkit-user-select:text;cursor:auto;
 }
 .inspector-drawer.open{height:320px}
 .inspector-drawer.resizing{transition:none!important}
@@ -1277,6 +1278,11 @@ const WV_CONTEXT_MENU_SCRIPT = `
     e.preventDefault()
     console.log('[SEOZ-ZOOM]' + (e.deltaY < 0 ? 'in' : 'out'))
   }, { passive: false })
+
+  // Left-click closes context menu in parent
+  document.addEventListener('click', () => {
+    console.log('[SEOZ-CLICK]')
+  })
 `
 
 // ── Webview right-click context menu builder ──
@@ -1401,6 +1407,11 @@ function _attachWebviewListeners(el, tabId) {
 
   // Console message capture (context menu, zoom, SEOZ-PICK, errors)
   el.addEventListener('console-message', e => {
+    // ── Left-click in webview closes context menu ──
+    if (e.message === '[SEOZ-CLICK]') {
+      hideCtx()
+      return
+    }
     // ── Right-click context menu from webview ──
     if (e.message && e.message.startsWith('[SEOZ-CTX]')) {
       if (!_isActive()) return
@@ -6067,12 +6078,38 @@ function renderInspImages(d) {
   }
 
   html += '<div class="insp-section"><div class="insp-section-title">Alla bilder</div>'
-  d.images.slice(0, 50).forEach(i => {
-    html += `<div class="insp-row"><div class="insp-label" style="width:60px"><img src="${esc(i.src)}" style="max-width:50px;max-height:30px;border-radius:3px" onerror="this.style.display='none'"></div>
-    <div class="insp-value" style="font-size:10px">${esc(i.alt) || '<em style="color:var(--r)">Ingen alt</em>'} <span style="color:var(--muted)">${i.width}x${i.height}${i.loading ? ' loading='+i.loading : ''}</span></div></div>`
+  d.images.slice(0, 50).forEach((i, idx) => {
+    const altTag = i.hasAlt
+      ? '<span class="insp-tag green">alt</span>'
+      : '<span class="insp-tag red">saknar alt</span>'
+    html += `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start">
+      <div style="flex-shrink:0;width:80px;height:60px;border-radius:4px;overflow:hidden;background:var(--panel);display:flex;align-items:center;justify-content:center;border:1px solid var(--border)">
+        <img src="${esc(i.src)}" style="max-width:78px;max-height:58px;object-fit:contain" onerror="this.style.display='none';this.parentNode.insertAdjacentHTML('beforeend','<span style=&quot;font-size:9px;color:var(--muted)&quot;>Trasig</span>')">
+      </div>
+      <div style="flex:1;min-width:0;font-size:10px">
+        <div style="font-weight:600;color:var(--head);margin-bottom:2px;word-break:break-all">${esc(i.src.split('/').pop().split('?')[0] || i.src.substring(0, 40))}</div>
+        <div style="color:var(--muted);margin-bottom:3px">${i.width}x${i.height}${i.loading ? ' · loading=' + i.loading : ''}</div>
+        <div style="margin-bottom:4px">${altTag} <span style="color:var(--txt)">${esc(i.alt) || ''}</span></div>
+        <div style="display:flex;gap:4px">
+          <button class="act-btn" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex" onclick="window.open('${esc(i.src)}','_blank')">Öppna</button>
+          <button class="act-btn" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex;background:var(--g)" onclick="downloadInspImage('${esc(i.src)}')">Ladda ner</button>
+          <button class="act-btn" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex;background:var(--border);color:var(--txt)" onclick="navigator.clipboard.writeText('${esc(i.src)}');toast('URL kopierad','var(--g)')">Kopiera URL</button>
+        </div>
+      </div>
+    </div>`
   })
   html += '</div>'
   return html
+}
+
+function downloadInspImage(url) {
+  const safeUrl = url.replace(/\\/g,'\\\\').replace(/'/g,"\\'")
+  wv.executeJavaScript(
+    "(function(){var a=document.createElement('a');a.href='" + safeUrl + "';a.download='" + safeUrl.split('/').pop().split('?')[0] + "';document.body.appendChild(a);a.click();document.body.removeChild(a)})()"
+  ).catch(function() {
+    newTab(url)
+  })
+  toast('Laddar ner bild...', 'var(--g)')
 }
 
 function renderInspSchema(d) {

@@ -2542,27 +2542,54 @@ async function renderPanelContent(name) {
     const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
     const cName = clientObj ? clientObj.name : null
     if (!window._tasksFilter) window._tasksFilter = 'open'
+    if (!window._expandedTaskId) window._expandedTaskId = null
+    if (!window._showNewTaskForm) window._showNewTaskForm = false
 
     let html = ''
     if (!synced.activeClientId) {
       html = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient först för att hantera tasks.</p>'
     } else {
       const tasks = synced.tasks || []
-      // Map filter: 'open' = new + in_progress, 'done' = done, 'all' = everything
       const filtered = window._tasksFilter === 'all' ? tasks
         : window._tasksFilter === 'done' ? tasks.filter(t => t.status === 'done')
         : tasks.filter(t => t.status === 'new' || t.status === 'in_progress')
-      html += `<div class="sh">TASKS — ${esc(cName || '')}</div>`
+      html += `<div class="sh" style="display:flex;justify-content:space-between;align-items:center">
+        <span>TASKS — ${esc(cName || '')}</span>
+        <button class="act-btn" style="font-size:11px;padding:1px 8px;height:auto" onclick="window._showNewTaskForm=!window._showNewTaskForm;renderPanelContent('tasks')" title="Ny task">+ Ny</button>
+      </div>`
       html += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 -14px 10px;padding:0 14px">
         <div class="seo-sub-tab ${window._tasksFilter==='open'?'active':''}" onclick="window._tasksFilter='open';renderPanelContent('tasks')">Öppna</div>
         <div class="seo-sub-tab ${window._tasksFilter==='done'?'active':''}" onclick="window._tasksFilter='done';renderPanelContent('tasks')">Klara</div>
         <div class="seo-sub-tab ${window._tasksFilter==='all'?'active':''}" onclick="window._tasksFilter='all';renderPanelContent('tasks')">Alla</div>
       </div>`
-      html += '<div id="tasksList" style="max-height:calc(100vh - 280px);overflow-y:auto">'
+      // ── New task form ──
+      if (window._showNewTaskForm) {
+        html += `<div style="background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:10px">
+          <div style="font-size:10px;font-weight:700;color:var(--head);margin-bottom:6px">NY TASK</div>
+          <input id="nt_title" class="ac-inp" placeholder="Titel *" style="width:100%;height:28px;font-size:11px;margin-bottom:4px">
+          <textarea id="nt_desc" class="ac-inp" placeholder="Beskrivning..." rows="2" style="width:100%;font-size:10px;resize:vertical;margin-bottom:4px"></textarea>
+          <input id="nt_url" class="ac-inp" placeholder="URL (valfritt)" style="width:100%;height:26px;font-size:10px;margin-bottom:6px">
+          <div style="display:flex;gap:4px;margin-bottom:6px">
+            <select id="nt_severity" class="ac-inp" style="flex:1;height:26px;font-size:10px">
+              <option value="low">Låg</option><option value="medium" selected>Medium</option><option value="high">Hög</option><option value="critical">Kritisk</option>
+            </select>
+            <select id="nt_skill" class="ac-inp" style="flex:1;height:26px;font-size:10px">
+              <option value="technical">Teknisk</option><option value="content">Innehåll</option><option value="mixed" selected>Blandat</option><option value="keyword_research">Nyckelord</option>
+            </select>
+            <input id="nt_effort" class="ac-inp" type="number" min="0.5" step="0.5" value="1" style="width:50px;height:26px;font-size:10px" title="Timmar">
+          </div>
+          <div style="display:flex;gap:4px;justify-content:flex-end">
+            <button class="act-btn" style="font-size:10px;padding:3px 10px;height:auto;background:var(--border);color:var(--txt)" onclick="window._showNewTaskForm=false;renderPanelContent('tasks')">Avbryt</button>
+            <button class="act-btn" style="font-size:10px;padding:3px 10px;height:auto" onclick="createTask()">Skapa</button>
+          </div>
+        </div>`
+      }
+      html += '<div id="tasksList" style="max-height:calc(100vh - 320px);overflow-y:auto">'
       if (filtered.length === 0) {
         html += `<p style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0">${window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks.'}</p>`
       } else {
         filtered.forEach(t => {
+          const isExpanded = window._expandedTaskId === t.id
           const done = t.status === 'done' ? 'checked' : ''
           const strike = t.status === 'done' ? 'text-decoration:line-through;opacity:.5' : ''
           const sevCol = t.severity === 'critical' ? '#ef4444' : t.severity === 'high' ? 'var(--r)' : t.severity === 'medium' ? 'var(--w)' : 'var(--muted)'
@@ -2572,20 +2599,79 @@ async function renderPanelContent(name) {
           const effortStr = t.effort_h ? `${t.effort_h}h` : ''
           const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString('sv-SE') : ''
           const scoreStr = t.priority_score ? `P${Math.round(t.priority_score)}` : ''
-          html += `<div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;border-bottom:1px solid var(--border)">
-            <input type="checkbox" ${done} onchange="toggleTask('${esc(t.id)}')" style="margin-top:2px;cursor:pointer;accent-color:var(--p)">
-            <div style="flex:1;min-width:0">
-              <div style="font-size:11px;color:var(--head);${strike}">${esc(t.title)}</div>
-              ${t.description ? `<div style="font-size:9px;color:var(--txt);margin-top:1px;${strike}">${esc(t.description).substring(0,100)}</div>` : ''}
-              ${t.url ? `<div style="font-size:8px;color:var(--p);margin-top:1px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:220px;cursor:pointer" onclick="document.getElementById('urlInput').value='${esc(t.url)}';wv.loadURL('${esc(t.url)}')" title="${esc(t.url)}">${esc(t.url)}</div>` : ''}
-              <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                <span style="color:${sevCol};font-weight:600">${sevLabel}</span>${skillBadge}${statusBadge}
-                ${scoreStr ? `<span title="Prioritetspoäng">${scoreStr}</span>` : ''}
-                ${effortStr ? `<span title="Uppskattad tid">⏱${effortStr}</span>` : ''}
-                <span>${dateStr}</span>
+          // ── Collapsed row ──
+          html += `<div style="border-bottom:1px solid var(--border)">
+            <div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;cursor:pointer" onclick="window._expandedTaskId=window._expandedTaskId==='${esc(t.id)}'?null:'${esc(t.id)}';renderPanelContent('tasks')">
+              <input type="checkbox" ${done} onchange="event.stopPropagation();toggleTask('${esc(t.id)}')" style="margin-top:2px;cursor:pointer;accent-color:var(--p)">
+              <div style="flex:1;min-width:0">
+                <div style="font-size:11px;color:var(--head);${strike}">${esc(t.title)}</div>
+                <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
+                  <span style="color:${sevCol};font-weight:600">${sevLabel}</span>${skillBadge}${statusBadge}
+                  ${scoreStr ? `<span title="Prioritetspoäng">${scoreStr}</span>` : ''}
+                  ${effortStr ? `<span title="Uppskattad tid">⏱${effortStr}</span>` : ''}
+                  <span>${dateStr}</span>
+                </div>
               </div>
-            </div>
-          </div>`
+              <span style="font-size:10px;color:var(--muted);padding:2px">${isExpanded ? '▲' : '▼'}</span>
+            </div>`
+          // ── Expanded detail/edit view ──
+          if (isExpanded) {
+            html += `<div style="padding:0 0 8px 22px">
+              <div style="margin-bottom:6px">
+                <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Titel</label>
+                <input id="te_title_${esc(t.id)}" class="ac-inp" value="${esc(t.title)}" style="width:100%;height:26px;font-size:11px">
+              </div>
+              <div style="margin-bottom:6px">
+                <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Beskrivning</label>
+                <textarea id="te_desc_${esc(t.id)}" class="ac-inp" rows="3" style="width:100%;font-size:10px;resize:vertical">${esc(t.description || '')}</textarea>
+              </div>
+              <div style="margin-bottom:6px">
+                <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">URL</label>
+                <input id="te_url_${esc(t.id)}" class="ac-inp" value="${esc(t.url || '')}" style="width:100%;height:26px;font-size:10px">
+              </div>
+              <div style="display:flex;gap:4px;margin-bottom:6px">
+                <div style="flex:1">
+                  <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Allvarlighet</label>
+                  <select id="te_sev_${esc(t.id)}" class="ac-inp" style="width:100%;height:26px;font-size:10px">
+                    <option value="low" ${t.severity==='low'?'selected':''}>Låg</option>
+                    <option value="medium" ${t.severity==='medium'?'selected':''}>Medium</option>
+                    <option value="high" ${t.severity==='high'?'selected':''}>Hög</option>
+                    <option value="critical" ${t.severity==='critical'?'selected':''}>Kritisk</option>
+                  </select>
+                </div>
+                <div style="flex:1">
+                  <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Status</label>
+                  <select id="te_status_${esc(t.id)}" class="ac-inp" style="width:100%;height:26px;font-size:10px">
+                    <option value="new" ${t.status==='new'?'selected':''}>Ny</option>
+                    <option value="in_progress" ${t.status==='in_progress'?'selected':''}>Pågår</option>
+                    <option value="done" ${t.status==='done'?'selected':''}>Klar</option>
+                  </select>
+                </div>
+              </div>
+              <div style="display:flex;gap:4px;margin-bottom:8px">
+                <div style="flex:1">
+                  <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Typ</label>
+                  <select id="te_skill_${esc(t.id)}" class="ac-inp" style="width:100%;height:26px;font-size:10px">
+                    <option value="technical" ${t.skill_type==='technical'?'selected':''}>Teknisk</option>
+                    <option value="content" ${t.skill_type==='content'?'selected':''}>Innehåll</option>
+                    <option value="mixed" ${t.skill_type==='mixed'?'selected':''}>Blandat</option>
+                    <option value="keyword_research" ${t.skill_type==='keyword_research'?'selected':''}>Nyckelord</option>
+                  </select>
+                </div>
+                <div style="flex:1">
+                  <label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Tid (h)</label>
+                  <input id="te_effort_${esc(t.id)}" class="ac-inp" type="number" min="0.5" step="0.5" value="${t.effort_h || 1}" style="width:100%;height:26px;font-size:10px">
+                </div>
+              </div>
+              ${t.agent_notes ? `<div style="margin-bottom:6px"><label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Agent-anteckningar</label><div style="font-size:10px;color:var(--txt);background:var(--panel);padding:6px;border-radius:4px;white-space:pre-wrap">${esc(t.agent_notes)}</div></div>` : ''}
+              ${t.agent_solution ? `<div style="margin-bottom:6px"><label style="font-size:9px;color:var(--muted);display:block;margin-bottom:2px">Agent-lösning</label><div style="font-size:10px;color:var(--txt);background:var(--panel);padding:6px;border-radius:4px;white-space:pre-wrap">${esc(t.agent_solution)}</div></div>` : ''}
+              <div style="display:flex;gap:4px;justify-content:flex-end">
+                ${t.url ? `<button class="act-btn" style="font-size:10px;padding:3px 8px;height:auto;background:var(--border);color:var(--txt)" onclick="document.getElementById('urlInput').value='${esc(t.url)}';wv.loadURL('${esc(t.url)}')">Öppna URL</button>` : ''}
+                <button class="act-btn" style="font-size:10px;padding:3px 10px;height:auto" onclick="saveTaskEdit('${esc(t.id)}')">Spara</button>
+              </div>
+            </div>`
+          }
+          html += '</div>'
         })
       }
       html += '</div>'
@@ -4289,6 +4375,68 @@ function copyCreativeOutput() {
 // ══════════════════════════════════════════════════════
 //  TASKS — synced with seoz.se backend
 // ══════════════════════════════════════════════════════
+
+async function createTask() {
+  const title = document.getElementById('nt_title')?.value?.trim()
+  if (!title) { toast('Titel krävs', 'var(--r)'); return }
+  const clientId = synced.activeClientId
+  if (!clientId) return
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) { toast('Ingen API-nyckel', 'var(--r)'); return }
+  const body = {
+    clientId,
+    title,
+    description: document.getElementById('nt_desc')?.value?.trim() || '',
+    url: document.getElementById('nt_url')?.value?.trim() || '',
+    severity: document.getElementById('nt_severity')?.value || 'medium',
+    skill_type: document.getElementById('nt_skill')?.value || 'mixed',
+    effort_h: parseFloat(document.getElementById('nt_effort')?.value) || 1,
+  }
+  try {
+    const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, method: 'POST', body })
+    if (res && res.task) {
+      if (!synced.tasks) synced.tasks = []
+      synced.tasks.unshift(res.task)
+      window._showNewTaskForm = false
+      toast('Task skapad!', 'var(--g)')
+    } else {
+      toast(res?.error || 'Kunde inte skapa task', 'var(--r)')
+    }
+  } catch(e) {
+    console.error('[SEOZ] Create task error:', e)
+    toast('Kunde inte skapa task', 'var(--r)')
+  }
+  renderPanelContent('tasks')
+}
+
+async function saveTaskEdit(taskId) {
+  const task = (synced.tasks || []).find(t => t.id === taskId)
+  if (!task) return
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) { toast('Ingen API-nyckel', 'var(--r)'); return }
+  const updates = {
+    title: document.getElementById('te_title_' + taskId)?.value?.trim() || task.title,
+    description: document.getElementById('te_desc_' + taskId)?.value || '',
+    url: document.getElementById('te_url_' + taskId)?.value?.trim() || '',
+    severity: document.getElementById('te_sev_' + taskId)?.value || task.severity,
+    status: document.getElementById('te_status_' + taskId)?.value || task.status,
+    skill_type: document.getElementById('te_skill_' + taskId)?.value || task.skill_type,
+    effort_h: parseFloat(document.getElementById('te_effort_' + taskId)?.value) || task.effort_h,
+  }
+  try {
+    const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, method: 'PATCH', body: { taskId, ...updates } })
+    if (res && res.task) {
+      Object.assign(task, res.task)
+      toast('Task sparad!', 'var(--g)')
+    } else {
+      toast(res?.error || 'Kunde inte spara', 'var(--r)')
+    }
+  } catch(e) {
+    console.error('[SEOZ] Save task error:', e)
+    toast('Kunde inte spara task', 'var(--r)')
+  }
+  renderPanelContent('tasks')
+}
 
 async function toggleTask(taskId) {
   const task = (synced.tasks || []).find(t => t.id === taskId)

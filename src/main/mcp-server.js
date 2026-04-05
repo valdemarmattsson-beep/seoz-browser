@@ -422,9 +422,13 @@ function startMCPServer() {
 
     // JSON-RPC message endpoint
     if (req.method === 'POST' && (req.url === '/message' || req.url?.startsWith('/message?'))) {
-      // Extract sessionId from query string
+      // Extract sessionId from query string — generate one if missing so MCP ops never touch user's active tab
       const msgUrl = new URL(req.url, 'http://localhost')
-      const sessionId = msgUrl.searchParams.get('sessionId') || null
+      let sessionId = msgUrl.searchParams.get('sessionId') || null
+      if (!sessionId) {
+        sessionId = '_anon_' + crypto.randomUUID()
+        mcpSessions.set(sessionId, { createdAt: Date.now(), anonymous: true })
+      }
       let body = ''
       req.on('data', chunk => body += chunk)
       req.on('end', async () => {

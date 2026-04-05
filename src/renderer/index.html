@@ -1729,6 +1729,12 @@ function _attachWebviewListeners(el, tabId) {
   el.addEventListener('new-window', e => {
     e.preventDefault()
     if (!e.url || !/^https?:\/\//i.test(e.url)) return
+    // MCP webviews: NEVER create new user tabs or switch focus — always navigate in-place
+    const isMcpTab = _mcpTabToSession.has(tabId)
+    if (isMcpTab) {
+      el.loadURL(e.url)
+      return
+    }
     // disposition: 'foreground-tab' = Ctrl+click/middle-click, 'background-tab' = Ctrl+Shift+click
     // 'new-window'/'default' = target="_blank" or window.open() — navigate in same tab
     if (e.disposition === 'foreground-tab' || e.disposition === 'background-tab') {
@@ -6236,9 +6242,10 @@ window.__mcpCleanupSession = function(sessionId) {
 }
 
 window.__mcpExecute = async function(toolName, args, sessionId) {
-  // Use dedicated hidden webview for MCP sessions, user's active tab otherwise
-  const wv = sessionId ? _getOrCreateMcpWebview(sessionId) : getWV()
-  const isMcpSession = !!sessionId
+  // Always use a dedicated MCP webview — never touch the user's active tab
+  if (!sessionId) sessionId = '_fallback_' + Date.now()
+  const wv = _getOrCreateMcpWebview(sessionId)
+  const isMcpSession = true
   markAgentActive(toolName, sessionId)
 
   switch (toolName) {

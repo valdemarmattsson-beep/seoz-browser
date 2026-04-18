@@ -1,6 +1,6 @@
 {
   "name": "seoz-browser",
-  "version": "1.4.19",
+  "version": "1.4.20",
   "description": "SEOZ Desktop Browser",
   "main": "src/main/main.js",
   "author": "SEOZ <hello@seoz.se>",
@@ -8,6 +8,7 @@
   "scripts": {
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron . --dev",
+    "build:icons": "node scripts/build-icons.mjs",
     "build": "electron-builder --win --x64",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win --mac",
@@ -21,7 +22,10 @@
   "devDependencies": {
     "cross-env": "^7.0.3",
     "electron": "^28.0.0",
-    "electron-builder": "^24.9.1"
+    "electron-builder": "^24.9.1",
+    "png-to-ico": "^2.1.8",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.33.5"
   },
   "build": {
     "appId": "se.seoz.browser",

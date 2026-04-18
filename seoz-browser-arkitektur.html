@@ -1,0 +1,1174 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SEOZ Browser → Insight Platform — Arkitektur</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --primary: #4680ff;
+  --primary-50: #eef3ff;
+  --primary-100: #dce6ff;
+  --primary-600: #2563eb;
+  --success: #2ca87f;
+  --success-50: #eafaf5;
+  --warning: #e58a00;
+  --danger: #dc2626;
+  --purple: #7c3aed;
+  --cyan: #0097a7;
+  --pink: #db2777;
+  --body-bg: #131920;
+  --card-bg: #1b232d;
+  --border: #303f50;
+  --heading: rgba(255,255,255,0.85);
+  --body-color: #bfbfbf;
+  --secondary-text: #748892;
+  --sidebar-color: rgba(255,255,255,0.5);
+  --radius: 8px;
+  --radius-lg: 12px;
+  --shadow-sm: 0 1px 4px 0 rgba(0,0,0,0.15);
+  --shadow: 0 4px 12px 0 rgba(0,0,0,0.2);
+  --shadow-lg: 0 8px 30px 0 rgba(0,0,0,0.25);
+}
+
+* { margin: 0; padding: 0; box-sizing: border-box; }
+body {
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  background: var(--body-bg);
+  color: var(--body-color);
+  font-size: 0.875rem;
+  line-height: 1.6;
+  overflow-x: hidden;
+}
+
+/* Header */
+.page-header {
+  padding: 40px 40px 0;
+  max-width: 1400px;
+  margin: 0 auto;
+}
+.page-header h1 {
+  font-size: clamp(1.5rem, 3vw, 2.25rem);
+  font-weight: 700;
+  color: var(--heading);
+  letter-spacing: -0.025em;
+  line-height: 1.2;
+}
+.page-header .subtitle {
+  color: var(--secondary-text);
+  font-size: 0.9375rem;
+  margin-top: 8px;
+  max-width: 700px;
+}
+.badge-pill {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 5px 14px;
+  background: rgba(70,128,255,0.1);
+  color: var(--primary);
+  border-radius: 100px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  letter-spacing: 0.02em;
+  border: 1px solid rgba(70,128,255,0.15);
+  margin-bottom: 12px;
+}
+.badge-dot {
+  width: 6px; height: 6px;
+  background: var(--primary);
+  border-radius: 50%;
+  animation: pulse 2s infinite;
+}
+@keyframes pulse {
+  0%, 100% { opacity: 1; transform: scale(1); }
+  50% { opacity: 0.6; transform: scale(1.3); }
+}
+
+/* Tab Navigation */
+.tab-nav {
+  display: flex;
+  gap: 0;
+  padding: 0 40px;
+  max-width: 1400px;
+  margin: 32px auto 0;
+  border-bottom: 1px solid var(--border);
+}
+.tab-btn {
+  padding: 10px 20px;
+  background: none;
+  border: none;
+  color: var(--secondary-text);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: all 0.15s;
+  margin-bottom: -1px;
+}
+.tab-btn:hover { color: var(--heading); }
+.tab-btn.active {
+  color: var(--primary);
+  border-bottom-color: var(--primary);
+}
+
+/* Content */
+.content { padding: 32px 40px; max-width: 1400px; margin: 0 auto; }
+.tab-panel { display: none; }
+.tab-panel.active { display: block; }
+
+/* Architecture Diagram */
+.arch-diagram {
+  position: relative;
+  width: 100%;
+  min-height: 700px;
+}
+
+.arch-layer {
+  margin-bottom: 24px;
+}
+.layer-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: var(--primary);
+  margin-bottom: 10px;
+}
+
+.arch-row {
+  display: flex;
+  gap: 16px;
+  flex-wrap: wrap;
+}
+
+.arch-node {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px;
+  flex: 1;
+  min-width: 220px;
+  position: relative;
+  transition: all 0.2s;
+  cursor: pointer;
+}
+.arch-node:hover {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), var(--shadow);
+  transform: translateY(-2px);
+}
+.arch-node.highlight {
+  border-color: var(--primary);
+  box-shadow: 0 0 0 1px var(--primary), 0 0 20px rgba(70,128,255,0.15);
+}
+
+.node-icon {
+  width: 42px;
+  height: 42px;
+  border-radius: 10px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 12px;
+  font-size: 1.1rem;
+}
+.icon-blue { background: rgba(70,128,255,0.1); color: var(--primary); }
+.icon-green { background: rgba(44,168,127,0.12); color: var(--success); }
+.icon-orange { background: rgba(229,138,0,0.12); color: var(--warning); }
+.icon-purple { background: rgba(124,58,237,0.12); color: var(--purple); }
+.icon-cyan { background: rgba(0,151,167,0.12); color: var(--cyan); }
+.icon-pink { background: rgba(219,39,119,0.12); color: var(--pink); }
+
+.node-title {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 4px;
+}
+.node-desc {
+  font-size: 0.8125rem;
+  color: var(--secondary-text);
+  line-height: 1.5;
+}
+
+.node-badge {
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.badge-new { background: rgba(44,168,127,0.12); color: var(--success); }
+.badge-modify { background: rgba(229,138,0,0.12); color: var(--warning); }
+.badge-exists { background: rgba(255,255,255,0.06); color: var(--secondary-text); }
+
+/* Flow arrows */
+.flow-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+  color: var(--secondary-text);
+  font-size: 0.75rem;
+  gap: 8px;
+}
+.flow-connector .arrow {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.flow-connector .arrow svg { width: 16px; height: 16px; }
+.flow-line {
+  height: 1px;
+  flex: 1;
+  max-width: 100px;
+  background: linear-gradient(90deg, transparent, var(--border), transparent);
+}
+
+/* Data flow panel */
+.flow-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 24px;
+  margin-top: 24px;
+}
+.flow-panel h3 {
+  font-size: 1rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 16px;
+}
+
+.flow-step {
+  display: flex;
+  align-items: flex-start;
+  gap: 16px;
+  padding: 12px 0;
+  border-bottom: 1px solid var(--border);
+}
+.flow-step:last-child { border-bottom: none; }
+
+.step-num {
+  width: 28px;
+  height: 28px;
+  border-radius: 50%;
+  background: rgba(70,128,255,0.1);
+  color: var(--primary);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.75rem;
+  font-weight: 700;
+  flex-shrink: 0;
+}
+.step-content { flex: 1; }
+.step-title {
+  font-size: 0.875rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 2px;
+}
+.step-desc {
+  font-size: 0.8125rem;
+  color: var(--secondary-text);
+}
+.step-tech {
+  display: inline-block;
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+  background: rgba(255,255,255,0.04);
+  color: var(--sidebar-color);
+  margin-top: 4px;
+  font-family: 'SF Mono', 'Fira Code', monospace;
+}
+
+/* Priority table */
+.priority-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 12px;
+}
+.priority-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: 20px 24px;
+  display: flex;
+  gap: 20px;
+  align-items: flex-start;
+  transition: all 0.2s;
+}
+.priority-card:hover {
+  box-shadow: var(--shadow);
+  transform: translateY(-1px);
+}
+.priority-rank {
+  font-size: 1.5rem;
+  font-weight: 800;
+  color: var(--heading);
+  letter-spacing: -0.03em;
+  min-width: 32px;
+}
+.priority-info { flex: 1; }
+.priority-name {
+  font-size: 0.9375rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 4px;
+}
+.priority-desc {
+  font-size: 0.8125rem;
+  color: var(--secondary-text);
+  line-height: 1.55;
+}
+.priority-meta {
+  display: flex;
+  gap: 12px;
+  margin-top: 8px;
+  flex-wrap: wrap;
+}
+.meta-tag {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 4px;
+}
+.meta-effort { background: rgba(229,138,0,0.12); color: var(--warning); }
+.meta-impact { background: rgba(44,168,127,0.12); color: var(--success); }
+.meta-files { background: rgba(255,255,255,0.04); color: var(--sidebar-color); font-family: 'SF Mono', monospace; }
+.meta-depends { background: rgba(124,58,237,0.12); color: var(--purple); }
+
+/* Side panel mockup */
+.panel-mockup {
+  display: grid;
+  grid-template-columns: 1fr 320px;
+  gap: 20px;
+  min-height: 500px;
+}
+.mockup-browser {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.mockup-titlebar {
+  height: 36px;
+  background: #0f1419;
+  display: flex;
+  align-items: center;
+  padding: 0 12px;
+  gap: 8px;
+}
+.mockup-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  background: #303f50;
+}
+.mockup-dot.r { background: #dc2626; }
+.mockup-dot.y { background: #e58a00; }
+.mockup-dot.g { background: #2ca87f; }
+.mockup-url-bar {
+  flex: 1;
+  height: 22px;
+  background: rgba(255,255,255,0.06);
+  border-radius: 4px;
+  margin-left: 12px;
+  display: flex;
+  align-items: center;
+  padding: 0 10px;
+  font-size: 0.6875rem;
+  color: var(--secondary-text);
+}
+.mockup-content {
+  padding: 20px;
+  min-height: 400px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.mockup-skeleton {
+  height: 14px;
+  background: rgba(255,255,255,0.04);
+  border-radius: 4px;
+}
+.mockup-skeleton.w80 { width: 80%; }
+.mockup-skeleton.w60 { width: 60%; }
+.mockup-skeleton.w90 { width: 90%; }
+.mockup-skeleton.w40 { width: 40%; }
+.mockup-skeleton.h40 { height: 40px; }
+
+/* Side panel */
+.mockup-panel {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+.panel-header {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-client {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  background: rgba(70,128,255,0.06);
+  border: 1px solid rgba(70,128,255,0.15);
+  border-radius: var(--radius);
+  cursor: pointer;
+}
+.client-dot {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  background: var(--success);
+}
+.client-name {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--heading);
+  flex: 1;
+}
+.client-chevron {
+  color: var(--secondary-text);
+  font-size: 0.75rem;
+}
+
+.panel-section {
+  padding: 16px;
+  border-bottom: 1px solid var(--border);
+}
+.panel-section-title {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--secondary-text);
+  margin-bottom: 10px;
+}
+
+.intent-card {
+  background: rgba(124,58,237,0.08);
+  border: 1px solid rgba(124,58,237,0.2);
+  border-radius: var(--radius);
+  padding: 12px;
+}
+.intent-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--purple);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  margin-bottom: 6px;
+}
+.intent-value {
+  font-size: 0.8125rem;
+  font-weight: 500;
+  color: var(--heading);
+  line-height: 1.4;
+}
+
+.vera-insight {
+  background: rgba(0,151,167,0.08);
+  border: 1px solid rgba(0,151,167,0.2);
+  border-radius: var(--radius);
+  padding: 12px;
+  margin-top: 8px;
+}
+.vera-label {
+  font-size: 0.6875rem;
+  font-weight: 600;
+  color: var(--cyan);
+  margin-bottom: 6px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+.vera-text {
+  font-size: 0.8125rem;
+  color: var(--body-color);
+  line-height: 1.5;
+}
+
+.panel-actions {
+  padding: 16px;
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: auto;
+}
+.action-btn {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 10px 14px;
+  border-radius: var(--radius);
+  border: 1px solid var(--border);
+  background: var(--card-bg);
+  color: var(--heading);
+  font-family: inherit;
+  font-size: 0.8125rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.15s;
+}
+.action-btn:hover {
+  border-color: var(--primary);
+  background: rgba(70,128,255,0.06);
+  color: var(--primary);
+  transform: translateY(-1px);
+}
+.action-btn .action-icon {
+  width: 28px;
+  height: 28px;
+  border-radius: 6px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.875rem;
+}
+
+/* IPC diagram */
+.ipc-diagram {
+  display: grid;
+  grid-template-columns: 1fr auto 1fr auto 1fr;
+  gap: 0;
+  align-items: start;
+}
+.ipc-col {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.ipc-arrow-col {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 40px 16px;
+  min-height: 300px;
+}
+.ipc-arrow {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+  margin: 8px 0;
+}
+.ipc-arrow-line {
+  width: 60px;
+  height: 2px;
+  background: var(--primary);
+  position: relative;
+}
+.ipc-arrow-line::after {
+  content: '';
+  position: absolute;
+  right: -4px;
+  top: -4px;
+  border: 5px solid transparent;
+  border-left-color: var(--primary);
+}
+.ipc-arrow-line.left::after {
+  right: auto;
+  left: -4px;
+  border-left-color: transparent;
+  border-right-color: var(--primary);
+}
+.ipc-arrow-label {
+  font-size: 0.625rem;
+  font-weight: 600;
+  color: var(--secondary-text);
+  text-align: center;
+  max-width: 80px;
+  line-height: 1.3;
+  letter-spacing: 0.02em;
+}
+.ipc-node {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: var(--radius);
+  padding: 14px;
+}
+.ipc-node-title {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--heading);
+  margin-bottom: 4px;
+}
+.ipc-node-desc {
+  font-size: 0.75rem;
+  color: var(--secondary-text);
+  line-height: 1.4;
+}
+.ipc-col-header {
+  font-size: 0.6875rem;
+  font-weight: 700;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--primary);
+  padding: 4px 0;
+  text-align: center;
+}
+
+@media (max-width: 900px) {
+  .content { padding: 20px; }
+  .page-header { padding: 24px 20px 0; }
+  .tab-nav { padding: 0 20px; overflow-x: auto; }
+  .panel-mockup { grid-template-columns: 1fr; }
+  .ipc-diagram { grid-template-columns: 1fr; }
+  .ipc-arrow-col { flex-direction: row; padding: 8px; min-height: auto; }
+  .ipc-arrow-line { width: 2px; height: 40px; }
+  .arch-row { flex-direction: column; }
+}
+</style>
+</head>
+<body>
+
+<div class="page-header">
+  <div class="badge-pill"><span class="badge-dot"></span> Arkitektur — Browser → Insight Platform</div>
+  <h1>SEOZ Browser: Från inspector till research-arm</h1>
+  <p class="subtitle">Dataflödet vänds — från "inspektera och exportera" till "samla, tolka och skicka till plattformen". Browsern blir research-armen för OTTO och VERA.</p>
+</div>
+
+<div class="tab-nav">
+  <button class="tab-btn active" onclick="switchTab('overview')">Översikt</button>
+  <button class="tab-btn" onclick="switchTab('sidepanel')">Sidopanel</button>
+  <button class="tab-btn" onclick="switchTab('dataflow')">Dataflöde</button>
+  <button class="tab-btn" onclick="switchTab('ipc')">IPC-brygga</button>
+  <button class="tab-btn" onclick="switchTab('priority')">Prioritet</button>
+</div>
+
+<div class="content">
+
+  <!-- TAB: Overview -->
+  <div class="tab-panel active" id="tab-overview">
+    <div class="arch-diagram">
+
+      <div class="arch-layer">
+        <div class="layer-label">Electron Main Process</div>
+        <div class="arch-row">
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-blue">&#9881;</div>
+            <div class="node-title">main.js</div>
+            <div class="node-desc">Window management, IPC handlers, content blocker, auto-updater. ~900 rader.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-green">&#128274;</div>
+            <div class="node-title">MCP Server</div>
+            <div class="node-desc">HTTP + SSE på port 19532. 24 verktyg. JSON-RPC 2.0. Kan redan styra browser via agents.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-new">Nytt</span>
+            <div class="node-icon icon-purple">&#128279;</div>
+            <div class="node-title">Client Context Store</div>
+            <div class="node-desc">electron-store: activeClientId, clientName, JWT token. Delas med renderer via IPC.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-line"></div>
+        <div class="arrow">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M4 9l4 4 4-4"/></svg>
+          IPC Bridge
+        </div>
+        <div class="flow-line"></div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-label">Renderer (index.html → moduler)</div>
+        <div class="arch-row">
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-blue">&#128196;</div>
+            <div class="node-title">Tab Manager</div>
+            <div class="node-desc">Webview-pool, tab-skapande, MCP-session isolation. _tabWebviews Map.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-modify">Utöka</span>
+            <div class="node-icon icon-cyan">&#128270;</div>
+            <div class="node-title">SEO Panel → Insight Panel</div>
+            <div class="node-desc">Nuvarande .seoz-panel utökas med klientkontext, VERA-insikter, intent-kort och generate-knappar.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-new">Nytt</span>
+            <div class="node-icon icon-orange">&#127758;</div>
+            <div class="node-title">Search Everywhere Mode</div>
+            <div class="node-desc">Dedikerad vy: 4 dolda webviews (Google, YouTube, Reddit, E-handel) → aggregerad 3-kolumns-vy.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-line"></div>
+        <div class="arrow">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M4 9l4 4 4-4"/></svg>
+          HTTP / did-navigate events
+        </div>
+        <div class="flow-line"></div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-label">Webview Layer</div>
+        <div class="arch-row">
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-green">&#127760;</div>
+            <div class="node-title">User Webviews</div>
+            <div class="node-desc">Användarens aktiva flikar. Kan inte röras av MCP-agenter (isolation).</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-pink">&#129302;</div>
+            <div class="node-title">MCP Webviews</div>
+            <div class="node-desc">Isolerade webviews för AI-agenter. Auto-cleanup efter 8s inaktivitet.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-new">Nytt</span>
+            <div class="node-icon icon-purple">&#128161;</div>
+            <div class="node-title">VERA Analysis Layer</div>
+            <div class="node-desc">Lyssnar på did-navigate → kör content extraction → skickar till Claude API → visar insikt i panelen.</div>
+          </div>
+        </div>
+      </div>
+
+      <div class="flow-connector">
+        <div class="flow-line"></div>
+        <div class="arrow">
+          <svg viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><path d="M8 3v10M4 9l4 4 4-4"/></svg>
+          REST API
+        </div>
+        <div class="flow-line"></div>
+      </div>
+
+      <div class="arch-layer">
+        <div class="layer-label">SEOZ Platform (Next.js + Supabase)</div>
+        <div class="arch-row">
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-blue">&#128187;</div>
+            <div class="node-title">seoz.se/api</div>
+            <div class="node-desc">Befintligt REST-API: klienter, keywords, tasks, snapshots, notifications.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-new">Nytt</span>
+            <div class="node-icon icon-green">&#128203;</div>
+            <div class="node-title">POST /api/insights</div>
+            <div class="node-desc">Ny endpoint: ta emot Insight Cards från browsern. Sparar till Supabase med clientId.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-new">Nytt</span>
+            <div class="node-icon icon-orange">&#128221;</div>
+            <div class="node-title">POST /api/briefs</div>
+            <div class="node-desc">Ny endpoint: starta Brief Generator-flödet (OTTO). Insight → kampanjidé direkt.</div>
+          </div>
+          <div class="arch-node" onclick="highlightNode(this)">
+            <span class="node-badge badge-exists">Finns</span>
+            <div class="node-icon icon-cyan">&#128451;</div>
+            <div class="node-title">Supabase</div>
+            <div class="node-desc">Single source of truth. client_signals, insight_cards (ny tabell), briefs.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Side Panel -->
+  <div class="tab-panel" id="tab-sidepanel">
+    <div style="margin-bottom: 16px;">
+      <div class="layer-label">Sidopanel — Mockup</div>
+      <p style="color: var(--secondary-text); font-size: 0.8125rem; margin-bottom: 20px;">
+        Panelen lever som overlay ovanpå webview-innehållet. Tre sektioner: klientkontext, VERA/intent-analys, och action-knappar.
+      </p>
+    </div>
+    <div class="panel-mockup">
+      <div class="mockup-browser">
+        <div class="mockup-titlebar">
+          <div class="mockup-dot r"></div>
+          <div class="mockup-dot y"></div>
+          <div class="mockup-dot g"></div>
+          <div class="mockup-url-bar">&#128274; competitor-site.se/produkter/jamforelse</div>
+        </div>
+        <div class="mockup-content">
+          <div class="mockup-skeleton h40 w80"></div>
+          <div class="mockup-skeleton w90"></div>
+          <div class="mockup-skeleton w60"></div>
+          <div class="mockup-skeleton w80"></div>
+          <div style="height: 12px"></div>
+          <div class="mockup-skeleton w90"></div>
+          <div class="mockup-skeleton w40"></div>
+          <div class="mockup-skeleton w80"></div>
+          <div class="mockup-skeleton w60"></div>
+          <div style="height: 12px"></div>
+          <div class="mockup-skeleton h40 w60"></div>
+          <div class="mockup-skeleton w90"></div>
+          <div class="mockup-skeleton w80"></div>
+        </div>
+      </div>
+
+      <div class="mockup-panel">
+        <div class="panel-header">
+          <div class="panel-client">
+            <div class="client-dot"></div>
+            <div class="client-name">Kundens Företag AB</div>
+            <div class="client-chevron">&#9662;</div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-section-title">Intent-analys</div>
+          <div class="intent-card">
+            <div class="intent-label">&#128161; Need State</div>
+            <div class="intent-value">Jämförelse → Osäkerhet i köpbeslut. Användaren söker trygghet genom att validera sitt val mot alternativ.</div>
+          </div>
+        </div>
+
+        <div class="panel-section">
+          <div class="panel-section-title">VERA-insikt</div>
+          <div class="vera-insight">
+            <div class="vera-label">&#128302; VERA</div>
+            <div class="vera-text">Informationssida med hög E-E-A-T, men ingen tydlig CTA. Kunden har inget motsvarande innehåll — gap i consideration-fasen.</div>
+          </div>
+          <div class="vera-insight" style="margin-top: 8px; border-color: rgba(44,168,127,0.2); background: rgba(44,168,127,0.06);">
+            <div class="vera-label" style="color: var(--success);">&#127919; Möjlighet</div>
+            <div class="vera-text">Skapa en brief kring comparison-content som adresserar köposäkerheten. Kan slå den här sidan med egen first-party-data.</div>
+          </div>
+        </div>
+
+        <div class="panel-actions">
+          <button class="action-btn">
+            <div class="action-icon icon-blue">&#128161;</div>
+            Generate insight
+          </button>
+          <button class="action-btn">
+            <div class="action-icon icon-orange">&#127912;</div>
+            Create campaign idea
+          </button>
+          <button class="action-btn">
+            <div class="action-icon icon-green">&#128203;</div>
+            Add to Insight Card
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Data Flow -->
+  <div class="tab-panel" id="tab-dataflow">
+    <div class="flow-panel">
+      <h3>Dataflöde: Webview → Insight Card</h3>
+      <p style="color: var(--secondary-text); font-size: 0.8125rem; margin-bottom: 20px;">
+        Hela kedjan från att användaren besöker en sida till att en insight sparas i plattformen.
+      </p>
+
+      <div class="flow-step">
+        <div class="step-num">1</div>
+        <div class="step-content">
+          <div class="step-title">Användaren navigerar i webview</div>
+          <div class="step-desc">Besöker t.ex. en konkurrents produktsida eller en SERP. Webview avfyrar <code>did-navigate</code> event.</div>
+          <div class="step-tech">webview.addEventListener('did-navigate', ...)</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">2</div>
+        <div class="step-content">
+          <div class="step-title">Content Extraction</div>
+          <div class="step-desc">Renderer kör <code>executeJavaScript</code> i webviewen — hämtar title, meta, headings, schema, OG-tags och brödtext. Samma mönster som befintliga <code>get_seo_analysis</code>.</div>
+          <div class="step-tech">webview.executeJavaScript(extractionScript)</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">3</div>
+        <div class="step-content">
+          <div class="step-title">VERA-analys via Claude API</div>
+          <div class="step-desc">Extracted content + klientkontext skickas till Anthropic API (redan kopplad i main.js). System prompt: "Klassificera intent, identifiera gaps, ge actionable insight." Svaret parsas och visas i sidopanelen.</div>
+          <div class="step-tech">ipcRenderer → main.js → api.anthropic.com</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">4</div>
+        <div class="step-content">
+          <div class="step-title">Användaren trycker "Generate insight"</div>
+          <div class="step-desc">VERA-insikten, intent-klassificeringen och sidans data paketeras som ett Insight Card-objekt med <code>clientId</code> från aktiv klientkontext.</div>
+          <div class="step-tech">{ type: 'insight', clientId, url, intent, vera_analysis, raw_data }</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">5</div>
+        <div class="step-content">
+          <div class="step-title">POST till SEOZ-plattformen</div>
+          <div class="step-desc">Browsern postar till <code>seoz.se/api/insights</code> via befintliga <code>SeozApiClient</code>. Ingen lokal IPC-brygga behövs — API:t är redan kopplat.</div>
+          <div class="step-tech">SeozApiClient.post('/api/insights', insightCard)</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">6</div>
+        <div class="step-content">
+          <div class="step-title">Supabase → Dashboard</div>
+          <div class="step-desc">Next.js-appen sparar till Supabase. Insight Card dyker upp i dashboarden, tillgänglig för OTTO (brief generation) och export till slides.</div>
+          <div class="step-tech">Supabase: insight_cards table → realtime subscription</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-panel" style="margin-top: 16px;">
+      <h3>Alternativt flöde: "Create campaign idea"</h3>
+
+      <div class="flow-step">
+        <div class="step-num">4b</div>
+        <div class="step-content">
+          <div class="step-title">Användaren trycker "Create campaign idea"</div>
+          <div class="step-desc">Istället för att spara en insight-card triggas Brief Generator-flödet direkt. VERA-analysen + sidans data skickas till OTTO.</div>
+          <div class="step-tech">SeozApiClient.post('/api/briefs', { clientId, source_insight, ... })</div>
+        </div>
+      </div>
+
+      <div class="flow-step">
+        <div class="step-num">5b</div>
+        <div class="step-content">
+          <div class="step-title">OTTO genererar brief</div>
+          <div class="step-desc">Brief Orchestrator (5-fas pipeline) kör: insight → audience + message + tonality + 3 kampanjidéer. Saga Signalström-agenten skapar briefen.</div>
+          <div class="step-tech">brief-orchestrator.ts → 5 phases → Supabase</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: IPC Bridge -->
+  <div class="tab-panel" id="tab-ipc">
+    <div style="margin-bottom: 20px;">
+      <div class="layer-label">Kommunikationsarkitektur</div>
+      <p style="color: var(--secondary-text); font-size: 0.8125rem; margin-bottom: 8px;">
+        Ingen lokal WebSocket-brygga behövs. Browsern har redan en HTTP-koppling till seoz.se/api. Nya endpoints + klientkontext i electron-store räcker.
+      </p>
+    </div>
+
+    <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 16px; margin-bottom: 24px;">
+      <!-- Column 1: Browser -->
+      <div>
+        <div class="ipc-col-header" style="text-align: left;">Electron Browser</div>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+          <div class="ipc-node">
+            <div class="ipc-node-title">Renderer (Panel UI)</div>
+            <div class="ipc-node-desc">Insight Panel, generate-knappar, klient-dropdown. Triggar actions.</div>
+          </div>
+          <div class="ipc-node" style="border-color: rgba(70,128,255,0.3);">
+            <div class="ipc-node-title" style="color: var(--primary);">window.seoz IPC</div>
+            <div class="ipc-node-desc">Befintlig contextBridge. Utökas med: setActiveClient, getActiveClient, postInsight, postBrief.</div>
+          </div>
+          <div class="ipc-node">
+            <div class="ipc-node-title">Main Process</div>
+            <div class="ipc-node-desc">Hanterar IPC, lagrar clientId i electron-store, proxy:ar requests med auth header.</div>
+          </div>
+          <div class="ipc-node">
+            <div class="ipc-node-title">MCP Server (:19532)</div>
+            <div class="ipc-node-desc">Befintlig. Lägger till clientId i alla tool-responses. Claude Code/Desktop kan fråga vilken klient som är aktiv.</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Column 2: Arrow -->
+      <div style="display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px; padding-top: 36px;">
+        <div style="text-align: center;">
+          <div style="font-size: 0.6875rem; font-weight: 600; color: var(--secondary-text); margin-bottom: 6px;">SeozApiClient</div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <div style="width: 80px; height: 2px; background: var(--primary);"></div>
+            <div style="width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-left: 6px solid var(--primary);"></div>
+          </div>
+          <div style="font-size: 0.625rem; color: var(--secondary-text); margin-top: 4px;">HTTPS + Bearer token</div>
+        </div>
+        <div style="text-align: center;">
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <div style="width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 6px solid var(--success);"></div>
+            <div style="width: 80px; height: 2px; background: var(--success);"></div>
+          </div>
+          <div style="font-size: 0.625rem; color: var(--secondary-text); margin-top: 4px;">JSON responses</div>
+        </div>
+        <div style="text-align: center; margin-top: 20px;">
+          <div style="font-size: 0.6875rem; font-weight: 600; color: var(--warning); margin-bottom: 6px;">Auth-delning</div>
+          <div style="display: flex; align-items: center; gap: 4px;">
+            <div style="width: 0; height: 0; border-top: 5px solid transparent; border-bottom: 5px solid transparent; border-right: 6px solid var(--warning);"></div>
+            <div style="width: 80px; height: 2px; background: var(--warning);"></div>
+          </div>
+          <div style="font-size: 0.625rem; color: var(--secondary-text); margin-top: 4px;">JWT vid uppstart</div>
+        </div>
+      </div>
+
+      <!-- Column 3: Platform -->
+      <div>
+        <div class="ipc-col-header" style="text-align: left;">SEOZ Platform</div>
+        <div style="display: flex; flex-direction: column; gap: 10px; margin-top: 12px;">
+          <div class="ipc-node" style="border-color: rgba(44,168,127,0.3);">
+            <div class="ipc-node-title" style="color: var(--success);">GET /api/clients</div>
+            <div class="ipc-node-desc">Finns. Browsern hämtar klientlista vid uppstart → populerar dropdown.</div>
+          </div>
+          <div class="ipc-node" style="border-color: rgba(44,168,127,0.3);">
+            <div class="ipc-node-title" style="color: var(--success);">POST /api/insights ✦</div>
+            <div class="ipc-node-desc">Ny. Tar emot { clientId, url, intent, vera_analysis, raw_data }. Sparar som Insight Card.</div>
+          </div>
+          <div class="ipc-node" style="border-color: rgba(44,168,127,0.3);">
+            <div class="ipc-node-title" style="color: var(--success);">POST /api/briefs ✦</div>
+            <div class="ipc-node-desc">Ny. Triggar Brief Generator. Tar insight + clientId → OTTO pipeline.</div>
+          </div>
+          <div class="ipc-node">
+            <div class="ipc-node-title">Supabase</div>
+            <div class="ipc-node-desc">insight_cards, briefs, client_signals. Realtime subscriptions för dashboard-uppdateringar.</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="flow-panel">
+      <h3>Nya IPC-handlers i main.js</h3>
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-top: 12px;">
+        <div class="ipc-node">
+          <div class="ipc-node-title">setActiveClient(clientId, name)</div>
+          <div class="ipc-node-desc">Sparar till electron-store. Emittar 'client-changed' event till renderer.</div>
+        </div>
+        <div class="ipc-node">
+          <div class="ipc-node-title">getActiveClient()</div>
+          <div class="ipc-node-desc">Returnerar { clientId, name } från store. Används vid uppstart och av MCP-server.</div>
+        </div>
+        <div class="ipc-node">
+          <div class="ipc-node-title">postInsight(data)</div>
+          <div class="ipc-node-desc">Proxy: lägger till auth header + clientId, postar till /api/insights.</div>
+        </div>
+        <div class="ipc-node">
+          <div class="ipc-node-title">postBrief(data)</div>
+          <div class="ipc-node-desc">Proxy: lägger till auth header + clientId, postar till /api/briefs. Returnerar briefId.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- TAB: Priority -->
+  <div class="tab-panel" id="tab-priority">
+    <div style="margin-bottom: 20px;">
+      <div class="layer-label">Implementationsordning</div>
+      <p style="color: var(--secondary-text); font-size: 0.8125rem;">
+        Ordnad efter: vad låser upp mest? Klientkontext först — allt annat beror på den.
+      </p>
+    </div>
+
+    <div class="priority-grid">
+      <div class="priority-card">
+        <div class="priority-rank">1</div>
+        <div class="priority-info">
+          <div class="priority-name">Klientkontext i browsern</div>
+          <div class="priority-desc">Dropdown i toolbar för att välja aktiv klient. Sparar clientId i electron-store. Alla API-anrop inkluderar clientId. Hämtar klientlista från befintligt GET /api/clients.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">2–3 dagar</span>
+            <span class="meta-tag meta-impact">Låser upp allt</span>
+            <span class="meta-tag meta-files">main.js, preload.js, index.html, api.js</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="priority-card">
+        <div class="priority-rank">2</div>
+        <div class="priority-info">
+          <div class="priority-name">API-endpoints: /api/insights + /api/briefs</div>
+          <div class="priority-desc">Två nya Next.js API-routes i SEOZ-plattformen. Tar emot data från browsern, sparar till Supabase. Insight Cards-tabell i databasen.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">2–3 dagar</span>
+            <span class="meta-tag meta-impact">Browser → Platform-brygga</span>
+            <span class="meta-tag meta-files">src/app/api/insights/, src/app/api/briefs/</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="priority-card">
+        <div class="priority-rank">3</div>
+        <div class="priority-info">
+          <div class="priority-name">Sidopanel: VERA + Intent + Generate-knappar</div>
+          <div class="priority-desc">Utöka .seoz-panel med tre sektioner. VERA triggas på did-navigate via befintlig Claude API-integration. Intent-klassificering är en del av VERA-prompten.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">1 vecka</span>
+            <span class="meta-tag meta-impact">Användarupplevelsen</span>
+            <span class="meta-tag meta-depends">Kräver steg 1 + 2</span>
+            <span class="meta-tag meta-files">index.html → bryt ut panel.js</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="priority-card">
+        <div class="priority-rank">4</div>
+        <div class="priority-info">
+          <div class="priority-name">Auth-delning</div>
+          <div class="priority-desc">Next.js-appen skickar JWT till browsern vid uppstart (deep link eller clipboard-handoff). Browsern lagrar token i electron-store per profil. SeozApiClient skickar som Bearer header.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">1–2 dagar</span>
+            <span class="meta-tag meta-impact">Säkerhet & UX</span>
+            <span class="meta-tag meta-files">main.js, profile-manager.js, api.js</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="priority-card">
+        <div class="priority-rank">5</div>
+        <div class="priority-info">
+          <div class="priority-name">Search Everywhere Mode</div>
+          <div class="priority-desc">Dedikerad vy med 4 parallella webviews. Scraping-scripts per källa. Aggregerad 3-kolumns-presentation. Mest ambitiösa delen.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">2–3 veckor</span>
+            <span class="meta-tag meta-impact">Differentiering</span>
+            <span class="meta-tag meta-depends">Kräver steg 1–3</span>
+            <span class="meta-tag meta-files">index.html → search-everywhere.js (ny modul)</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="priority-card">
+        <div class="priority-rank">6</div>
+        <div class="priority-info">
+          <div class="priority-name">Refaktor: bryt ut renderer-moduler</div>
+          <div class="priority-desc">7700 rader index.html → moduler: panel.js, tab-manager.js, search-everywhere.js, mcp-bridge.js. Inte kritiskt nu men nödvändigt innan Search Everywhere.</div>
+          <div class="priority-meta">
+            <span class="meta-tag meta-effort">3–4 dagar</span>
+            <span class="meta-tag meta-impact">Maintainability</span>
+            <span class="meta-tag meta-files">index.html → src/renderer/*.js</span>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+</div>
+
+<script>
+function switchTab(tabId) {
+  document.querySelectorAll('.tab-btn').forEach(btn => btn.classList.remove('active'));
+  document.querySelectorAll('.tab-panel').forEach(panel => panel.classList.remove('active'));
+  document.getElementById('tab-' + tabId).classList.add('active');
+  event.target.classList.add('active');
+}
+
+function highlightNode(el) {
+  document.querySelectorAll('.arch-node').forEach(n => n.classList.remove('highlight'));
+  el.classList.add('highlight');
+  setTimeout(() => el.classList.remove('highlight'), 2000);
+}
+</script>
+
+</body>
+</html>

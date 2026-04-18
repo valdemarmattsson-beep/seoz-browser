@@ -7,6 +7,7 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
+  /* ── Legacy aliases (short-form) — kept for back-compat across this file. */
   --p:#4680ff; --p50:#eef3ff; --p100:#dce6ff; --p600:#2563eb;
   --g:#2ca87f; --g50:#eafaf5;
   --w:#e58a00; --r:#dc2626;
@@ -14,11 +15,52 @@
   --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
   --tab-h:38px; --addr-h:46px; --bm-h:28px; --chrome-h:112px;
   --dock-w:48px; --panel-w:280px; --status-h:22px;
+
+  /* ── SEOZ OS Design System v2.0 tokens — available project-wide.
+     Use these for any NEW surfaces. Old --p / --bg / --card still work. */
+  --ink-0: rgba(255,255,255,.98);
+  --ink-1: rgba(255,255,255,.88);
+  --ink-2: rgba(255,255,255,.62);
+  --ink-3: rgba(255,255,255,.42);
+  --ink-4: rgba(255,255,255,.22);
+  --surface: #1a1d24;
+  --surface-2: #20242c;
+  --accent: #5b8dff;
+  --accent-soft: rgba(91,141,255,.15);
+  --live: #30d158;
+  --live-bg: rgba(48,209,88,.15);
+  --warn: #ff9f0a;
+  --warn-bg: rgba(255,159,10,.15);
+  --ds-danger: #ff453a;
+  --danger-bg: rgba(255,69,58,.15);
+  --ds-border: rgba(255,255,255,.06);
+  --border-strong: rgba(255,255,255,.1);
+  --hover: rgba(255,255,255,.06);
+  --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-pill: 100px;
+  --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
+  --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
+  --dur-fast: 120ms; --dur-base: 180ms; --dur-med: 240ms;
+
+  /* Orbit S logomark as CSS mask — for spinners and chips */
+  --orbit-loader-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><circle cx='100' cy='100' r='10' fill='black'/><path d='M100 40 A 60 60 0 0 1 160 100' fill='none' stroke='black' stroke-width='16' stroke-linecap='round'/></svg>");
 }
 [data-theme="light"] {
   --bg:#f0f2f5; --card:#ffffff; --panel:#f8f9fa;
   --border:#e7eaee; --head:#1d2630; --txt:#131920; --muted:rgba(33,37,41,.6);
+
+  /* v2.0 overrides for light theme */
+  --ink-0: #0a0a0a; --ink-1: #1a1a1a; --ink-2: #585854;
+  --ink-3: #8a8a85; --ink-4: #b8b8b2;
+  --surface: #ffffff; --surface-2: #fafaf8;
+  --accent: #3b6fe0; --accent-soft: rgba(91,141,255,.1);
+  --live: #0f9d44; --live-bg: rgba(15,157,68,.1);
+  --warn: #b45309; --warn-bg: rgba(180,83,9,.1);
+  --ds-danger: #dc2626; --danger-bg: rgba(220,38,38,.1);
+  --ds-border: rgba(0,0,0,.07); --border-strong: rgba(0,0,0,.12);
+  --hover: rgba(0,0,0,.04);
 }
+
+@keyframes orbit-spin { to { transform: rotate(360deg); } }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100vh;overflow:hidden;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);color:var(--txt);user-select:none}
 
@@ -49,6 +91,9 @@ input,textarea,select{user-select:text}
   background:var(--bg);
   display:flex;align-items:flex-end;
   padding:0 6px;gap:0;
+  /* Must not be a window-drag region — otherwise HTML5 drag events
+     (used for tab reorder / tear-off) never fire on children. */
+  -webkit-app-region:no-drag;
 }
 .tab{
   height:32px;width:180px;min-width:48px;flex:0 1 180px;
@@ -64,13 +109,21 @@ input,textarea,select{user-select:text}
 .tab:last-of-type::after,.tab.active::after,.tab.active+.tab::after,.tab:hover::after,.tab:hover+.tab::after{background:transparent}
 .tab:hover:not(.active){background:rgba(255,255,255,.05)}
 .tab.active{background:var(--card);color:var(--head);font-weight:600}
+.tab.dragging{opacity:.45;transform:scale(.97);transition:opacity .1s,transform .1s}
+.tab.drag-over-left::before,
+.tab.drag-over-right::before{
+  content:'';position:absolute;top:4px;bottom:4px;width:2px;
+  background:var(--p,#4e73f8);border-radius:2px;pointer-events:none;z-index:2;
+}
+.tab.drag-over-left::before{left:-1px}
+.tab.drag-over-right::before{right:-1px}
 .tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:block}
 .tab-ico-wrap{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .tab-x{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;flex-shrink:0;transition:opacity .15s}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
 .tab-x:hover{opacity:1!important;background:rgba(255,255,255,.15)}
-.tab-spin{width:10px;height:10px;border:2px solid rgba(255,255,255,.15);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite}
+.tab-spin{width:12px;height:12px;background:var(--accent);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite}
 /* Tab tooltip (Chrome-style) */
 .tab-tip{
   position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);z-index:150;
@@ -95,10 +148,23 @@ input,textarea,select{user-select:text}
 .newtab{width:24px;height:24px;border-radius:5px;margin-left:6px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
 .newtab:hover{background:rgba(255,255,255,.08)}
 .tsp{flex:1;min-width:8px}
-.wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center}
-.wc{width:34px;height:34px;border:none;background:none;display:flex;align-items:center;justify-content:center;font-size:11px;color:var(--muted);cursor:pointer;transition:background .1s}
-.wc:hover{background:rgba(255,255,255,.08)}
-.wc.x:hover{background:#e81123;color:#fff}
+/* Window controls — SEOZ OS chrome spec: circular, 0.5px border, Lucide icons,
+   semantic hover tint (min=warn, max=live, close=danger). */
+.wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center;align-self:center;gap:10px;padding-left:16px;margin:0 16px}
+.wc{
+  width:24px;height:24px;border-radius:50%;
+  background:transparent;
+  border:0.5px solid var(--border-strong);
+  color:var(--ink-2);
+  display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;
+  transition:background var(--dur-fast) var(--ease-out),
+             color var(--dur-fast) var(--ease-out),
+             border-color var(--dur-fast) var(--ease-out);
+}
+.wc.minimize:hover{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.wc.maximize:hover{background:var(--live-bg);color:var(--live);border-color:transparent}
+.wc.x:hover{background:var(--danger-bg);color:var(--ds-danger);border-color:transparent}
 
 /* Address bar */
 .addrbar{
@@ -129,7 +195,7 @@ input,textarea,select{user-select:text}
 .lock{font-size:10px;color:var(--g);flex-shrink:0}
 #urlInput{flex:1;border:none;background:none;outline:none;font-size:12px;font-family:'Inter',sans-serif;color:var(--txt)}
 #urlInput::placeholder{color:var(--muted)}
-.addr-spinner{width:12px;height:12px;flex-shrink:0;border:2px solid var(--border);border-top-color:var(--p);border-radius:50%;animation:spin .6s linear infinite;display:none}
+.addr-spinner{width:14px;height:14px;flex-shrink:0;background:var(--accent);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite;display:none}
 .addr-spinner.on{display:block}
 
 /* Zoom bar (in URL bar, right side) */
@@ -468,10 +534,11 @@ input,textarea,select{user-select:text}
 #auth.gone{display:none}
 .ac{width:380px;background:var(--card);border-radius:16px;border:1px solid var(--border);box-shadow:0 8px 30px rgba(0,0,0,.35);overflow:hidden}
 .ac-top{padding:28px}
-.ac-logo{display:flex;align-items:center;gap:10px;margin-bottom:22px}
-.ac-mark{width:36px;height:36px;border-radius:10px;background:var(--p);display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;box-shadow:0 4px 14px rgba(70,128,255,.35)}
-.ac-word{font-size:1.1rem;font-weight:800;color:var(--head);letter-spacing:-.03em}
-.ac-word span{color:var(--p)}
+.ac-logo{display:flex;align-items:center;gap:12px;margin-bottom:22px;color:var(--ink-0)}
+.ac-mark{width:32px;height:32px;display:block;flex-shrink:0}
+.ac-mark svg{width:100%;height:100%;display:block}
+.ac-word{font-family:'Inter Tight','Inter',sans-serif;font-size:1rem;font-weight:600;color:var(--ink-0);letter-spacing:.3em;text-transform:uppercase}
+.ac-word span{color:var(--ink-3);letter-spacing:.02em;text-transform:none;font-weight:500;margin-left:4px}
 .ac-h{font-size:1rem;font-weight:800;color:var(--head);margin-bottom:5px}
 .ac-sub{font-size:11px;color:var(--muted);line-height:1.65;margin-bottom:18px}
 .ac-lbl{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);margin-bottom:5px}
@@ -548,7 +615,8 @@ input,textarea,select{user-select:text}
   display:flex;align-items:center;gap:10px;transition:background .1s;
 }
 .chrome-dd-item:hover{background:rgba(255,255,255,.06)}
-.chrome-dd-item .cdi-icon{width:20px;text-align:center;flex-shrink:0;font-size:13px}
+.chrome-dd-item .cdi-icon{width:20px;flex-shrink:0;display:flex;align-items:center;justify-content:center;color:var(--ink-2)}
+.chrome-dd-item .cdi-icon svg{width:15px;height:15px}
 .chrome-dd-item .cdi-label{flex:1}
 .chrome-dd-item .cdi-shortcut{font-size:10px;color:var(--muted);font-family:'Inter',monospace}
 .chrome-dd-sep{height:1px;background:var(--border);margin:4px 10px}
@@ -722,7 +790,13 @@ input,textarea,select{user-select:text}
   <div class="pp-card">
     <div class="pp-top">
       <div class="ac-logo">
-        <div class="ac-mark" style="font-size:20px;line-height:1">🙈</div>
+        <div class="ac-mark" aria-hidden="true">
+          <svg viewBox="0 0 200 200" fill="none">
+            <circle cx="100" cy="100" r="6" fill="currentColor"/>
+            <path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+            <path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+          </svg>
+        </div>
         <div class="ac-word">SEOZ</div>
       </div>
       <div class="pp-h">Vem surfar?</div>
@@ -753,7 +827,13 @@ input,textarea,select{user-select:text}
   <div class="ac">
     <div class="ac-top">
       <div class="ac-logo">
-        <div class="ac-mark" style="font-size:20px;line-height:1">🙈</div>
+        <div class="ac-mark" aria-hidden="true">
+          <svg viewBox="0 0 200 200" fill="none">
+            <circle cx="100" cy="100" r="6" fill="currentColor"/>
+            <path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+            <path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="10" stroke-linecap="round"/>
+          </svg>
+        </div>
         <div class="ac-word">SEOZ</div>
       </div>
       <div class="ac-h">Anslut ditt konto</div>
@@ -786,9 +866,9 @@ input,textarea,select{user-select:text}
         <span class="agent-tab-label" id="agentTabLabel">Claude</span>
       </div>
       <div class="wc-wrap">
-        <div class="wc" onclick="SE.minimize()"><svg width="10" height="1" viewBox="0 0 10 1"><rect width="10" height="1" fill="currentColor"/></svg></div>
-        <div class="wc" onclick="SE.maximize()"><svg width="10" height="10" viewBox="0 0 10 10" fill="none" stroke="currentColor" stroke-width="1.2"><rect x="0.6" y="0.6" width="8.8" height="8.8" rx="1"/></svg></div>
-        <div class="wc x" onclick="requestClose()"><svg width="10" height="10" viewBox="0 0 10 10" stroke="currentColor" stroke-width="1.3" stroke-linecap="round"><line x1="1" y1="1" x2="9" y2="9"/><line x1="9" y1="1" x2="1" y2="9"/></svg></div>
+        <div class="wc minimize" onclick="SE.minimize()" aria-label="Minimera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+        <div class="wc maximize" onclick="SE.maximize()" aria-label="Maximera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+        <div class="wc x" onclick="requestClose()" aria-label="Stäng"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
       </div>
     </div>
     <!-- Address bar -->
@@ -938,7 +1018,7 @@ input,textarea,select{user-select:text}
     <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative" id="wvContainer">
       <div id="wvStack" style="flex:1;min-height:0;position:relative">
         <webview id="wv" src="https://www.google.com"
-                 useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36"
+                 useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
                  allowpopups style="position:absolute;inset:0;width:100%;height:100%;border:none;outline:none">
         </webview>
       </div>
@@ -1017,6 +1097,11 @@ input,textarea,select{user-select:text}
       <div class="di" id="di-voice" onclick="togglePanel('voice')" style="color:#a78bfa">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         <div class="dtt">Röstchatt</div>
+      </div>
+      <div class="dock-sep"></div>
+      <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()" style="color:#f472b6">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <div class="dtt">Design Mode (Ctrl+Shift+D)</div>
       </div>
       <div class="dock-sep"></div>
       <div class="dock-spacer"></div>
@@ -1234,7 +1319,7 @@ const _tabWebviews = new Map() // tabId → webview element
 let wv = _wvTemplate // always points to the active tab's webview
 function getWV() { return wv }
 
-const CHROME_UA_WV = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+const CHROME_UA_WV = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
 
 function createWebviewForTab(tabId, url) {
   const el = document.createElement('webview')
@@ -1299,10 +1384,51 @@ const CHROME_SPOOF_SCRIPT = `
     get: () => ['sv-SE', 'sv', 'en-US', 'en']
   });
 
-  // Spoof webdriver flag (Google checks this)
+  // Spoof webdriver flag (Google checks this) — delete first so the
+  // original descriptor is gone, then re-define as false
+  try { delete Object.getPrototypeOf(navigator).webdriver; } catch(_) {}
   Object.defineProperty(navigator, 'webdriver', {
-    get: () => false
+    get: () => false,
+    configurable: true
   });
+
+  // Spoof navigator.userAgentData (Chrome 90+ exposes this; empty = bot tell)
+  if (!navigator.userAgentData) {
+    const brands = [
+      { brand: 'Chromium', version: '140' },
+      { brand: 'Not=A?Brand', version: '24' },
+      { brand: 'Google Chrome', version: '140' },
+    ];
+    const uaData = {
+      brands,
+      mobile: false,
+      platform: 'Windows',
+      getHighEntropyValues: (hints) => Promise.resolve({
+        brands,
+        mobile: false,
+        platform: 'Windows',
+        platformVersion: '15.0.0',
+        architecture: 'x86',
+        bitness: '64',
+        model: '',
+        uaFullVersion: '140.0.0.0',
+        wow64: false,
+      }),
+      toJSON: () => ({ brands, mobile: false, platform: 'Windows' }),
+    };
+    Object.defineProperty(navigator, 'userAgentData', {
+      get: () => uaData,
+      configurable: true
+    });
+  }
+
+  // Spoof hardwareConcurrency / deviceMemory to typical consumer values
+  try {
+    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true });
+  } catch(_) {}
+  try {
+    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true });
+  } catch(_) {}
 
   // Spoof permissions API for notifications query
   if (navigator.permissions) {
@@ -1736,13 +1862,16 @@ function _attachWebviewListeners(el, tabId) {
       return
     }
     // disposition: 'foreground-tab' = Ctrl+click/middle-click, 'background-tab' = Ctrl+Shift+click
-    // 'new-window'/'default' = target="_blank" or window.open() — navigate in same tab
-    if (e.disposition === 'foreground-tab' || e.disposition === 'background-tab') {
-      newTab(e.url)
-    } else {
-      // Stay in current tab — regular target="_blank" links, ads, popups
-      el.loadURL(e.url)
+    // 'new-window' = window.open() with features or target="_blank", 'default' = plain link
+    // Chrome-style behavior: _blank / new-window / foreground-tab → new tab.
+    // Only true popups (window.open with explicit w/h features) should stay in-place —
+    // we can't reliably detect that here, so default to opening a new tab.
+    if (e.disposition === 'save-to-disk') {
+      // Let Electron handle download
+      return
     }
+    const inBackground = e.disposition === 'background-tab'
+    newTab(e.url, { background: inBackground })
   })
 
   // Find-in-page results
@@ -1936,6 +2065,7 @@ function renderTabs() {
       el = document.createElement('div')
       el.dataset.tabId = id
       el.className = 'tab'
+      el.draggable = true
       el.innerHTML = `
         <div class="tab-ico-wrap"></div>
         <div class="tab-title"></div>
@@ -1945,8 +2075,12 @@ function renderTabs() {
           <div class="tab-tip-url"></div>
         </div>
       `
-      el.querySelector('.tab-x').addEventListener('click', e => closeTab(e, tab.id))
+      const xBtn = el.querySelector('.tab-x')
+      xBtn.draggable = false
+      xBtn.addEventListener('mousedown', e => e.stopPropagation())
+      xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
+      attachTabDnD(el)
       bar.insertBefore(el, ntBtn)
     }
 
@@ -1990,20 +2124,133 @@ function renderTabs() {
   })
 }
 
+// ── Tab drag & drop (Chrome-style reorder + tear-off) ───────────────
+let _dragTabId = null
+let _dropHandled = false
+// Threshold: how far (px) the cursor must leave the tabbar band to tear off
+const TEAR_OFF_THRESHOLD = 60
+
+function clearDragMarkers() {
+  document.querySelectorAll('#tabbar .tab.drag-over-left, #tabbar .tab.drag-over-right')
+    .forEach(n => n.classList.remove('drag-over-left', 'drag-over-right'))
+}
+
+function attachTabDnD(el) {
+  el.addEventListener('dragstart', e => {
+    _dragTabId = el.dataset.tabId
+    _dropHandled = false
+    el.classList.add('dragging')
+    try {
+      e.dataTransfer.effectAllowed = 'move'
+      // Firefox requires data to initiate a drag
+      e.dataTransfer.setData('text/plain', _dragTabId)
+    } catch {}
+  })
+
+  el.addEventListener('dragend', e => {
+    el.classList.remove('dragging')
+    const draggedId = _dragTabId
+    const handled = _dropHandled
+    _dragTabId = null
+    _dropHandled = false
+    clearDragMarkers()
+
+    if (handled || draggedId == null) return
+
+    // Tear-off check: drop landed outside the tabbar by more than threshold
+    const bar = document.getElementById('tabbar')
+    const rect = bar.getBoundingClientRect()
+    const outsideVertically = e.clientY < rect.top - TEAR_OFF_THRESHOLD
+                           || e.clientY > rect.bottom + TEAR_OFF_THRESHOLD
+    if (!outsideVertically) return
+
+    // Only tear off if we have at least one other tab left — otherwise pointless
+    if (tabs.length <= 1) return
+
+    const tab = tabs.find(t => String(t.id) === String(draggedId))
+    if (!tab || !tab.url || !/^https?:\/\//i.test(tab.url)) return
+    if (!SE || typeof SE.tabTearOff !== 'function') return
+
+    // Close the tab here, then ask main to spawn a new window with it
+    SE.tabTearOff(tab.url, e.screenX, e.screenY)
+    closeTab(null, tab.id)
+  })
+
+  el.addEventListener('dragover', e => {
+    if (_dragTabId == null) return
+    if (el.dataset.tabId === _dragTabId) return
+    e.preventDefault()
+    e.dataTransfer.dropEffect = 'move'
+    const rect = el.getBoundingClientRect()
+    const before = (e.clientX - rect.left) < rect.width / 2
+    clearDragMarkers()
+    el.classList.add(before ? 'drag-over-left' : 'drag-over-right')
+  })
+
+  el.addEventListener('dragleave', e => {
+    // Only clear if we really left this element (not a child)
+    if (e.relatedTarget && el.contains(e.relatedTarget)) return
+    el.classList.remove('drag-over-left', 'drag-over-right')
+  })
+
+  el.addEventListener('drop', e => {
+    e.preventDefault()
+    _dropHandled = true
+    if (_dragTabId == null || el.dataset.tabId === _dragTabId) {
+      clearDragMarkers()
+      return
+    }
+    const rect = el.getBoundingClientRect()
+    const before = (e.clientX - rect.left) < rect.width / 2
+    reorderTab(_dragTabId, el.dataset.tabId, before)
+    clearDragMarkers()
+  })
+}
+
+function reorderTab(srcId, dstId, insertBefore) {
+  const srcIdx = tabs.findIndex(t => String(t.id) === String(srcId))
+  const dstIdx = tabs.findIndex(t => String(t.id) === String(dstId))
+  if (srcIdx < 0 || dstIdx < 0 || srcIdx === dstIdx) return
+  const [moved] = tabs.splice(srcIdx, 1)
+  // Recompute dst index after removal
+  let newDst = tabs.findIndex(t => String(t.id) === String(dstId))
+  if (newDst < 0) newDst = tabs.length
+  const insertAt = insertBefore ? newDst : newDst + 1
+  tabs.splice(insertAt, 0, moved)
+
+  // Reflect new order in the DOM without recreating elements
+  const bar = document.getElementById('tabbar')
+  const ntBtn = document.getElementById('newtabBtn')
+  tabs.forEach(t => {
+    const el = bar.querySelector('.tab[data-tab-id="' + CSS.escape(String(t.id)) + '"]')
+    if (el) bar.insertBefore(el, ntBtn)
+  })
+
+  // Persist if the app has a session-save hook
+  if (typeof saveSession === 'function') { try { saveSession() } catch {} }
+}
+
 function esc(s) { return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/"/g,'&quot;') }
 
-function newTab(url) {
+function newTab(url, opts) {
   const id = nextId++
   const isBlank = !url
   const loadUrl = url || 'about:blank'
+  const background = !!(opts && opts.background)
   tabs.push({ id, title:'Ny flik', url: loadUrl, loading:false, favicon:null, _zoom:100 })
   // Create a dedicated webview for this tab
   createWebviewForTab(id, loadUrl)
+  if (background) {
+    // Keep current tab active — just show it in the bar
+    scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    return id
+  }
   switchTab(id)
   const urlInput = document.getElementById('urlInput')
   if (isBlank) urlInput.value = ''
   urlInput.focus()
   if (!isBlank) urlInput.select()
+  return id
 }
 
 function switchTab(id) {
@@ -3738,29 +3985,52 @@ function closeChromeMenu() { document.getElementById('chromeDd').classList.remov
 function buildChromeMenu() {
   const dd = document.getElementById('chromeDd')
   dd.innerHTML = ''
+  // Lucide line-icons (24-grid, 1.8 stroke). Replaces emoji per SEOZ OS v2.0.
+  const lc = (path) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`
+  const ico = {
+    plus:     lc('<path d="M12 5v14M5 12h14"/>'),
+    link:     lc('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+    copy:     lc('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+    external: lc('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>'),
+    search:   lc('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>'),
+    printer:  lc('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
+    clock:    lc('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
+    download: lc('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
+    star:     lc('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+    shield:   lc('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),
+    scan:     lc('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/>'),
+    fullscreen: lc('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>'),
+    moon:     lc('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
+    sun:      lc('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'),
+    settings: lc('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
+    zoomIn:   lc('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>'),
+  }
+  const isDark = document.documentElement.dataset.theme === 'dark'
   const items = [
-    { icon:'➕', label:'Ny flik', shortcut:'Ctrl+T', action: () => newTab() },
-    { icon:'🔗', label:'Ny flik med URL', shortcut:'', action: () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) } },
+    { icon: ico.plus,      label:'Ny flik', shortcut:'Ctrl+T', action: () => newTab() },
+    { icon: ico.link,      label:'Ny flik med URL', shortcut:'', action: () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) } },
     '---',
-    { icon:'📋', label:'Kopiera URL', shortcut:'', action: () => copyUrl() },
-    { icon:'📤', label:'Öppna i extern webbläsare', shortcut:'', action: () => SE.openExternal(document.getElementById('urlInput').value) },
+    { icon: ico.copy,      label:'Kopiera URL', shortcut:'', action: () => copyUrl() },
+    { icon: ico.external,  label:'Öppna i extern webbläsare', shortcut:'', action: () => SE.openExternal(document.getElementById('urlInput').value) },
     '---',
     'zoom',
     '---',
-    { icon:'🔍', label:'Sök på sidan', shortcut:'Ctrl+F', action: () => openFindBar() },
-    { icon:'🖨️', label:'Skriv ut', shortcut:'Ctrl+P', action: () => doPrint() },
+    { icon: ico.search,    label:'Sök på sidan', shortcut:'Ctrl+F', action: () => openFindBar() },
+    { icon: ico.printer,   label:'Skriv ut', shortcut:'Ctrl+P', action: () => doPrint() },
     '---',
-    { icon:'🕒', label:'Historik', shortcut:'Ctrl+H', action: () => openHistory() },
-    { icon:'⬇️', label:'Nedladdningar', shortcut:'Ctrl+J', action: () => openDownloads() },
-    { icon:'⭐', label:'Bokmärken', shortcut:'Ctrl+D', action: () => toggleBookmark() },
+    { icon: ico.clock,     label:'Historik', shortcut:'Ctrl+H', action: () => openHistory() },
+    { icon: ico.download,  label:'Nedladdningar', shortcut:'Ctrl+J', action: () => openDownloads() },
+    { icon: ico.star,      label:'Bokmärken', shortcut:'Ctrl+D', action: () => toggleBookmark() },
     '---',
-    { icon:'🛡️', label: blockerOn ? 'Shield aktiv (' + blockerCount + ' blockerade)' : 'Shield avstängd', shortcut:'', action: () => { toggleBlockerEnabled() } },
-    { icon:'🔬', label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
-    { icon:'⛶', label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
+    { icon: ico.shield,    label: blockerOn ? 'Shield aktiv (' + blockerCount + ' blockerade)' : 'Shield avstängd', shortcut:'', action: () => { toggleBlockerEnabled() } },
+    { icon: ico.scan,      label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
+    { icon: ico.fullscreen,label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
     '---',
-    { icon:'🌙', label: document.documentElement.dataset.theme === 'dark' ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
-    { icon:'⚙️', label:'Inställningar', shortcut:'', action: () => togglePanel('settings') },
+    { icon: isDark ? ico.sun : ico.moon, label: isDark ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
+    { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => togglePanel('settings') },
   ]
+  // Make the zoom-row icon available to the zoom block below
+  items._zoomIcon = ico.zoomIn
   items.forEach(item => {
     if (item === '---') {
       const sep = document.createElement('div'); sep.className = 'chrome-dd-sep'; dd.appendChild(sep); return
@@ -3768,12 +4038,13 @@ function buildChromeMenu() {
     if (item === 'zoom') {
       // Zoom control row
       const row = document.createElement('div'); row.className = 'zoom-row'
+      const resetIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`
       row.innerHTML = `
-        <span class="cdi-icon" style="width:20px;text-align:center;font-size:13px;flex-shrink:0">🔎</span>
+        <span class="cdi-icon">${items._zoomIcon}</span>
         <button class="zoom-btn" onclick="event.stopPropagation();doZoom(-10)">−</button>
         <span class="zoom-label" id="zoomLabel">${zoomLevel}%</span>
         <button class="zoom-btn" onclick="event.stopPropagation();doZoom(10)">+</button>
-        <button class="zoom-btn" style="margin-left:4px;font-size:10px;width:auto;padding:0 6px" onclick="event.stopPropagation();doZoom(0)">⟲</button>
+        <button class="zoom-btn" style="margin-left:4px;width:auto;padding:0 8px;display:inline-flex;align-items:center;justify-content:center" onclick="event.stopPropagation();doZoom(0)" aria-label="Återställ zoom">${resetIcon}</button>
       `
       dd.appendChild(row); return
     }
@@ -6200,11 +6471,56 @@ const _mcpTabToSession = new Map() // tabId -> sessionId
 const _mcpSessionColors = ['#7c3aed','#0891b2','#059669','#d97706','#dc2626','#be185d','#4f46e5','#0d9488']
 let _mcpColorIdx = 0
 
-function _getOrCreateMcpWebview(sessionId) {
-  // If session already has a tab, return its webview
+// ── MCP Tab Inactivity Auto-Close ──
+const _MCP_INACTIVITY_MS = 8000 // Auto-close MCP tabs after 8s of inactivity
+const _mcpInactivityTimers = new Map() // sessionId -> timeoutId
+
+function _resetMcpInactivityTimer(sessionId) {
+  // Clear any existing timer for this session
+  if (_mcpInactivityTimers.has(sessionId)) {
+    clearTimeout(_mcpInactivityTimers.get(sessionId))
+  }
+  // Set a new timer — if no activity within 8s, auto-close the tab
+  const timerId = setTimeout(() => {
+    _mcpInactivityTimers.delete(sessionId)
+    if (_mcpSessionToTab.has(sessionId)) {
+      console.log('[MCP] Auto-closing inactive tab for session:', sessionId)
+      window.__mcpCleanupSession(sessionId)
+    }
+  }, _MCP_INACTIVITY_MS)
+  _mcpInactivityTimers.set(sessionId, timerId)
+}
+
+// Helper: wait for a webview's dom-ready event (with timeout)
+function _waitForDomReady(wvEl, timeoutMs = 10000) {
+  return new Promise((resolve) => {
+    // Check if already ready by trying a harmless call
+    try {
+      wvEl.getURL()
+      // If getURL doesn't throw, the webview is attached and ready
+      resolve(wvEl)
+      return
+    } catch (e) {
+      // Not ready yet, wait for dom-ready
+    }
+    const timeout = setTimeout(() => { cleanup(); resolve(wvEl) }, timeoutMs)
+    function onReady() { cleanup(); resolve(wvEl) }
+    function cleanup() { clearTimeout(timeout); wvEl.removeEventListener('dom-ready', onReady) }
+    wvEl.addEventListener('dom-ready', onReady)
+  })
+}
+
+async function _getOrCreateMcpWebview(sessionId) {
+  // If session already has a tab, return its webview (already ready)
   if (_mcpSessionToTab.has(sessionId)) {
     const tabId = _mcpSessionToTab.get(sessionId)
-    return _tabWebviews.get(tabId)
+    const existing = _tabWebviews.get(tabId)
+    if (existing) {
+      // Ensure it's still attached and ready
+      try { existing.getURL(); return existing } catch(e) { /* fell through — re-wait */ }
+      await _waitForDomReady(existing)
+    }
+    return existing
   }
   // Create a new visible tab for this MCP session
   const tabId = nextId++
@@ -6216,11 +6532,20 @@ function _getOrCreateMcpWebview(sessionId) {
   _mcpSessionToTab.set(sessionId, tabId)
   _mcpTabToSession.set(tabId, sessionId)
   scheduleRenderTabs()
+  _resetMcpInactivityTimer(sessionId)
   console.log('[MCP] Created visible tab', tabId, 'for session:', sessionId, 'color:', color)
-  return _tabWebviews.get(tabId)
+  // Wait for the webview to be fully attached before returning
+  const newWv = _tabWebviews.get(tabId)
+  if (newWv) await _waitForDomReady(newWv)
+  return newWv
 }
 
 window.__mcpCleanupSession = function(sessionId) {
+  // Clear any inactivity timer for this session
+  if (_mcpInactivityTimers.has(sessionId)) {
+    clearTimeout(_mcpInactivityTimers.get(sessionId))
+    _mcpInactivityTimers.delete(sessionId)
+  }
   const tabId = _mcpSessionToTab.get(sessionId)
   if (tabId != null) {
     // Remove the webview
@@ -6242,11 +6567,59 @@ window.__mcpCleanupSession = function(sessionId) {
 }
 
 window.__mcpExecute = async function(toolName, args, sessionId) {
+  // ── Design Mode tools operate on the USER's active tab, not MCP session ──
+  if (toolName === 'design_toggle') {
+    if (window.__designMode) {
+      window.__designMode.toggle()
+      return JSON.stringify({ active: window.__designMode.isActive() })
+    }
+    return 'Design Mode not loaded'
+  }
+  if (toolName === 'design_get_selection') {
+    if (window.__designMode) {
+      const sel = window.__designMode.getSelection()
+      if (!sel) return 'No changes pushed yet. Ask the user to make visual changes in Design Mode and click "Push till Claude".'
+      return JSON.stringify(sel, null, 2)
+    }
+    return 'Design Mode not loaded'
+  }
+  if (toolName === 'design_get_changes') {
+    if (window.__designMode) {
+      const ch = window.__designMode.getChanges()
+      if (!ch || ch.length === 0) return 'No changes tracked yet. The user needs to edit text, CSS, or move elements in Design Mode first.'
+      return JSON.stringify(ch, null, 2)
+    }
+    return 'Design Mode not loaded'
+  }
+  if (toolName === 'design_apply_css') {
+    if (window.__designMode) {
+      const result = await window.__designMode.applyCSS(args.selector, args.css)
+      return result
+    }
+    return 'Design Mode not loaded'
+  }
+  if (toolName === 'design_apply_html') {
+    if (window.__designMode) {
+      const result = await window.__designMode.applyHTML(args.selector, args.html)
+      return result
+    }
+    return 'Design Mode not loaded'
+  }
+  if (toolName === 'design_set_text') {
+    if (window.__designMode) {
+      const result = await window.__designMode.setText(args.selector, args.text)
+      return result
+    }
+    return 'Design Mode not loaded'
+  }
+
   // Always use a dedicated MCP webview — never touch the user's active tab
   if (!sessionId) sessionId = '_fallback_' + Date.now()
-  const wv = _getOrCreateMcpWebview(sessionId)
+  const wv = await _getOrCreateMcpWebview(sessionId)
   const isMcpSession = true
   markAgentActive(toolName, sessionId)
+  // Reset inactivity timer — tab stays alive while tools are being called
+  _resetMcpInactivityTimer(sessionId)
 
   switch (toolName) {
     case 'navigate': {
@@ -7668,6 +8041,15 @@ loadBookmarks()
 loadHistory()
 loadDownloads()
 initBlocker()
+
+// One-shot: clear any persisted split-view layout from the (now reverted)
+// MVP. Safe to remove this block once seen in prod for a release or two.
+try { SE.storeSet('paneCount', 1) } catch(e) {}
 </script>
+<script>
+// ── Connect Design Mode to active webview ──
+window.__designGetWebview = function() { return wv; }
+</script>
+<script src="design-mode.js"></script>
 </body>
 </html>

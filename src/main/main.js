@@ -46,6 +46,18 @@ if (process.platform === 'win32') {
   app.setAsDefaultProtocolClient('https')
 }
 
+// ══════════════════════════════════════════════════════════════════════════════
+//  ANTI-DETECTION — make Electron look like a real Chrome install so sites
+//  like Cloudflare / hCaptcha / Google don't instantly flag us as a bot.
+// ══════════════════════════════════════════════════════════════════════════════
+// Remove the "AutomationControlled" flag that Chromium sets by default when
+// running under CDP / embedded — bot detectors check for this first.
+app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
+// Avoid leaking that we're headless-ish (some heuristics check this).
+app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,Translate')
+// Use a realistic number of cores / RAM when asked via Navigator APIs
+app.commandLine.appendSwitch('enable-features', 'NetworkService,NetworkServiceInProcess')
+
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {
   // The URL is typically the last argument
@@ -138,7 +150,15 @@ function isDomainBlocked(hostname) {
 }
 
 // Chrome User-Agent — used globally so all requests look like real Chrome
-const CHROME_UA = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/131.0.0.0 Safari/537.36'
+// NOTE: keep in sync with CHROME_MAJOR below for Sec-CH-UA client hints.
+const CHROME_MAJOR = '140'
+const CHROME_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`
+
+// Sec-CH-UA client hints — modern bot detectors (Cloudflare, Akamai, hCaptcha)
+// compare these against the UA string. They MUST match or the request is flagged.
+const SEC_CH_UA = `"Chromium";v="${CHROME_MAJOR}", "Not=A?Brand";v="24", "Google Chrome";v="${CHROME_MAJOR}"`
+const SEC_CH_UA_PLATFORM = '"Windows"'
+const SEC_CH_UA_MOBILE = '?0'
 
 function setupContentBlocker() {
   // Intercept requests in the webview's partition
@@ -147,6 +167,20 @@ function setupContentBlocker() {
 
   // Override User-Agent at session level (removes "Electron/..." from UA)
   ses.setUserAgent(CHROME_UA)
+
+  // Normalize request headers so they match a real Chrome install
+  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+    const h = details.requestHeaders
+    // Strip any Electron fingerprint
+    delete h['Electron']
+    // Force a consistent modern Chrome UA (some sites re-send old UA header)
+    h['User-Agent'] = CHROME_UA
+    // Add/override client hints — only for navigations & top-level resources
+    h['sec-ch-ua'] = SEC_CH_UA
+    h['sec-ch-ua-mobile'] = SEC_CH_UA_MOBILE
+    h['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
+    callback({ requestHeaders: h })
+  })
 
   // Never block these domains
   const whitelist = ['seoz.se', 'flow.seoz.se', 'api.seoz.se']
@@ -201,25 +235,27 @@ function createWindow() {
     return allowed.includes(permission)
   })
 
-  // Block Ctrl+Shift+R / F5 from reloading the entire Electron renderer
-  // (handled in renderer to only reload the active webview tab)
+  // Block Electron's default Ctrl+R / Ctrl+Shift+R / F5 / Shift+F5 handling
+  // on the window. The renderer listens for these and calls wvReload() on
+  // the active tab's <webview> only. Without this, Electron reloads the
+  // entire BrowserWindow renderer, which recreates all tabs from scratch.
+  // preventDefault() here only blocks Electron's built-in accelerator — the
+  // keydown still flows to the renderer so its JS handler fires.
   win.webContents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
     const ctrl = input.control || input.meta
-    if (ctrl && input.shift && input.key.toLowerCase() === 'r') event.preventDefault()
-    if (input.shift && input.key === 'F5') event.preventDefault()
+    const keyLower = (input.key || '').toLowerCase()
+    if (ctrl && keyLower === 'r') event.preventDefault()
+    if (input.key === 'F5') event.preventDefault()
   })
 
   // Intercept any window.open / target="_blank" that escapes webview
   // Navigate in same tab instead of opening a new OS window
   win.webContents.setWindowOpenHandler(({ url, disposition }) => {
     if (url && /^https?:\/\//i.test(url)) {
-      // Only open as new tab for explicit user actions (Ctrl+click etc)
-      if (disposition === 'foreground-tab' || disposition === 'background-tab') {
-        win.webContents.send('open-url', url)
-      } else {
-        win.webContents.send('navigate-current', url)
-      }
+      // Chrome-style: any escape (target=_blank, window.open, ctrl/middle click)
+      // opens as a new tab in this browser instead of a separate OS window.
+      win.webContents.send('open-url', url)
     }
     return { action: 'deny' }
   })
@@ -238,13 +274,44 @@ function createWindow() {
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
   })
   win.on('closed', () => { win = null; stopSync() })
-
-  if (process.argv.includes('--dev')) {
-    win.webContents.openDevTools({ mode: 'detach' })
-  }
 }
 
 // ── Window controls ──
+// Tear-off: open a dragged tab as a new window at the drop location
+ipcMain.on('tab-tear-off', (_evt, payload) => {
+  try {
+    const { url, x, y } = payload || {}
+    if (!url || !/^https?:\/\//i.test(url)) return
+    const bounds = store.get('bounds') || { width: 1400, height: 860 }
+    const newWin = new BrowserWindow({
+      width: bounds.width,
+      height: bounds.height,
+      x: typeof x === 'number' ? Math.max(0, x - 200) : undefined,
+      y: typeof y === 'number' ? Math.max(0, y - 20) : undefined,
+      minWidth: 800, minHeight: 500,
+      backgroundColor: '#131920',
+      titleBarStyle: 'hidden',
+      frame: false,
+      webPreferences: {
+        preload: path.join(__dirname, '../preload/preload.js'),
+        contextIsolation: true,
+        nodeIntegration: false,
+        webviewTag: true,
+        sandbox: false,
+      },
+      icon: APP_ICON,
+      show: false,
+    })
+    newWin.loadFile(path.join(__dirname, '../renderer/index.html'))
+    newWin.once('ready-to-show', () => {
+      newWin.show()
+      newWin.webContents.send('open-url', url)
+    })
+  } catch (err) {
+    console.error('[tab-tear-off] failed:', err)
+  }
+})
+
 ipcMain.on('win-min',   () => win?.minimize())
 ipcMain.on('win-max',   () => win?.isMaximized() ? win.unmaximize() : win?.maximize())
 ipcMain.on('win-close', () => win?.close())

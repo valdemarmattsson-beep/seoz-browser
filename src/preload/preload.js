@@ -81,6 +81,9 @@ contextBridge.exposeInMainWorld('seoz', {
   terminalHistoryRecent: (opts) => ipcRenderer.invoke('terminal-history-recent', opts),
   terminalHistoryClear:  ()     => ipcRenderer.invoke('terminal-history-clear'),
 
+  // Tab tear-off (drag a tab out of the window to create a new window)
+  tabTearOff: (url, x, y) => ipcRenderer.send('tab-tear-off', { url, x, y }),
+
   // Auto-updater
   updaterCheck:     () => ipcRenderer.send('updater-check'),
   updaterDownload:  () => ipcRenderer.send('updater-download'),

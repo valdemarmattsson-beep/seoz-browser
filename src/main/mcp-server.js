@@ -290,6 +290,58 @@ const TOOLS = [
       required: ['fields']
     }
   },
+  // ── Design Mode tools ──
+  {
+    name: 'design_toggle',
+    description: 'Toggle Design Mode on/off. Design Mode is a Figma-like overlay that lets the user inspect, annotate, and move elements on the page. Use this to activate the overlay before using other design_ tools.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'design_get_selection',
+    description: 'Get the full Design Mode payload after the user clicked "Push till Claude". Returns all tracked changes (text edits, CSS changes, moved elements, hidden elements) with original and modified values, plus page URL and surrounding HTML context. Use this to understand what the user changed visually, then use run_command to find and edit the actual source files.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'design_get_changes',
+    description: 'Get the list of visual changes the user made in Design Mode. Each change has: selector, type (text/css/move/hide), description, original value, and modified value. Use this to map DOM changes back to source code files.',
+    inputSchema: { type: 'object', properties: {} }
+  },
+  {
+    name: 'design_apply_css',
+    description: 'Apply CSS changes to an element on the page. Takes a CSS selector and an object of CSS property-value pairs. Use this to implement design changes the user requested via Design Mode. Example: { "selector": ".hero-title", "css": { "fontSize": "48px", "color": "#1a1a1a" } }',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector of the element to modify' },
+        css: { type: 'object', description: 'Object of CSS property-value pairs (camelCase keys). E.g. { "fontSize": "16px", "backgroundColor": "#fff" }' }
+      },
+      required: ['selector', 'css']
+    }
+  },
+  {
+    name: 'design_apply_html',
+    description: 'Replace an element\'s HTML on the page. Takes a CSS selector and the new outerHTML. Use for structural changes like rewriting a component\'s markup. The change is live-previewed in the browser.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector of the element to replace' },
+        html: { type: 'string', description: 'New outerHTML to replace the element with' }
+      },
+      required: ['selector', 'html']
+    }
+  },
+  {
+    name: 'design_set_text',
+    description: 'Change the visible text content of an element on the page. Use this for simple text edits like updating headings, button labels, paragraphs, etc. Preserves child elements — only replaces text nodes.',
+    inputSchema: {
+      type: 'object',
+      properties: {
+        selector: { type: 'string', description: 'CSS selector of the element whose text to change' },
+        text: { type: 'string', description: 'New text content' }
+      },
+      required: ['selector', 'text']
+    }
+  },
 ]
 
 // ── Execute MCP tool via IPC to renderer (or directly for terminal) ──
@@ -467,22 +519,59 @@ function startMCPServer() {
     res.writeHead(404); res.end('Not Found')
   })
 
+  // Surface HTTP-level errors instead of silently dying
+  server.on('clientError', (err, socket) => {
+    console.warn('[MCP] clientError:', err.message)
+    try { socket.destroy() } catch {}
+  })
+
+  server.on('close', () => {
+    console.log('[MCP] server closed')
+  })
+
   server.listen(MCP_PORT, '127.0.0.1', () => {
     console.log(`[MCP] SEOZ Browser MCP Server running on http://127.0.0.1:${MCP_PORT}`)
   })
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
-      console.warn(`[MCP] Port ${MCP_PORT} in use, trying ${MCP_PORT + 1}`)
-      server.listen(MCP_PORT + 1, '127.0.0.1')
+      // DO NOT silently shift to another port — the stdio proxy hardcodes 19532.
+      // Most likely cause: a stale instance of SEOZ Browser is still running.
+      console.error(
+        `[MCP] Port ${MCP_PORT} already in use. ` +
+        `Another SEOZ Browser instance is likely running. ` +
+        `Close it (check Task Manager for electron.exe) and relaunch.`
+      )
+      server = null
     } else {
       console.error('[MCP] Server error:', err)
+      server = null
     }
   })
 }
 
+// Async-safe shutdown: actually waits for close before resolving so a
+// subsequent startMCPServer() doesn't race the old listener.
 function stopMCPServer() {
-  if (server) { server.close(); server = null }
+  return new Promise(resolve => {
+    if (!server) return resolve()
+    const s = server
+    server = null
+    s.close(err => {
+      if (err) console.warn('[MCP] error during close:', err.message)
+      resolve()
+    })
+    // Close keep-alive connections so .close() actually completes promptly
+    if (typeof s.closeAllConnections === 'function') s.closeAllConnections()
+  })
 }
+
+// Global safety nets — a single bad tool call shouldn't kill the port
+process.on('unhandledRejection', (reason) => {
+  console.error('[MCP] unhandledRejection:', reason && reason.stack || reason)
+})
+process.on('uncaughtException', (err) => {
+  console.error('[MCP] uncaughtException:', err && err.stack || err)
+})
 
 module.exports = { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch }

@@ -50,6 +50,19 @@ contextBridge.exposeInMainWorld('seoz', {
   elevenlabsTTS:    (opts) => ipcRenderer.invoke('elevenlabs-tts', opts),
   elevenlabsVoices: (opts) => ipcRenderer.invoke('elevenlabs-voices', opts),
 
+  // Mail (IMAP/SMTP)
+  mail: {
+    test:       (cfg)      => ipcRenderer.invoke('mail:test', cfg),
+    saveConfig: (cfg)      => ipcRenderer.invoke('mail:save-config', cfg),
+    hasConfig:  ()         => ipcRenderer.invoke('mail:has-config'),
+    getConfig:  ()         => ipcRenderer.invoke('mail:get-config'),
+    forget:     ()         => ipcRenderer.invoke('mail:forget'),
+    list:       (opts)     => ipcRenderer.invoke('mail:list', opts || {}),
+    get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
+    flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
+    send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),
+  },
+
   // OS notifications
   notify:      (title, body) => ipcRenderer.send('send-notification', { title, body }),
 

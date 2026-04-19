@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage } = require('electron')
 const path = require('path')
 const https = require('https')
 const os = require('os')
@@ -8,6 +8,7 @@ const { exec, spawn } = require('child_process')
 const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
 const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch } = require('./mcp-server')
+const mail = require('./mail')
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
@@ -812,6 +813,113 @@ ipcMain.handle('terminal-history-clear', () => {
   historyStore.set('entries', [])
   return { ok: true }
 })
+
+// ══════════════════════════════════════════════════════════════════════
+//  MAIL — IMAP/SMTP via src/main/mail.js. The app password is stored
+//  encrypted via Electron's safeStorage (OS-level: Keychain on macOS,
+//  DPAPI on Windows, libsecret on Linux). Everything else lives in plain
+//  electron-store so the renderer can read connection metadata without
+//  decryption roundtrips.
+// ══════════════════════════════════════════════════════════════════════
+const MAIL_STORE_KEY = 'mailConfig'
+function _mailLoadConfig() {
+  const raw = store.get(MAIL_STORE_KEY, null)
+  if (!raw || !raw.email) return null
+  let password = null
+  if (raw.passwordEnc && safeStorage.isEncryptionAvailable()) {
+    try { password = safeStorage.decryptString(Buffer.from(raw.passwordEnc, 'base64')) } catch (_) {}
+  }
+  return { ...raw, password }
+}
+function _mailSaveConfig(cfg) {
+  if (!cfg || !cfg.email) throw new Error('email required')
+  const toStore = { ...cfg }
+  delete toStore.password
+  delete toStore.passwordEnc
+  if (cfg.password) {
+    if (!safeStorage.isEncryptionAvailable()) {
+      throw new Error('OS-kryptering ej tillgänglig — kan inte lagra lösenord säkert')
+    }
+    toStore.passwordEnc = safeStorage.encryptString(cfg.password).toString('base64')
+  }
+  store.set(MAIL_STORE_KEY, toStore)
+}
+
+ipcMain.handle('mail:test', async (_evt, cfg) => {
+  return mail.testConnection(cfg)
+})
+
+ipcMain.handle('mail:save-config', async (_evt, cfg) => {
+  try { _mailSaveConfig(cfg); return { ok: true } }
+  catch (err) { return { ok: false, error: err.message } }
+})
+
+ipcMain.handle('mail:has-config', async () => {
+  const cfg = _mailLoadConfig()
+  return !!(cfg && cfg.password)
+})
+
+ipcMain.handle('mail:get-config', async () => {
+  const cfg = _mailLoadConfig()
+  if (!cfg) return null
+  // Never expose the decrypted password to the renderer. Return a metadata
+  // view (safe to show in settings).
+  const { password, passwordEnc, ...safe } = cfg
+  return safe
+})
+
+ipcMain.handle('mail:forget', async () => {
+  try { await mail.closeAll() } catch (_) {}
+  store.delete(MAIL_STORE_KEY)
+  return { ok: true }
+})
+
+ipcMain.handle('mail:list', async (_evt, { folder, limit } = {}) => {
+  const cfg = _mailLoadConfig()
+  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+  try {
+    const messages = await mail.listMessages(cfg, folder || 'INBOX', Number(limit) || 50)
+    return { ok: true, messages }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('mail:get', async (_evt, { uid, folder } = {}) => {
+  const cfg = _mailLoadConfig()
+  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+  try {
+    const message = await mail.getMessage(cfg, uid, folder || 'INBOX')
+    return { ok: true, message }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('mail:flag', async (_evt, { uid, flag, value, folder } = {}) => {
+  const cfg = _mailLoadConfig()
+  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+  try {
+    return await mail.setFlag(cfg, uid, flag || '\\Seen', !!value, folder || 'INBOX')
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('mail:send', async (_evt, opts) => {
+  const cfg = _mailLoadConfig()
+  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+  try {
+    return await mail.sendMessage(cfg, opts || {})
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+// Make sure we disconnect IMAP cleanly on quit so the server doesn't
+// sit waiting for the idle timeout.
+app.on('before-quit', async () => { try { await mail.closeAll() } catch (_) {} })
+
 // Expose for MCP server (direct access, no IPC round-trip)
 function terminalExecDirect(command, cwd, source) {
   const workDir = cwd || os.homedir()

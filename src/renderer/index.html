@@ -75,8 +75,25 @@
 }
 #homeScreen.show{display:flex}
 .home-inner{width:100%;max-width:640px;display:flex;flex-direction:column;align-items:center;gap:0}
-.home-mark{width:56px;height:56px;color:var(--head);margin-bottom:18px;opacity:.95}
+.home-mark{width:56px;height:56px;color:var(--head);margin-bottom:18px;opacity:.95;animation:home-orbit-pulse 300s linear infinite}
 .home-mark svg{width:100%;height:100%;display:block}
+/* Spin a couple of turns + cycle through the design-system semantic
+   colours (accent → live → warn → danger → rest) in the first ~3 s of
+   every 5-minute cycle. Rest of the cycle the mark just sits at --head.
+   Using a keyframe with a hold-at-end segment gets the "pulse then wait"
+   pattern without needing JS timers. */
+@keyframes home-orbit-pulse {
+  0%    { transform: rotate(0deg);   color: var(--head); }
+  0.25% { transform: rotate(180deg); color: var(--p); }
+  0.50% { transform: rotate(360deg); color: var(--g); }
+  0.75% { transform: rotate(540deg); color: var(--w); }
+  1%    { transform: rotate(720deg); color: var(--r); }
+  1.5%  { transform: rotate(720deg); color: var(--head); }
+  100%  { transform: rotate(720deg); color: var(--head); }
+}
+@media (prefers-reduced-motion: reduce) {
+  .home-mark { animation: none; }
+}
 .home-greet{
   font-family:'Inter Tight','Inter',sans-serif;
   font-size:26px;font-weight:600;color:var(--head);
@@ -151,6 +168,148 @@
 .home-slash-item:hover,.home-slash-item.sel{background:var(--panel)}
 .home-slash-cmd{font-family:monospace;color:var(--p);font-weight:600;min-width:96px}
 .home-slash-desc{color:var(--muted);font-size:10px}
+
+/* ══════════════════════════════════════════════════════════
+   MAIL SCREEN — full-tab Gmail-style inbox
+══════════════════════════════════════════════════════════ */
+#mailScreen{
+  position:absolute;inset:0;z-index:6;
+  background:var(--bg);display:none;flex-direction:column;overflow:hidden;
+}
+#mailScreen.show{display:flex}
+.mail-topbar{
+  height:48px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;
+  background:var(--card);
+}
+.mail-topbar-title{
+  font-family:'Inter Tight','Inter',sans-serif;font-size:14px;font-weight:600;
+  color:var(--head);letter-spacing:-.01em;display:flex;align-items:center;gap:8px;
+}
+.mail-topbar-title svg{width:16px;height:16px;color:var(--p)}
+.mail-topbar-addr{font-size:11px;color:var(--muted);font-family:monospace}
+.mail-topbar-spacer{flex:1}
+.mail-topbar-btn{
+  height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);
+  background:var(--panel);color:var(--txt);font-size:11px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:background .12s,border-color .12s;
+}
+.mail-topbar-btn:hover{background:var(--card);border-color:var(--p)}
+.mail-topbar-btn.primary{background:var(--p);color:#fff;border-color:var(--p)}
+.mail-topbar-btn.primary:hover{background:var(--p600)}
+.mail-topbar-btn svg{width:13px;height:13px}
+
+.mail-body{flex:1;display:flex;min-height:0;overflow:hidden}
+
+/* Empty / setup state */
+.mail-setup{
+  flex:1;display:flex;flex-direction:column;align-items:center;justify-content:center;
+  padding:40px 20px;overflow-y:auto;
+}
+.mail-setup-card{
+  width:100%;max-width:520px;background:var(--card);border:1px solid var(--border);
+  border-radius:14px;padding:28px;
+}
+.mail-setup-title{
+  font-family:'Inter Tight','Inter',sans-serif;font-size:20px;font-weight:600;
+  color:var(--head);margin-bottom:6px;letter-spacing:-.02em;
+}
+.mail-setup-sub{font-size:12px;color:var(--muted);line-height:1.5;margin-bottom:20px}
+.mail-setup-presets{display:flex;gap:6px;margin-bottom:18px;flex-wrap:wrap}
+.mail-preset{
+  height:28px;padding:0 12px;border-radius:6px;border:1px solid var(--border);
+  background:var(--panel);color:var(--txt);font-size:11px;cursor:pointer;
+  transition:background .12s;
+}
+.mail-preset:hover{background:var(--card)}
+.mail-preset.active{background:var(--p);color:#fff;border-color:var(--p)}
+.mail-form-row{margin-bottom:12px}
+.mail-form-row label{font-size:10px;font-weight:600;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;display:block;margin-bottom:4px}
+.mail-form-row input{
+  width:100%;height:34px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;color:var(--txt);
+  outline:none;transition:border-color .15s,box-shadow .15s;
+}
+.mail-form-row input:focus{border-color:var(--p);box-shadow:0 0 0 3px rgba(70,128,255,.12)}
+.mail-form-row.grid{display:grid;grid-template-columns:1fr 80px;gap:6px}
+.mail-form-hint{font-size:10px;color:var(--muted);margin-top:3px;line-height:1.4}
+.mail-form-hint a{color:var(--p);cursor:pointer;text-decoration:underline}
+.mail-setup-actions{display:flex;gap:8px;margin-top:16px;align-items:center}
+.mail-setup-msg{font-size:11px;margin-top:8px;padding:8px 10px;border-radius:6px;display:none}
+.mail-setup-msg.show{display:block}
+.mail-setup-msg.ok{background:rgba(44,168,127,.08);border:1px solid rgba(44,168,127,.2);color:var(--g)}
+.mail-setup-msg.err{background:rgba(220,38,38,.08);border:1px solid rgba(220,38,38,.2);color:var(--r)}
+
+/* Inbox layout */
+.mail-inbox-pane{width:360px;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0;background:var(--card)}
+.mail-reader-pane{flex:1;overflow-y:auto;padding:24px 28px;background:var(--bg)}
+.mail-empty-note{color:var(--muted);font-size:11px;padding:24px;text-align:center}
+
+/* Inbox row */
+.mail-row{
+  padding:10px 14px;border-bottom:1px solid var(--border);cursor:pointer;
+  transition:background .1s;display:flex;flex-direction:column;gap:4px;min-height:62px;
+}
+.mail-row:hover{background:var(--panel)}
+.mail-row.selected{background:rgba(70,128,255,.12)}
+.mail-row.unread .mail-row-from,
+.mail-row.unread .mail-row-subject{color:var(--head);font-weight:600}
+.mail-row-line1{display:flex;align-items:center;gap:6px;font-size:11.5px;color:var(--txt)}
+.mail-row-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--p);flex-shrink:0;
+}
+.mail-row-from{
+  flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt);
+}
+.mail-row-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.mail-row-subject{
+  font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  padding-left:12px;
+}
+.mail-row.unread .mail-row-subject{padding-left:12px}
+
+/* Reader */
+.mail-reader-head{
+  border-bottom:1px solid var(--border);padding-bottom:14px;margin-bottom:16px;
+}
+.mail-reader-subject{
+  font-family:'Inter Tight','Inter',sans-serif;font-size:18px;font-weight:600;color:var(--head);
+  letter-spacing:-.01em;line-height:1.3;margin-bottom:10px;
+}
+.mail-reader-meta{font-size:11px;color:var(--muted);line-height:1.7;display:flex;flex-direction:column;gap:2px}
+.mail-reader-meta strong{color:var(--txt);font-weight:500;margin-right:4px}
+.mail-reader-html{
+  color:var(--txt);font-size:13px;line-height:1.6;max-width:780px;
+  word-wrap:break-word;overflow-wrap:break-word;
+}
+.mail-reader-html img{max-width:100%;height:auto;border-radius:4px}
+.mail-reader-html a{color:var(--p);text-decoration:underline}
+.mail-reader-html table{max-width:100%;border-collapse:collapse;margin:8px 0}
+.mail-reader-html td, .mail-reader-html th{padding:4px 8px}
+.mail-reader-html blockquote{
+  border-left:3px solid var(--border);padding:4px 12px;margin:8px 0;
+  color:var(--muted);
+}
+.mail-reader-html pre{
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:8px 10px;overflow-x:auto;font-size:11px;
+}
+.mail-reader-text{
+  white-space:pre-wrap;font-family:'Inter',sans-serif;font-size:13px;
+  line-height:1.6;color:var(--txt);max-width:780px;margin:0;
+}
+.mail-attachments{
+  margin-top:20px;padding-top:14px;border-top:1px solid var(--border);
+}
+.mail-attachments-title{
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px;
+}
+.mail-att-row{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;
+  font-size:11px;color:var(--txt);background:var(--panel);margin-bottom:4px;
+}
+.mail-att-row svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100vh;overflow:hidden;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);color:var(--txt);user-select:none}
 
@@ -1153,6 +1312,32 @@ input,textarea,select{user-select:text}
             <div class="home-recent" id="homeRecent"></div>
           </div>
         </div>
+
+        <!-- Mail screen overlay — full-tab when active tab URL is seoz://mail -->
+        <div id="mailScreen" role="region" aria-label="Mejl">
+          <div class="mail-topbar">
+            <div class="mail-topbar-title">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+              <span>Mejl</span>
+              <span class="mail-topbar-addr" id="mailAddr"></span>
+            </div>
+            <div class="mail-topbar-spacer"></div>
+            <button class="mail-topbar-btn" id="mailRefreshBtn" onclick="mailRefresh()" style="display:none" aria-label="Uppdatera">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+              <span>Uppdatera</span>
+            </button>
+            <button class="mail-topbar-btn primary" id="mailComposeBtn" onclick="mailCompose()" style="display:none">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/></svg>
+              <span>Skriv</span>
+            </button>
+            <button class="mail-topbar-btn" id="mailSettingsBtn" onclick="mailOpenSetup()" style="display:none" title="Inställningar">
+              <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+            </button>
+          </div>
+          <div class="mail-body" id="mailBody">
+            <div class="mail-empty-note">Laddar…</div>
+          </div>
+        </div>
       </div>
       <!-- Voice button moved to dock sidebar -->
       <!-- SEOZ Inspector drawer -->
@@ -1229,6 +1414,10 @@ input,textarea,select{user-select:text}
       <div class="di" id="di-voice" onclick="togglePanel('voice')" style="color:#a78bfa">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
         <div class="dtt">Röstchatt</div>
+      </div>
+      <div class="di" id="di-mail" onclick="openMail()" style="color:#06b6d4">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+        <div class="dtt">Mejl</div>
       </div>
       <div class="dock-sep"></div>
       <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()" style="color:#f472b6">
@@ -2128,10 +2317,10 @@ function doNav(raw) {
   // If the active tab is still on the home sentinel, promote it to a real
   // page so the overlay hides and tab.url reflects the destination.
   const active = tabs.find(t => t.id === activeId)
-  if (active && isHomeUrl(active.url)) {
+  if (active && isOverlayUrl(active.url)) {
     active.url = u
     active.loading = true
-    syncHomeVisibility()
+    syncOverlayVisibility()
     scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
   }
   wv.loadURL(u)
@@ -2158,7 +2347,10 @@ let nextId = 2
 //  presence in tab.url just means "show the home overlay here".
 // ══════════════════════════════════════════════════════
 const HOME_URL = 'seoz://home'
+const MAIL_URL = 'seoz://mail'
 function isHomeUrl(u) { return u === HOME_URL || u === '' || u === 'about:blank' }
+function isMailUrl(u) { return u === MAIL_URL }
+function isOverlayUrl(u) { return isHomeUrl(u) || isMailUrl(u) }
 
 // Recent-closed ring buffer (persisted). Populated by closeTab().
 let _recentClosed = []
@@ -2233,17 +2425,27 @@ async function renderHomeScreen() {
 }
 
 function syncHomeVisibility() {
+  // Kept as a back-compat alias — internal code now routes everything
+  // through syncOverlayVisibility() which also handles the mail overlay.
+  syncOverlayVisibility()
+}
+
+function syncOverlayVisibility() {
   const active = tabs.find(t => t.id === activeId)
   const home = document.getElementById('homeScreen')
-  if (!home) return
-  const isHome = active && isHomeUrl(active.url)
-  home.classList.toggle('show', !!isHome)
-  // Hide the active webview while on home so it doesn't paint over us.
+  const mailEl = document.getElementById('mailScreen')
+  const onHome = !!(active && isHomeUrl(active.url))
+  const onMail = !!(active && isMailUrl(active.url))
+  if (home) home.classList.toggle('show', onHome)
+  if (mailEl) mailEl.classList.toggle('show', onMail)
+  // Hide active webview while any overlay owns the tab area.
   const wvEl = _tabWebviews.get(activeId)
-  if (wvEl) wvEl.style.display = isHome ? 'none' : ''
-  if (isHome) {
+  if (wvEl) wvEl.style.display = (onHome || onMail) ? 'none' : ''
+  if (onHome) {
     renderHomeScreen()
     setTimeout(() => document.getElementById('homeInput')?.focus(), 30)
+  } else if (onMail) {
+    renderMailScreen()
   }
 }
 
@@ -2364,7 +2566,7 @@ function _routeQuestionToClaude(text) {
 // Pull the active webview's text and ask Claude about it.
 async function _askClaudeAboutActiveTab(prompt) {
   // Look for the newest non-home tab with a real URL.
-  const candidate = [...tabs].reverse().find(t => !isHomeUrl(t.url))
+  const candidate = [...tabs].reverse().find(t => !isOverlayUrl(t.url))
   const wvEl = candidate ? _tabWebviews.get(candidate.id) : null
   if (!candidate || !wvEl) {
     toast('Öppna en sida i en annan flik först', '#dc2626')
@@ -2421,6 +2623,354 @@ window.handleHomeSubmit = handleHomeSubmit
 window.onHomeInput = onHomeInput
 window.onHomeKey = onHomeKey
 window._applySlash = _applySlash
+
+// ══════════════════════════════════════════════════════
+//  MAIL SCREEN — v1 Fas 1: onboarding + stub inbox
+// ══════════════════════════════════════════════════════
+
+// Provider presets used on the setup form. Each maps to IMAP + SMTP
+// endpoints and a helpful hint about where to grab the app password.
+const _MAIL_PRESETS = {
+  zoho:    { label: 'Zoho (EU)', imapHost: 'imap.zoho.eu', imapPort: 993, smtpHost: 'smtp.zoho.eu', smtpPort: 465, hint: 'EU-konton (.eu). App-lösenord: <a onclick="SE.openExternal(\'https://accounts.zoho.eu/home#security/app_passwords\')">accounts.zoho.eu</a>. IMAP måste vara aktiverat i Zoho Mail → Settings → Mail Accounts → IMAP Access.' },
+  zohoUS:  { label: 'Zoho (US)', imapHost: 'imap.zoho.com', imapPort: 993, smtpHost: 'smtp.zoho.com', smtpPort: 465, hint: 'US/default-konton. App-lösenord: <a onclick="SE.openExternal(\'https://accounts.zoho.com/home#security/app_passwords\')">accounts.zoho.com</a>. IMAP måste vara aktiverat i Zoho Mail-inställningarna.' },
+  gmail:   { label: 'Gmail',   imapHost: 'imap.gmail.com',   imapPort: 993, smtpHost: 'smtp.gmail.com',   smtpPort: 465, hint: 'Kräver 2FA + app-lösenord från <a onclick="SE.openExternal(\'https://myaccount.google.com/apppasswords\')">myaccount.google.com/apppasswords</a>.' },
+  outlook: { label: 'Outlook/365', imapHost: 'outlook.office365.com', imapPort: 993, smtpHost: 'smtp.office365.com', smtpPort: 587, hint: 'Microsoft tillåter bara IMAP på vissa konton. Generera app-lösenord via kontoinställningarna.' },
+  icloud:  { label: 'iCloud',  imapHost: 'imap.mail.me.com', imapPort: 993, smtpHost: 'smtp.mail.me.com', smtpPort: 587, hint: 'Kräver app-specifikt lösenord från <a onclick="SE.openExternal(\'https://appleid.apple.com/account/manage\')">appleid.apple.com</a>.' },
+  custom:  { label: 'Annat',   imapHost: '',                 imapPort: 993, smtpHost: '',                 smtpPort: 465, hint: 'Fyll i IMAP- och SMTP-hosts manuellt. Standardport: IMAP 993 (SSL), SMTP 465 (SSL) eller 587 (STARTTLS).' },
+}
+let _mailPresetKey = 'zoho'
+let _mailHasConfig = false
+let _mailCfgMeta = null  // { email, displayName, signature, fromAddresses, imap*, smtp* } — no password
+
+// Open the mail screen (or switch to an existing mail tab). Called from
+// the dock icon.
+window.openMail = function() {
+  // If any existing tab already owns seoz://mail, switch to it.
+  const existing = tabs.find(t => isMailUrl(t.url))
+  if (existing) { switchTab(existing.id); return }
+  // Otherwise: if the active tab is on HOME, promote it to mail (saves a tab).
+  const active = tabs.find(t => t.id === activeId)
+  if (active && isHomeUrl(active.url)) {
+    active.url = MAIL_URL
+    active.title = 'Mejl'
+    syncOverlayVisibility()
+    scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    return
+  }
+  // Fall back to opening a new tab for mail.
+  const id = nextId++
+  tabs.push({ id, title: 'Mejl', url: MAIL_URL, loading:false, favicon:null, _zoom:100 })
+  createWebviewForTab(id, 'about:blank')
+  switchTab(id)
+}
+
+async function renderMailScreen() {
+  const body = document.getElementById('mailBody')
+  const addr = document.getElementById('mailAddr')
+  const refreshBtn = document.getElementById('mailRefreshBtn')
+  const composeBtn = document.getElementById('mailComposeBtn')
+  const settingsBtn = document.getElementById('mailSettingsBtn')
+  if (!body) return
+
+  // Load config (metadata only — password stays in main)
+  const cfg = await SE.mail.getConfig()
+  _mailHasConfig = !!cfg
+  _mailCfgMeta = cfg
+
+  if (addr) addr.textContent = cfg ? cfg.email : ''
+  if (refreshBtn) refreshBtn.style.display = cfg ? '' : 'none'
+  if (composeBtn) composeBtn.style.display = cfg ? '' : 'none'
+  if (settingsBtn) settingsBtn.style.display = cfg ? '' : 'none'
+
+  if (!cfg) { _renderMailSetup(body); return }
+
+  // Two-pane inbox layout. Listan fylls asynkront — vi visar skeleton först.
+  body.innerHTML = `
+    <div class="mail-inbox-pane" id="mailInboxPane">
+      <div class="mail-empty-note">Laddar inbox…</div>
+    </div>
+    <div class="mail-reader-pane" id="mailReaderPane">
+      <div class="mail-empty-note">Välj ett mejl från inboxen för att läsa det här.</div>
+    </div>
+  `
+  _mailLoadInbox()
+}
+
+// ══════════════════════════════════════════════════════
+//  MAIL — inbox + reader (Fas 2)
+// ══════════════════════════════════════════════════════
+const _mailState = {
+  folder: 'INBOX',
+  messages: [],
+  selectedUid: null,
+  loading: false,
+}
+
+async function _mailLoadInbox() {
+  if (_mailState.loading) return
+  _mailState.loading = true
+  const pane = document.getElementById('mailInboxPane')
+  if (pane) pane.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
+  const res = await SE.mail.list({ folder: _mailState.folder, limit: 50 })
+  _mailState.loading = false
+  if (!res || !res.ok) {
+    const err = res?.error || 'okänt fel'
+    if (pane) pane.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Kunde inte ladda inbox: ${esc(err)}</div>`
+    return
+  }
+  _mailState.messages = Array.isArray(res.messages) ? res.messages : []
+  _renderInboxList()
+}
+
+function _renderInboxList() {
+  const pane = document.getElementById('mailInboxPane')
+  if (!pane) return
+  if (!_mailState.messages.length) {
+    pane.innerHTML = '<div class="mail-empty-note">Inboxen är tom.</div>'
+    return
+  }
+  pane.innerHTML = _mailState.messages.map(_inboxRowHtml).join('')
+}
+
+function _inboxRowHtml(m) {
+  const from = (m.from && m.from[0]) || { name: '', address: '' }
+  const fromLabel = from.name || from.address || '(okänd)'
+  const selected = m.uid === _mailState.selectedUid
+  return `
+    <div class="mail-row${m.unread ? ' unread' : ''}${selected ? ' selected' : ''}"
+         onclick="_mailOpen(${m.uid})"
+         data-uid="${m.uid}">
+      <div class="mail-row-line1">
+        <span class="mail-row-dot" style="${m.unread ? '' : 'visibility:hidden'}"></span>
+        <span class="mail-row-from">${esc(fromLabel)}</span>
+        <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
+      </div>
+      <div class="mail-row-subject">${esc(m.subject || '(utan ämne)')}</div>
+    </div>
+  `
+}
+
+function _formatMailDate(iso) {
+  if (!iso) return ''
+  const d = new Date(iso)
+  if (isNaN(d)) return ''
+  const now = new Date()
+  const sameDay = d.toDateString() === now.toDateString()
+  if (sameDay) {
+    return d.toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  }
+  const daysAgo = Math.floor((now.getTime() - d.getTime()) / 86400000)
+  if (daysAgo > 0 && daysAgo < 7) {
+    return ['Sön','Mån','Tis','Ons','Tor','Fre','Lör'][d.getDay()]
+  }
+  if (d.getFullYear() === now.getFullYear()) {
+    return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })
+  }
+  return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+window._mailOpen = async function(uid) {
+  _mailState.selectedUid = uid
+  _renderInboxList()  // refresh to mark selected row
+  const reader = document.getElementById('mailReaderPane')
+  if (!reader) return
+  reader.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
+  const res = await SE.mail.get({ uid, folder: _mailState.folder })
+  if (!res || !res.ok || !res.message) {
+    reader.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Kunde inte ladda mejlet: ${esc(res?.error || 'okänt')}</div>`
+    return
+  }
+  _renderReader(res.message)
+  // Mark as read on the server if it was unread. Update local state so
+  // the dot disappears without needing a full inbox refresh.
+  const local = _mailState.messages.find(m => m.uid === uid)
+  if (local && local.unread) {
+    local.unread = false
+    SE.mail.flag({ uid, flag: '\\Seen', value: true, folder: _mailState.folder }).catch(() => {})
+    _renderInboxList()
+  }
+}
+
+function _renderReader(msg) {
+  const reader = document.getElementById('mailReaderPane')
+  if (!reader) return
+  const fromArr = Array.isArray(msg.from) ? msg.from : []
+  const toArr   = Array.isArray(msg.to) ? msg.to : []
+  const ccArr   = Array.isArray(msg.cc) ? msg.cc : []
+  const fmtAddr = a => a.name
+    ? `${esc(a.name)} &lt;${esc(a.address || '')}&gt;`
+    : esc(a.address || '')
+  const fromLabel = fromArr.map(fmtAddr).join(', ') || '—'
+  const toLabel = toArr.map(fmtAddr).join(', ')
+  const ccLabel = ccArr.map(fmtAddr).join(', ')
+  const dateStr = msg.date ? new Date(msg.date).toLocaleString('sv-SE') : ''
+  // Use sanitized HTML if present, else fall back to plain text wrapped in <pre>.
+  const bodyHtml = msg.html
+    ? `<div class="mail-reader-html">${msg.html}</div>`
+    : `<pre class="mail-reader-text">${esc(msg.text || '(tomt meddelande)')}</pre>`
+  const atts = Array.isArray(msg.attachments) ? msg.attachments : []
+  const attHtml = atts.length ? `
+    <div class="mail-attachments">
+      <div class="mail-attachments-title">Bilagor (${atts.length})</div>
+      ${atts.map(a => `
+        <div class="mail-att-row" title="${esc(a.contentType || '')}">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.filename || 'bilaga')}</span>
+          <span style="color:var(--muted);font-size:10px">${((a.size || 0) / 1024).toFixed(0)} KB</span>
+        </div>`).join('')}
+    </div>
+  ` : ''
+  reader.innerHTML = `
+    <div class="mail-reader-head">
+      <div class="mail-reader-subject">${esc(msg.subject || '(utan ämne)')}</div>
+      <div class="mail-reader-meta">
+        <div><strong>Från:</strong> ${fromLabel}</div>
+        ${toLabel ? `<div><strong>Till:</strong> ${toLabel}</div>` : ''}
+        ${ccLabel ? `<div><strong>Kopia:</strong> ${ccLabel}</div>` : ''}
+        ${dateStr ? `<div><strong>Datum:</strong> ${esc(dateStr)}</div>` : ''}
+      </div>
+    </div>
+    ${bodyHtml}
+    ${attHtml}
+  `
+}
+
+function _renderMailSetup(body) {
+  const presetKeys = Object.keys(_MAIL_PRESETS)
+  body.innerHTML = `
+    <div class="mail-setup">
+      <div class="mail-setup-card">
+        <div class="mail-setup-title">Anslut din e-post</div>
+        <div class="mail-setup-sub">SEOZ Browser ansluter direkt mot din mejlserver via IMAP/SMTP. App-lösenordet krypteras lokalt med ditt operativsystems keychain.</div>
+        <div class="mail-setup-presets" id="mailPresetRow">
+          ${presetKeys.map(k => `<button class="mail-preset${k===_mailPresetKey?' active':''}" data-k="${k}" onclick="_mailPickPreset('${k}')">${esc(_MAIL_PRESETS[k].label)}</button>`).join('')}
+        </div>
+        <div class="mail-form-row">
+          <label>E-postadress</label>
+          <input id="mailCfgEmail" type="email" placeholder="du@example.com" autocomplete="off">
+        </div>
+        <div class="mail-form-row">
+          <label>App-lösenord</label>
+          <input id="mailCfgPass" type="password" placeholder="••••••••••••••••" autocomplete="off">
+          <div class="mail-form-hint" id="mailCfgPassHint">${_MAIL_PRESETS[_mailPresetKey].hint}</div>
+        </div>
+        <div class="mail-form-row">
+          <label>Visningsnamn</label>
+          <input id="mailCfgDisplay" type="text" placeholder="Ditt namn">
+        </div>
+        <div class="mail-form-row">
+          <label>IMAP-server</label>
+          <div class="mail-form-row grid" style="margin-bottom:0">
+            <input id="mailCfgImapHost" type="text" value="${esc(_MAIL_PRESETS[_mailPresetKey].imapHost)}">
+            <input id="mailCfgImapPort" type="number" value="${_MAIL_PRESETS[_mailPresetKey].imapPort}">
+          </div>
+        </div>
+        <div class="mail-form-row">
+          <label>SMTP-server</label>
+          <div class="mail-form-row grid" style="margin-bottom:0">
+            <input id="mailCfgSmtpHost" type="text" value="${esc(_MAIL_PRESETS[_mailPresetKey].smtpHost)}">
+            <input id="mailCfgSmtpPort" type="number" value="${_MAIL_PRESETS[_mailPresetKey].smtpPort}">
+          </div>
+        </div>
+        <div class="mail-form-row">
+          <label>Skicka från (aliases, kommaseparerade — valfritt)</label>
+          <input id="mailCfgFrom" type="text" placeholder="alias1@example.com, alias2@example.com">
+        </div>
+        <div class="mail-form-row">
+          <label>Signatur (plain text, valfritt)</label>
+          <input id="mailCfgSig" type="text" placeholder="Hälsningar, Ditt namn">
+        </div>
+        <div class="mail-setup-actions">
+          <button class="mail-topbar-btn" onclick="_mailTest()">Testa anslutning</button>
+          <button class="mail-topbar-btn primary" onclick="_mailSaveConfig()">Spara och fortsätt</button>
+        </div>
+        <div class="mail-setup-msg" id="mailSetupMsg"></div>
+      </div>
+    </div>
+  `
+  // Pre-fill with existing config if any (in case user re-opens setup)
+  if (_mailCfgMeta) {
+    document.getElementById('mailCfgEmail').value = _mailCfgMeta.email || ''
+    document.getElementById('mailCfgDisplay').value = _mailCfgMeta.displayName || ''
+    document.getElementById('mailCfgImapHost').value = _mailCfgMeta.imapHost || ''
+    document.getElementById('mailCfgImapPort').value = _mailCfgMeta.imapPort || 993
+    document.getElementById('mailCfgSmtpHost').value = _mailCfgMeta.smtpHost || ''
+    document.getElementById('mailCfgSmtpPort').value = _mailCfgMeta.smtpPort || 465
+    document.getElementById('mailCfgFrom').value = (_mailCfgMeta.fromAddresses || []).join(', ')
+    document.getElementById('mailCfgSig').value = _mailCfgMeta.signature || ''
+  }
+}
+
+window._mailPickPreset = function(k) {
+  if (!_MAIL_PRESETS[k]) return
+  _mailPresetKey = k
+  document.querySelectorAll('#mailPresetRow .mail-preset').forEach(b => {
+    b.classList.toggle('active', b.dataset.k === k)
+  })
+  const p = _MAIL_PRESETS[k]
+  document.getElementById('mailCfgImapHost').value = p.imapHost
+  document.getElementById('mailCfgImapPort').value = p.imapPort
+  document.getElementById('mailCfgSmtpHost').value = p.smtpHost
+  document.getElementById('mailCfgSmtpPort').value = p.smtpPort
+  const hint = document.getElementById('mailCfgPassHint')
+  if (hint) hint.innerHTML = p.hint
+}
+
+function _mailCollectForm(includePass) {
+  const from = document.getElementById('mailCfgFrom').value.split(',').map(s => s.trim()).filter(Boolean)
+  const cfg = {
+    email:       document.getElementById('mailCfgEmail').value.trim(),
+    displayName: document.getElementById('mailCfgDisplay').value.trim(),
+    imapHost:    document.getElementById('mailCfgImapHost').value.trim(),
+    imapPort:    Number(document.getElementById('mailCfgImapPort').value) || 993,
+    smtpHost:    document.getElementById('mailCfgSmtpHost').value.trim(),
+    smtpPort:    Number(document.getElementById('mailCfgSmtpPort').value) || 465,
+    fromAddresses: from,
+    signature:   document.getElementById('mailCfgSig').value,
+  }
+  if (includePass) cfg.password = document.getElementById('mailCfgPass').value
+  return cfg
+}
+
+function _mailMsg(kind, text) {
+  const el = document.getElementById('mailSetupMsg')
+  if (!el) return
+  el.className = 'mail-setup-msg show ' + kind
+  el.textContent = text
+}
+
+window._mailTest = async function() {
+  const cfg = _mailCollectForm(true)
+  if (!cfg.email || !cfg.password) { _mailMsg('err', 'E-post och app-lösenord krävs.'); return }
+  _mailMsg('ok', 'Testar anslutning…')
+  const res = await SE.mail.test(cfg)
+  if (res.ok) _mailMsg('ok', `Ansluten. ${res.inboxTotal ?? '—'} mejl i inboxen.`)
+  else _mailMsg('err', 'Misslyckades: ' + (res.error || 'okänt fel'))
+}
+
+window._mailSaveConfig = async function() {
+  const cfg = _mailCollectForm(true)
+  if (!cfg.email || !cfg.password) { _mailMsg('err', 'E-post och app-lösenord krävs.'); return }
+  _mailMsg('ok', 'Testar och sparar…')
+  const test = await SE.mail.test(cfg)
+  if (!test.ok) { _mailMsg('err', 'Anslutning misslyckades: ' + (test.error || '')); return }
+  const save = await SE.mail.saveConfig(cfg)
+  if (!save.ok) { _mailMsg('err', 'Kunde inte spara: ' + (save.error || '')); return }
+  toast('Mejl ansluten: ' + cfg.email, '#2ca87f')
+  renderMailScreen()
+}
+
+window.mailRefresh = function() {
+  // Keep the currently-selected message visible while the list reloads.
+  _mailLoadInbox()
+}
+window.mailOpenSetup = function() {
+  const body = document.getElementById('mailBody')
+  if (body) _renderMailSetup(body)
+}
+window.mailCompose = function() {
+  toast('Compose kommer i Fas 4', 'var(--p)')
+}
 
 const getActive = () => tabs.find(t => t.id === activeId)
 
@@ -2648,7 +3198,7 @@ function switchTab(id) {
   }
 
   if (tab) {
-    const showVal = isHomeUrl(tab.url) ? '' : (tab.url === 'about:blank' ? '' : tab.url)
+    const showVal = isOverlayUrl(tab.url) ? '' : (tab.url === 'about:blank' ? '' : tab.url)
     document.getElementById('urlInput').value = showVal
     if (tab.favicon) setUrlFavicon(tab.favicon)
     // Update spinner state for this tab

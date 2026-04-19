@@ -815,68 +815,209 @@ ipcMain.handle('terminal-history-clear', () => {
 })
 
 // ══════════════════════════════════════════════════════════════════════
-//  MAIL — IMAP/SMTP via src/main/mail.js. The app password is stored
-//  encrypted via Electron's safeStorage (OS-level: Keychain on macOS,
-//  DPAPI on Windows, libsecret on Linux). Everything else lives in plain
-//  electron-store so the renderer can read connection metadata without
-//  decryption roundtrips.
+//  MAIL — IMAP/SMTP via src/main/mail.js. Accounts live per-profile in
+//  PM.profileGet('mailAccounts'), keyed by an 8-byte hex id. The currently
+//  selected account per profile is in 'mailActiveAccountId'. Passwords are
+//  stored encrypted via Electron's safeStorage (OS-level: Keychain on macOS,
+//  DPAPI on Windows, libsecret on Linux).
 // ══════════════════════════════════════════════════════════════════════
-const MAIL_STORE_KEY = 'mailConfig'
-function _mailLoadConfig() {
-  const raw = store.get(MAIL_STORE_KEY, null)
-  if (!raw || !raw.email) return null
-  let password = null
-  if (raw.passwordEnc && safeStorage.isEncryptionAvailable()) {
-    try { password = safeStorage.decryptString(Buffer.from(raw.passwordEnc, 'base64')) } catch (_) {}
+const crypto = require('crypto')
+const LEGACY_MAIL_STORE_KEY = 'mailConfig'
+
+function _encryptPassword(pw) {
+  if (!pw) return null
+  if (!safeStorage.isEncryptionAvailable()) {
+    throw new Error('OS-kryptering ej tillgänglig — kan inte lagra lösenord säkert')
   }
-  return { ...raw, password }
-}
-function _mailSaveConfig(cfg) {
-  if (!cfg || !cfg.email) throw new Error('email required')
-  const toStore = { ...cfg }
-  delete toStore.password
-  delete toStore.passwordEnc
-  if (cfg.password) {
-    if (!safeStorage.isEncryptionAvailable()) {
-      throw new Error('OS-kryptering ej tillgänglig — kan inte lagra lösenord säkert')
-    }
-    toStore.passwordEnc = safeStorage.encryptString(cfg.password).toString('base64')
-  }
-  store.set(MAIL_STORE_KEY, toStore)
+  return safeStorage.encryptString(pw).toString('base64')
 }
 
-ipcMain.handle('mail:test', async (_evt, cfg) => {
-  return mail.testConnection(cfg)
+function _decryptPassword(enc) {
+  if (!enc || !safeStorage.isEncryptionAvailable()) return null
+  try { return safeStorage.decryptString(Buffer.from(enc, 'base64')) } catch (_) { return null }
+}
+
+function _mailListAccounts() { return PM.profileGet('mailAccounts', []) }
+function _mailSaveAccounts(arr) { PM.profileSet('mailAccounts', arr) }
+function _mailGetActiveAccountId() { return PM.profileGet('mailActiveAccountId', null) }
+function _mailSetActiveAccountId(id) { PM.profileSet('mailActiveAccountId', id) }
+
+// Metadata view — safe to send to renderer (password stripped).
+function _mailSafeAccount(a) {
+  if (!a) return null
+  const { passwordEnc, ...safe } = a
+  return safe
+}
+
+// Full cfg with decrypted password. Main-process only.
+function _mailHydrateAccount(id) {
+  const a = _mailListAccounts().find(x => x.id === id)
+  if (!a) return null
+  return { ...a, password: _decryptPassword(a.passwordEnc) }
+}
+
+// Resolve account: explicit id → active → first. Returns hydrated cfg or null.
+function _mailResolveAccount(explicitId) {
+  const id = explicitId || _mailGetActiveAccountId()
+  if (id) {
+    const h = _mailHydrateAccount(id)
+    if (h) return h
+  }
+  const first = _mailListAccounts()[0]
+  return first ? _mailHydrateAccount(first.id) : null
+}
+
+function _mailAddAccount(cfg) {
+  if (!cfg || !cfg.email) throw new Error('email required')
+  const accounts = _mailListAccounts()
+  const account = {
+    id: crypto.randomBytes(8).toString('hex'),
+    email: cfg.email,
+    displayName: cfg.displayName || '',
+    imapHost: cfg.imapHost,
+    imapPort: Number(cfg.imapPort) || 993,
+    imapSecure: cfg.imapSecure !== false,
+    smtpHost: cfg.smtpHost,
+    smtpPort: Number(cfg.smtpPort) || 465,
+    smtpSecure: cfg.smtpSecure !== false,
+    username: cfg.username || null,
+    passwordEnc: _encryptPassword(cfg.password),
+    createdAt: new Date().toISOString(),
+  }
+  accounts.push(account)
+  _mailSaveAccounts(accounts)
+  if (!_mailGetActiveAccountId()) _mailSetActiveAccountId(account.id)
+  return account.id
+}
+
+function _mailUpdateAccount(id, updates) {
+  const accounts = _mailListAccounts()
+  const idx = accounts.findIndex(a => a.id === id)
+  if (idx === -1) throw new Error('account not found')
+  const allowed = ['email', 'displayName', 'imapHost', 'imapPort', 'imapSecure', 'smtpHost', 'smtpPort', 'smtpSecure', 'username']
+  for (const key of allowed) {
+    if (updates[key] !== undefined) accounts[idx][key] = updates[key]
+  }
+  if (updates.password) accounts[idx].passwordEnc = _encryptPassword(updates.password)
+  _mailSaveAccounts(accounts)
+}
+
+async function _mailDeleteAccount(id) {
+  const remaining = _mailListAccounts().filter(a => a.id !== id)
+  _mailSaveAccounts(remaining)
+  try { await mail.closeAccount(id) } catch (_) {}
+  let nextActiveId = _mailGetActiveAccountId()
+  if (nextActiveId === id) {
+    nextActiveId = remaining[0]?.id || null
+    _mailSetActiveAccountId(nextActiveId)
+  }
+  return nextActiveId
+}
+
+// One-shot lift of legacy root-store 'mailConfig' → active profile's
+// first account. Runs at startup; no-op if nothing to migrate or profile
+// already has accounts.
+function _mailMigrateLegacy() {
+  const old = store.get(LEGACY_MAIL_STORE_KEY, null)
+  if (!old || !old.email) return
+  if (_mailListAccounts().length === 0) {
+    const account = {
+      id: crypto.randomBytes(8).toString('hex'),
+      email: old.email,
+      displayName: old.displayName || '',
+      imapHost: old.imapHost,
+      imapPort: Number(old.imapPort) || 993,
+      imapSecure: old.imapSecure !== false,
+      smtpHost: old.smtpHost,
+      smtpPort: Number(old.smtpPort) || 465,
+      smtpSecure: old.smtpSecure !== false,
+      username: old.username || null,
+      passwordEnc: old.passwordEnc || null,
+      createdAt: new Date().toISOString(),
+    }
+    _mailSaveAccounts([account])
+    _mailSetActiveAccountId(account.id)
+    console.log('[mail] migrated legacy single-account config → profile')
+  }
+  store.delete(LEGACY_MAIL_STORE_KEY)
+}
+
+// PM.migrateLegacyData already ran when profile-manager was required, so
+// an active profile is guaranteed by now.
+_mailMigrateLegacy()
+
+// ── IPC: Account management ──────────────────────────────────────────
+
+ipcMain.handle('mail:accounts-list', async () => {
+  return _mailListAccounts().map(_mailSafeAccount)
 })
 
-ipcMain.handle('mail:save-config', async (_evt, cfg) => {
-  try { _mailSaveConfig(cfg); return { ok: true } }
+ipcMain.handle('mail:account-add', async (_evt, cfg) => {
+  try { return { ok: true, id: _mailAddAccount(cfg) } }
   catch (err) { return { ok: false, error: err.message } }
 })
 
-ipcMain.handle('mail:has-config', async () => {
-  const cfg = _mailLoadConfig()
-  return !!(cfg && cfg.password)
+ipcMain.handle('mail:account-update', async (_evt, { id, updates } = {}) => {
+  try { _mailUpdateAccount(id, updates || {}); return { ok: true } }
+  catch (err) { return { ok: false, error: err.message } }
 })
 
-ipcMain.handle('mail:get-config', async () => {
-  const cfg = _mailLoadConfig()
-  if (!cfg) return null
-  // Never expose the decrypted password to the renderer. Return a metadata
-  // view (safe to show in settings).
-  const { password, passwordEnc, ...safe } = cfg
-  return safe
+ipcMain.handle('mail:account-delete', async (_evt, id) => {
+  try {
+    const nextActiveId = await _mailDeleteAccount(id)
+    return { ok: true, nextActiveId }
+  } catch (err) { return { ok: false, error: err.message } }
 })
 
-ipcMain.handle('mail:forget', async () => {
-  try { await mail.closeAll() } catch (_) {}
-  store.delete(MAIL_STORE_KEY)
+ipcMain.handle('mail:account-set-active', async (_evt, id) => {
+  if (!_mailListAccounts().some(a => a.id === id)) return { ok: false, error: 'account not found' }
+  _mailSetActiveAccountId(id)
   return { ok: true }
 })
 
-ipcMain.handle('mail:list', async (_evt, { folder, limit } = {}) => {
-  const cfg = _mailLoadConfig()
-  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+ipcMain.handle('mail:account-get-active', async () => {
+  const id = _mailGetActiveAccountId()
+  if (!id) return null
+  return _mailSafeAccount(_mailListAccounts().find(x => x.id === id)) || null
+})
+
+// ── IPC: Tests + backward-compat wrappers ────────────────────────────
+
+ipcMain.handle('mail:test', async (_evt, cfg) => mail.testConnection(cfg))
+
+// Deprecated: keep so existing renderer setup flow keeps working.
+// If cfg.id exists → update; else → add.
+ipcMain.handle('mail:save-config', async (_evt, cfg) => {
+  try {
+    if (cfg && cfg.id && _mailListAccounts().some(a => a.id === cfg.id)) {
+      _mailUpdateAccount(cfg.id, cfg)
+      return { ok: true, id: cfg.id }
+    }
+    return { ok: true, id: _mailAddAccount(cfg) }
+  } catch (err) { return { ok: false, error: err.message } }
+})
+
+ipcMain.handle('mail:has-config', async () => _mailListAccounts().length > 0)
+
+ipcMain.handle('mail:get-config', async () => {
+  const id = _mailGetActiveAccountId()
+  const a = _mailListAccounts().find(x => x.id === id) || _mailListAccounts()[0] || null
+  return _mailSafeAccount(a)
+})
+
+// Deprecated: in the new model, "forget" deletes the active account.
+ipcMain.handle('mail:forget', async () => {
+  const id = _mailGetActiveAccountId() || _mailListAccounts()[0]?.id
+  if (!id) return { ok: true }
+  try { await _mailDeleteAccount(id); return { ok: true } }
+  catch (err) { return { ok: false, error: err.message } }
+})
+
+// ── IPC: Mail operations (accountId optional — fallback till aktiv) ──
+
+ipcMain.handle('mail:list', async (_evt, { accountId, folder, limit } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
   try {
     const messages = await mail.listMessages(cfg, folder || 'INBOX', Number(limit) || 50)
     return { ok: true, messages }
@@ -885,9 +1026,9 @@ ipcMain.handle('mail:list', async (_evt, { folder, limit } = {}) => {
   }
 })
 
-ipcMain.handle('mail:get', async (_evt, { uid, folder } = {}) => {
-  const cfg = _mailLoadConfig()
-  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+ipcMain.handle('mail:get', async (_evt, { accountId, uid, folder } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
   try {
     const message = await mail.getMessage(cfg, uid, folder || 'INBOX')
     return { ok: true, message }
@@ -896,9 +1037,9 @@ ipcMain.handle('mail:get', async (_evt, { uid, folder } = {}) => {
   }
 })
 
-ipcMain.handle('mail:flag', async (_evt, { uid, flag, value, folder } = {}) => {
-  const cfg = _mailLoadConfig()
-  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+ipcMain.handle('mail:flag', async (_evt, { accountId, uid, flag, value, folder } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
   try {
     return await mail.setFlag(cfg, uid, flag || '\\Seen', !!value, folder || 'INBOX')
   } catch (err) {
@@ -906,11 +1047,11 @@ ipcMain.handle('mail:flag', async (_evt, { uid, flag, value, folder } = {}) => {
   }
 })
 
-ipcMain.handle('mail:send', async (_evt, opts) => {
-  const cfg = _mailLoadConfig()
-  if (!cfg || !cfg.password) return { ok: false, error: 'No mail configured' }
+ipcMain.handle('mail:send', async (_evt, opts = {}) => {
+  const cfg = _mailResolveAccount(opts.accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
   try {
-    return await mail.sendMessage(cfg, opts || {})
+    return await mail.sendMessage(cfg, opts)
   } catch (err) {
     return { ok: false, error: err.message || String(err) }
   }

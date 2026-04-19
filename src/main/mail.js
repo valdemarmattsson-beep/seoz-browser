@@ -58,34 +58,50 @@ const SANITIZE_OPTS = {
 }
 
 // ─── Connection pool ─────────────────────────────────────────────────
-// One persistent IMAP client per email account. Reconnected lazily.
-let _client = null
-let _clientFor = null       // email address the current client was built for
-let _clientLock = Promise.resolve()
+// One persistent IMAP client per configured account. Keyed by cfg.id so
+// parallel operations on different accounts don't block each other.
+// Each slot carries its own lock (serializes connect/reconnect attempts
+// within the same account) plus a fingerprint so we force-reconnect if
+// host/port/username changed without the id changing.
+const _pool = new Map()  // accountId -> { client, lock, cfgFingerprint }
+
+function _fingerprint(cfg) {
+  return `${cfg.imapHost}:${cfg.imapPort || 993}:${cfg.username || cfg.email}`
+}
 
 async function _getClient(cfg) {
-  // Serialize connection attempts so parallel list/get don't both dial up.
-  const prev = _clientLock
+  if (!cfg || !cfg.id) throw new Error('cfg.id required for pooled client')
+  const slot = _pool.get(cfg.id) || { client: null, lock: Promise.resolve(), cfgFingerprint: null }
+  const prev = slot.lock
   let release
-  _clientLock = new Promise(r => { release = r })
+  slot.lock = new Promise(r => { release = r })
+  _pool.set(cfg.id, slot)
   await prev
 
   try {
-    if (_client && _client.usable && _clientFor === cfg.email) return _client
-    if (_client) { try { await _client.logout() } catch (_) {} }
-    _clientFor = cfg.email
-    _client = new ImapFlow({
+    const fp = _fingerprint(cfg)
+    if (slot.client && slot.client.usable && slot.cfgFingerprint === fp) return slot.client
+    if (slot.client) { try { await slot.client.logout() } catch (_) {} }
+    slot.client = new ImapFlow({
       host: cfg.imapHost,
       port: Number(cfg.imapPort) || 993,
       secure: cfg.imapSecure !== false,
       auth: { user: cfg.username || cfg.email, pass: cfg.password },
       logger: false,
     })
-    await _client.connect()
-    return _client
+    await slot.client.connect()
+    slot.cfgFingerprint = fp
+    return slot.client
   } finally {
     release()
   }
+}
+
+async function closeAccount(accountId) {
+  const slot = _pool.get(accountId)
+  if (!slot) return
+  if (slot.client) { try { await slot.client.logout() } catch (_) {} }
+  _pool.delete(accountId)
 }
 
 // ─── Public API ──────────────────────────────────────────────────────
@@ -230,9 +246,11 @@ async function sendMessage(cfg, opts) {
 }
 
 async function closeAll() {
-  if (_client) { try { await _client.logout() } catch (_) {} }
-  _client = null
-  _clientFor = null
+  const slots = Array.from(_pool.values())
+  _pool.clear()
+  await Promise.all(slots.map(async s => {
+    if (s.client) { try { await s.client.logout() } catch (_) {} }
+  }))
 }
 
-module.exports = { testConnection, listMessages, getMessage, setFlag, sendMessage, closeAll }
+module.exports = { testConnection, listMessages, getMessage, setFlag, sendMessage, closeAccount, closeAll }

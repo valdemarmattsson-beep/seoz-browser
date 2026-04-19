@@ -198,6 +198,32 @@
 }
 .mail-topbar-title svg{width:16px;height:16px;color:var(--p)}
 .mail-topbar-addr{font-size:11px;color:var(--muted);font-family:monospace}
+.mail-acct-wrap{position:relative;display:inline-flex}
+.mail-acct-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  background:none;border:none;padding:2px 6px;border-radius:4px;
+  font:inherit;font-size:11px;color:var(--muted);font-family:monospace;
+  cursor:pointer;transition:background .12s,color .12s;
+}
+.mail-acct-btn:hover{background:var(--card);color:var(--txt)}
+.mail-acct-btn svg{width:10px;height:10px;opacity:.7;flex-shrink:0}
+.mail-acct-menu{
+  position:absolute;top:calc(100% + 4px);left:0;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  min-width:240px;padding:4px;z-index:100;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  display:none;
+}
+.mail-acct-menu.show{display:block}
+.mail-acct-item{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  border-radius:4px;cursor:pointer;font-size:12px;color:var(--txt);
+}
+.mail-acct-item:hover{background:var(--panel)}
+.mail-acct-item-check{width:14px;flex-shrink:0;color:var(--p)}
+.mail-acct-item-check svg{width:12px;height:12px}
+.mail-acct-divider{height:1px;background:var(--border);margin:4px 2px}
+.mail-acct-add{color:var(--p);font-weight:500}
 .mail-topbar-spacer{flex:1}
 .mail-topbar-btn{
   height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);
@@ -1419,7 +1445,13 @@ input,textarea,select{user-select:text}
             <div class="mail-topbar-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
               <span>Mejl</span>
-              <span class="mail-topbar-addr" id="mailAddr"></span>
+              <div class="mail-acct-wrap">
+                <button class="mail-acct-btn" id="mailAcctBtn" type="button" onclick="_mailToggleAcctMenu()" style="display:none">
+                  <span id="mailAddr"></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="mail-acct-menu" id="mailAcctMenu"></div>
+              </div>
             </div>
             <div class="mail-topbar-spacer"></div>
             <button class="mail-topbar-btn" id="mailRefreshBtn" onclick="mailRefresh()" style="display:none" aria-label="Uppdatera">
@@ -2878,22 +2910,27 @@ window.openMail = function() {
 async function renderMailScreen() {
   const body = document.getElementById('mailBody')
   const addr = document.getElementById('mailAddr')
+  const acctBtn = document.getElementById('mailAcctBtn')
   const refreshBtn = document.getElementById('mailRefreshBtn')
   const composeBtn = document.getElementById('mailComposeBtn')
   const settingsBtn = document.getElementById('mailSettingsBtn')
   if (!body) return
 
-  // Load config (metadata only — password stays in main)
-  const cfg = await SE.mail.getConfig()
+  // Load all accounts + determine active. Metadata only — password stays in main.
+  _mailState.accounts = (await SE.mail.accountsList()) || []
+  const active = (await SE.mail.accountGetActive()) || _mailState.accounts[0] || null
+  _mailState.accountId = active ? active.id : null
+  const cfg = active
   _mailHasConfig = !!cfg
   _mailCfgMeta = cfg
 
   if (addr) addr.textContent = cfg ? cfg.email : ''
+  if (acctBtn) acctBtn.style.display = cfg ? '' : 'none'
   if (refreshBtn) refreshBtn.style.display = cfg ? '' : 'none'
   if (composeBtn) composeBtn.style.display = cfg ? '' : 'none'
   if (settingsBtn) settingsBtn.style.display = cfg ? '' : 'none'
 
-  if (!cfg) { _renderMailSetup(body); return }
+  if (!cfg) { _mailState.setupMode = 'first'; _renderMailSetup(body); return }
 
   // Two-pane inbox layout. Listan fylls asynkront — vi visar skeleton först.
   body.innerHTML = `
@@ -2912,9 +2949,67 @@ async function renderMailScreen() {
 // ══════════════════════════════════════════════════════
 const _mailState = {
   folder: 'INBOX',
+  accountId: null,           // currently-active account id
+  accounts: [],              // cached list of { id, email, ... } (no passwords)
+  setupMode: 'first',        // 'first' (no accounts yet) | 'add' (adding another)
   messages: [],
   selectedUid: null,
   loading: false,
+}
+
+// ── Account switcher (mail topbar dropdown) ─────────────────────────
+function _mailRenderAcctMenu() {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu) return
+  const check = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+  const rows = _mailState.accounts.map(a => `
+    <div class="mail-acct-item" onclick="_mailSwitchAccount('${esc(a.id)}')">
+      <span class="mail-acct-item-check">${a.id === _mailState.accountId ? check : ''}</span>
+      <span>${esc(a.email)}</span>
+    </div>
+  `).join('')
+  menu.innerHTML = `
+    ${rows}
+    ${_mailState.accounts.length ? '<div class="mail-acct-divider"></div>' : ''}
+    <div class="mail-acct-item mail-acct-add" onclick="_mailAddAccountFlow()">+ Lägg till konto</div>
+  `
+}
+
+window._mailToggleAcctMenu = function() {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) _mailRenderAcctMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('mailAcctBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
+
+window._mailSwitchAccount = async function(id) {
+  document.getElementById('mailAcctMenu')?.classList.remove('show')
+  if (id === _mailState.accountId) return
+  const res = await SE.mail.accountSetActive(id)
+  if (!res || !res.ok) { toast('Kunde inte byta konto: ' + (res?.error || ''), '#dc2626'); return }
+  _mailState.accountId = id
+  _mailState.messages = []
+  _mailState.selectedUid = null
+  await renderMailScreen()
+}
+
+window._mailAddAccountFlow = function() {
+  document.getElementById('mailAcctMenu')?.classList.remove('show')
+  _mailState.setupMode = 'add'
+  _mailCfgMeta = null
+  const body = document.getElementById('mailBody')
+  if (body) _renderMailSetup(body)
 }
 
 async function _mailLoadInbox() {
@@ -2922,7 +3017,7 @@ async function _mailLoadInbox() {
   _mailState.loading = true
   const pane = document.getElementById('mailInboxPane')
   if (pane) pane.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
-  const res = await SE.mail.list({ folder: _mailState.folder, limit: 50 })
+  const res = await SE.mail.list({ accountId: _mailState.accountId, folder: _mailState.folder, limit: 50 })
   _mailState.loading = false
   if (!res || !res.ok) {
     const err = res?.error || 'okänt fel'
@@ -2986,7 +3081,7 @@ window._mailOpen = async function(uid) {
   const reader = document.getElementById('mailReaderPane')
   if (!reader) return
   reader.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
-  const res = await SE.mail.get({ uid, folder: _mailState.folder })
+  const res = await SE.mail.get({ accountId: _mailState.accountId, uid, folder: _mailState.folder })
   if (!res || !res.ok || !res.message) {
     reader.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Kunde inte ladda mejlet: ${esc(res?.error || 'okänt')}</div>`
     return
@@ -2998,7 +3093,7 @@ window._mailOpen = async function(uid) {
   const local = _mailState.messages.find(m => m.uid === uid)
   if (local && local.unread) {
     local.unread = false
-    SE.mail.flag({ uid, flag: '\\Seen', value: true, folder: _mailState.folder }).catch(() => {})
+    SE.mail.flag({ accountId: _mailState.accountId, uid, flag: '\\Seen', value: true, folder: _mailState.folder }).catch(() => {})
     _renderInboxList()
   }
 }
@@ -3180,8 +3275,11 @@ window._mailSaveConfig = async function() {
   _mailMsg('ok', 'Testar och sparar…')
   const test = await SE.mail.test(cfg)
   if (!test.ok) { _mailMsg('err', 'Anslutning misslyckades: ' + (test.error || '')); return }
-  const save = await SE.mail.saveConfig(cfg)
+  const save = await SE.mail.accountAdd(cfg)
   if (!save.ok) { _mailMsg('err', 'Kunde inte spara: ' + (save.error || '')); return }
+  // Make the newly-added account the active one so the UI flips straight to its inbox
+  if (save.id) await SE.mail.accountSetActive(save.id)
+  _mailState.setupMode = 'first'
   toast('Mejl ansluten: ' + cfg.email, '#2ca87f')
   renderMailScreen()
 }
@@ -3344,6 +3442,7 @@ window._composeSend = async function() {
   status.textContent = 'Skickar…'
 
   const res = await SE.mail.send({
+    accountId: _mailState.accountId,
     from, to, cc: cc || undefined, bcc: bcc || undefined,
     subject: subj, text: body,
     inReplyTo:  _composeState.inReplyTo || undefined,

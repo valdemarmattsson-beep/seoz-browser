@@ -72,6 +72,8 @@ function getProfileStore(profileId) {
       history: [],
       activeClientId: null,
       blockerEnabled: true,
+      mailAccounts: [],
+      mailActiveAccountId: null,
     }
   })
   profileStores.set(profileId, ps)

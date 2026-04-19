@@ -52,11 +52,20 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Mail (IMAP/SMTP)
   mail: {
+    // Tests + deprecated single-account compat
     test:       (cfg)      => ipcRenderer.invoke('mail:test', cfg),
     saveConfig: (cfg)      => ipcRenderer.invoke('mail:save-config', cfg),
     hasConfig:  ()         => ipcRenderer.invoke('mail:has-config'),
     getConfig:  ()         => ipcRenderer.invoke('mail:get-config'),
     forget:     ()         => ipcRenderer.invoke('mail:forget'),
+    // Multi-account management
+    accountsList:     ()          => ipcRenderer.invoke('mail:accounts-list'),
+    accountAdd:       (cfg)       => ipcRenderer.invoke('mail:account-add', cfg),
+    accountUpdate:    (id, u)     => ipcRenderer.invoke('mail:account-update', { id, updates: u }),
+    accountDelete:    (id)        => ipcRenderer.invoke('mail:account-delete', id),
+    accountSetActive: (id)        => ipcRenderer.invoke('mail:account-set-active', id),
+    accountGetActive: ()          => ipcRenderer.invoke('mail:account-get-active'),
+    // Mail operations — opts may include { accountId } to override active account
     list:       (opts)     => ipcRenderer.invoke('mail:list', opts || {}),
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),

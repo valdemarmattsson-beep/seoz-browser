@@ -204,7 +204,7 @@ function setupContentBlocker() {
   })
 
   // Never block these domains
-  const whitelist = ['seoz.se', 'flow.seoz.se', 'api.seoz.se']
+  const whitelist = ['seoz.io', 'flow.seoz.io', 'api.seoz.io']
   const isWhitelisted = host => whitelist.some(w => host === w || host.endsWith('.' + w))
 
   ses.webRequest.onBeforeRequest((details, callback) => {
@@ -589,9 +589,9 @@ ipcMain.on('send-notification', (_, { title, body }) => {
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
-//  SEOZ API SYNC — connects to real backend at seoz.se
+//  SEOZ API SYNC — connects to real backend at seoz.io
 // ══════════════════════════════════════════════════════════════════════════════
-const API_BASE = 'https://seoz.se/api/browser'
+const API_BASE = 'https://seoz.io/api/browser'
 
 async function apiFetch(endpoint, apiKey, options = {}) {
   const { method = 'GET', params = {}, body } = options

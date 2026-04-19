@@ -1,10 +1,10 @@
 'use strict';
 
 // ─── SEOZ API Client ──────────────────────────────────────────────────────────
-// All communication with seoz.se backend.
+// All communication with seoz.io backend.
 // Used in the renderer via fetch() — no Node.js required.
 
-const BASE_URL = 'https://seoz.se/api';
+const BASE_URL = 'https://seoz.io/api';
 
 class SeozApiClient {
   constructor() {

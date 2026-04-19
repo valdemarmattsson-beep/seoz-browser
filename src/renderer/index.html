@@ -61,6 +61,16 @@
 }
 
 @keyframes orbit-spin { to { transform: rotate(360deg); } }
+/* Colour-cycle for loading spinners (.tab-spin, .addr-spinner). Walks
+   through the design-system semantic palette so the spinner feels alive
+   while a page loads — same palette as the home-screen orbit pulse. */
+@keyframes orbit-loader-hue {
+  0%   { background: var(--p); }
+  25%  { background: var(--g); }
+  50%  { background: var(--w); }
+  75%  { background: var(--r); }
+  100% { background: var(--p); }
+}
 
 /* ══════════════════════════════════════════════════════════
    HOME SCREEN — shown when the active tab's URL is seoz://home.
@@ -463,7 +473,7 @@ input,textarea,select{user-select:text}
 .tab-x{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;flex-shrink:0;transition:opacity .15s}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
 .tab-x:hover{opacity:1!important;background:rgba(255,255,255,.15)}
-.tab-spin{width:12px;height:12px;background:var(--accent);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite}
+.tab-spin{width:12px;height:12px;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite}
 /* Tab tooltip (Chrome-style) */
 .tab-tip{
   position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);z-index:150;
@@ -535,7 +545,7 @@ input,textarea,select{user-select:text}
 .lock{font-size:10px;color:var(--g);flex-shrink:0}
 #urlInput{flex:1;border:none;background:none;outline:none;font-size:12px;font-family:'Inter',sans-serif;color:var(--txt)}
 #urlInput::placeholder{color:var(--muted)}
-.addr-spinner{width:14px;height:14px;flex-shrink:0;background:var(--accent);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite;display:none}
+.addr-spinner{width:14px;height:14px;flex-shrink:0;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite;display:none}
 .addr-spinner.on{display:block}
 
 /* Zoom bar (in URL bar, right side) */
@@ -614,7 +624,6 @@ input,textarea,select{user-select:text}
 .bmbar{
   height:var(--bm-h);flex-shrink:0;
   background:var(--card);
-  border-bottom:1px solid var(--border);
   display:flex;align-items:center;
   padding:0 10px;gap:2px;
   overflow:visible;position:relative;
@@ -973,11 +982,11 @@ input,textarea,select{user-select:text}
 
 /* ── FIND BAR ── */
 .find-bar{
-  height:0;overflow:hidden;background:var(--card);border-bottom:1px solid var(--border);
+  height:0;overflow:hidden;background:var(--card);
   display:flex;align-items:center;padding:0 10px;gap:6px;
   transition:height .15s ease;
 }
-.find-bar.open{height:36px}
+.find-bar.open{height:36px;border-bottom:1px solid var(--border)}
 .find-input{flex:1;max-width:260px;height:26px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;color:var(--txt);outline:none}
 .find-input:focus{border-color:var(--p)}
 .find-count{font-size:10px;color:var(--muted);min-width:60px}
@@ -2249,10 +2258,12 @@ function _attachWebviewListeners(el, tabId) {
   el.addEventListener('did-navigate', e => {
     const t = _myTab(); if (t) t.url = e.url
     if (_isActive()) updateURL(e.url)
+    _persistTabs()
   })
   el.addEventListener('did-navigate-in-page', e => {
     const t = _myTab(); if (t) t.url = e.url
     if (_isActive()) updateURL(e.url)
+    _persistTabs()
   })
   el.addEventListener('did-start-loading', () => {
     const t = _myTab(); if (t) { t.loading = true; scheduleRenderTabs() }
@@ -2438,10 +2449,16 @@ function updateURL(url) {
 function setUrlFavicon(src) {
   const img = document.getElementById('urlFav')
   const lock = document.getElementById('urlLock')
-  if (img && src) {
+  if (!img) return
+  if (src) {
     img.src = src
-    // onload/onerror handlers in HTML handle display
     if (lock) lock.style.display = 'none'
+  } else {
+    // Clear any stale favicon from a previous tab. Empty src leaves the
+    // image collapsed (visibility:hidden via CSS when .show is absent).
+    img.removeAttribute('src')
+    img.classList.remove('show')
+    if (lock) lock.style.display = ''
   }
 }
 
@@ -2479,6 +2496,60 @@ function wvReload() {
 let tabs = [{ id:1, title:'Ny flik', url:'seoz://home', loading:false, favicon:null, _zoom:100 }]
 let activeId = 1
 let nextId = 2
+
+// ── Tab persistence ──────────────────────────────────────────────────
+// Mirror the open-tabs snapshot to localStorage so an accidental renderer
+// reload (Ctrl+R on chrome-focus, dev tooling, etc.) doesn't wipe the
+// user's session. Only URL/title/favicon is stored — webviews recreate
+// and navigate on restore.
+const _TABS_STORAGE_KEY = 'seoz_tabs_state'
+let _tabsPersistTimer = null
+function _persistTabs() {
+  // Debounce — several tab events fire back-to-back on create/navigate.
+  if (_tabsPersistTimer) clearTimeout(_tabsPersistTimer)
+  _tabsPersistTimer = setTimeout(() => {
+    try {
+      const data = {
+        v: 1,
+        activeId,
+        tabs: tabs
+          .filter(t => !t.isMcp)  // don't persist transient MCP session tabs
+          .map(t => ({ id: t.id, url: t.url, title: t.title, favicon: t.favicon })),
+      }
+      localStorage.setItem(_TABS_STORAGE_KEY, JSON.stringify(data))
+    } catch (_) {}
+  }, 200)
+}
+function _restoreTabs() {
+  try {
+    const raw = localStorage.getItem(_TABS_STORAGE_KEY)
+    if (!raw) return false
+    const data = JSON.parse(raw)
+    if (!data || !Array.isArray(data.tabs) || !data.tabs.length) return false
+    // Replace the default tab array. Remove the inline <webview id="wv">
+    // so each persisted tab gets a fresh webview.
+    const initial = document.getElementById('wv')
+    if (initial && initial.parentNode) initial.parentNode.removeChild(initial)
+    _tabWebviews.clear()
+    tabs = data.tabs.map(t => ({
+      id: t.id, url: t.url, title: t.title || 'Ny flik',
+      favicon: t.favicon || null, loading: false, _zoom: 100,
+    }))
+    activeId = data.activeId && tabs.some(t => t.id === data.activeId) ? data.activeId : tabs[0].id
+    nextId = Math.max(...tabs.map(t => t.id)) + 1
+    // Build webviews: overlay sentinels get about:blank, real URLs navigate.
+    for (const t of tabs) {
+      const url = (isHomeUrl(t.url) || isMailUrl(t.url)) ? 'about:blank' : t.url
+      createWebviewForTab(t.id, url)
+    }
+    // Point wv at the active tab's webview element.
+    wv = _tabWebviews.get(activeId) || wv
+    return true
+  } catch (e) {
+    console.warn('[tabs] restore failed:', e)
+    return false
+  }
+}
 
 // ══════════════════════════════════════════════════════
 //  HOME SCREEN — LLM-style startpage
@@ -2582,7 +2653,8 @@ function syncOverlayVisibility() {
   if (wvEl) wvEl.style.display = (onHome || onMail) ? 'none' : ''
   if (onHome) {
     renderHomeScreen()
-    setTimeout(() => document.getElementById('homeInput')?.focus(), 30)
+    // Do NOT auto-focus #homeInput — on a new tab the URL bar must own
+    // focus, and on tab-switches users shouldn't have the cursor stolen.
   } else if (onMail) {
     renderMailScreen()
   }
@@ -3530,17 +3602,23 @@ function newTab(url, opts) {
   const tabUrl = url || HOME_URL
   const loadUrl = isHome ? 'about:blank' : url
   const background = !!(opts && opts.background)
-  tabs.push({ id, title: isHome ? 'Ny flik' : 'Ny flik', url: tabUrl, loading:false, favicon:null, _zoom:100 })
+  tabs.push({ id, title: 'Ny flik', url: tabUrl, loading:false, favicon:null, _zoom:100 })
   createWebviewForTab(id, loadUrl)
   if (background) {
     scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    _persistTabs()
     return id
   }
   switchTab(id)
+  // Always land focus in the URL bar on a new tab — not inside the
+  // home-screen input or anywhere else. User asked explicitly.
   const urlInput = document.getElementById('urlInput')
-  if (isHome) urlInput.value = ''
-  else urlInput.focus()
-  if (!isHome) urlInput.select()
+  if (urlInput) {
+    urlInput.value = isHome ? '' : tabUrl
+    urlInput.focus()
+    urlInput.select()
+  }
+  _persistTabs()
   return id
 }
 
@@ -3558,7 +3636,9 @@ function switchTab(id) {
   if (tab) {
     const showVal = isOverlayUrl(tab.url) ? '' : (tab.url === 'about:blank' ? '' : tab.url)
     document.getElementById('urlInput').value = showVal
-    if (tab.favicon) setUrlFavicon(tab.favicon)
+    // Always reset — passing null/undefined clears the stale favicon from
+    // the previous tab so a fresh Ny-flik doesn't inherit its icon.
+    setUrlFavicon(tab.favicon || null)
     // Update spinner state for this tab
     _isLoading = !!tab.loading
     document.getElementById('spinner').classList.toggle('on', _isLoading)
@@ -3572,6 +3652,7 @@ function switchTab(id) {
   }
   syncHomeVisibility()
   renderTabs()
+  _persistTabs()
 }
 
 function closeTab(e, id) {
@@ -3586,6 +3667,7 @@ function closeTab(e, id) {
   if (closedWv) { closedWv.remove(); _tabWebviews.delete(id) }
   if (activeId === id) switchTab(tabs[Math.min(idx, tabs.length-1)].id)
   else renderTabs()
+  _persistTabs()
 }
 
 // ══════════════════════════════════════════════════════
@@ -9410,8 +9492,21 @@ document.addEventListener('keydown', e => {
   else if ((ctrl && key === 'l') || e.key === 'F6') { e.preventDefault(); document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }
   // Ctrl+Shift+R → Hard reload active tab only (bypass cache)
   else if (ctrl && e.shiftKey && key === 'r') { e.preventDefault(); if (wv) wv.reloadIgnoringCache() }
-  // Ctrl+R or F5 → Reload active tab
-  else if ((ctrl && key === 'r') || e.key === 'F5') { e.preventDefault(); wvReload() }
+  // Ctrl+R or F5 → Context-aware refresh. If the active tab is on one
+  // of our overlay sentinels (home / mail) refresh that surface; otherwise
+  // reload the active webview. This avoids a full renderer reload (which
+  // would wipe tabs) while still giving the user a useful "refresh" key.
+  else if ((ctrl && key === 'r') || e.key === 'F5') {
+    e.preventDefault()
+    const active = tabs.find(t => t.id === activeId)
+    if (active && isHomeUrl(active.url)) {
+      renderHomeScreen()
+    } else if (active && isMailUrl(active.url)) {
+      if (typeof _mailLoadInbox === 'function') _mailLoadInbox()
+    } else {
+      wvReload()
+    }
+  }
   // Ctrl+F → Find in page
   else if (ctrl && key === 'f') { e.preventDefault(); openFindBar() }
   // Escape → Close find bar
@@ -9617,8 +9712,16 @@ loadBookmarks()
 loadHistory()
 loadDownloads()
 initBlocker()
-// Initial tab starts on HOME_URL — render the overlay now so the first
-// paint shows the LLM-style startscreen instead of a blank webview.
+// Restore the previous tab session if one was persisted (e.g. after a
+// renderer reload). Falls back to the default single HOME tab otherwise.
+const _restored = _restoreTabs()
+if (_restored) {
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+  // Refresh the URL bar for the active tab
+  const active = tabs.find(t => t.id === activeId)
+  const urlInput = document.getElementById('urlInput')
+  if (active && urlInput) urlInput.value = isOverlayUrl(active.url) ? '' : active.url
+}
 syncHomeVisibility()
 
 // One-shot: clear any persisted split-view layout from the (now reverted)

@@ -247,13 +247,32 @@ function createWindow() {
 
   // Grant permissions for voice chat, clipboard, notifications etc.
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications']
+    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications', 'display-capture']
     callback(allowed.includes(permission))
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications']
+    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications', 'display-capture']
     return allowed.includes(permission)
   })
+
+  // Meeting transcription — grant getDisplayMedia() with system-loopback
+  // audio. Our own chrome renderer calls this for the transcription feature;
+  // guests (<webview>) have a separate permission flow above. A video source
+  // is required by Chromium's API even when we only care about the audio
+  // track, so we stage a screen source that the renderer then discards.
+  if (typeof win.webContents.session.setDisplayMediaRequestHandler === 'function') {
+    win.webContents.session.setDisplayMediaRequestHandler(async (_req, callback) => {
+      try {
+        const { desktopCapturer } = require('electron')
+        const sources = await desktopCapturer.getSources({ types: ['screen'] })
+        const primary = sources[0]
+        if (!primary) { callback({}); return }
+        callback({ video: primary, audio: 'loopback' })
+      } catch (_) {
+        callback({})
+      }
+    })
+  }
 
   // Block Electron's default Ctrl+R / Ctrl+Shift+R / F5 / Shift+F5 handling
   // on the window. The renderer listens for these and calls wvReload() on

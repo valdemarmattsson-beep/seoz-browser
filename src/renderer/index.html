@@ -310,6 +310,97 @@
   font-size:11px;color:var(--txt);background:var(--panel);margin-bottom:4px;
 }
 .mail-att-row svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+
+/* Reply / reply-all / forward buttons under the message header */
+.mail-reply-row{
+  display:flex;gap:6px;margin:14px 0 6px;padding-bottom:14px;
+  border-bottom:1px solid var(--border);
+}
+.mail-reply-btn{
+  height:30px;padding:0 14px;border-radius:7px;border:1px solid var(--border);
+  background:var(--panel);color:var(--txt);font-size:11px;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:background .12s,border-color .12s;
+}
+.mail-reply-btn:hover{background:var(--card);border-color:var(--p)}
+.mail-reply-btn svg{width:13px;height:13px}
+
+/* Compose modal — centered card over the whole mail screen */
+.mail-compose-bg{
+  position:absolute;inset:0;z-index:10;
+  background:rgba(0,0,0,.5);
+  display:none;align-items:center;justify-content:center;padding:30px 20px;
+  backdrop-filter:blur(4px);-webkit-backdrop-filter:blur(4px);
+}
+.mail-compose-bg.open{display:flex}
+.mail-compose{
+  width:100%;max-width:720px;max-height:calc(100vh - 160px);
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  box-shadow:0 16px 48px rgba(0,0,0,.4);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.mail-compose-head{
+  display:flex;align-items:center;padding:12px 16px;border-bottom:1px solid var(--border);
+}
+.mail-compose-title{
+  font-family:'Inter Tight','Inter',sans-serif;font-size:14px;font-weight:600;color:var(--head);
+  flex:1;
+}
+.mail-compose-close{
+  width:26px;height:26px;border-radius:6px;border:none;background:transparent;color:var(--muted);
+  display:flex;align-items:center;justify-content:center;cursor:pointer;transition:background .1s;
+}
+.mail-compose-close:hover{background:var(--panel);color:var(--head)}
+.mail-compose-close svg{width:14px;height:14px}
+.mail-compose-body{
+  padding:8px 16px 12px;display:flex;flex-direction:column;gap:1px;flex:1;min-height:0;
+}
+.mail-field{
+  display:flex;align-items:center;gap:8px;padding:7px 0;border-bottom:1px solid var(--border);
+  font-size:12px;
+}
+.mail-field-label{
+  width:48px;flex-shrink:0;color:var(--muted);font-size:10px;font-weight:600;
+  text-transform:uppercase;letter-spacing:.06em;
+}
+.mail-field-input{
+  flex:1;border:none;outline:none;background:transparent;color:var(--txt);
+  font-family:inherit;font-size:12px;min-width:0;
+}
+.mail-field-input::placeholder{color:var(--muted)}
+.mail-field-select{
+  flex:1;border:none;outline:none;background:transparent;color:var(--txt);
+  font-family:inherit;font-size:12px;cursor:pointer;
+}
+.mail-field-togglebar{
+  display:flex;gap:12px;margin-left:auto;flex-shrink:0;
+}
+.mail-field-toggle{
+  background:none;border:none;color:var(--muted);font-size:10px;cursor:pointer;padding:0;
+  transition:color .12s;
+}
+.mail-field-toggle:hover{color:var(--p)}
+.mail-field-toggle.active{color:var(--p);font-weight:600}
+.mail-compose-body-text{
+  flex:1;min-height:180px;max-height:none;width:100%;
+  border:none;outline:none;background:transparent;resize:none;
+  font-family:inherit;font-size:13px;color:var(--txt);line-height:1.55;
+  padding:14px 0 0;
+}
+.mail-compose-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  padding:12px 16px;border-top:1px solid var(--border);
+  background:var(--panel);
+}
+.mail-compose-status{font-size:10px;color:var(--muted);flex:1;margin-right:10px}
+.mail-compose-status.err{color:var(--r)}
+.mail-compose-send{
+  height:32px;padding:0 18px;border-radius:7px;border:none;
+  background:var(--p);color:#fff;font-size:12px;font-weight:600;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;transition:background .12s;
+}
+.mail-compose-send:hover:not(:disabled){background:var(--p600)}
+.mail-compose-send:disabled{opacity:.5;cursor:not-allowed}
+.mail-compose-send svg{width:13px;height:13px}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100vh;overflow:hidden;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);color:var(--txt);user-select:none}
 
@@ -484,13 +575,13 @@ input,textarea,select{user-select:text}
 }
 .blocker-badge:empty{display:none}
 .flow-btn{
-  width:34px;height:34px;border-radius:8px;border:none;background:transparent;
+  width:26px;height:26px;border-radius:5px;border:none;background:transparent;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   flex-shrink:0;transition:background .15s;
   -webkit-app-region:no-drag;padding:0;overflow:hidden;
 }
 .flow-btn:hover{background:var(--border)}
-.flow-btn img{width:26px;height:26px;border-radius:6px}
+.flow-btn img{width:16px;height:16px;border-radius:4px}
 
 /* Blocker popup */
 .blocker-popup{
@@ -1337,6 +1428,51 @@ input,textarea,select{user-select:text}
           <div class="mail-body" id="mailBody">
             <div class="mail-empty-note">Laddar…</div>
           </div>
+          <!-- Compose modal (new/reply/reply-all/forward) -->
+          <div class="mail-compose-bg" id="mailComposeBg" onclick="if(event.target===this)closeCompose()">
+            <div class="mail-compose" role="dialog" aria-label="Nytt mejl">
+              <div class="mail-compose-head">
+                <div class="mail-compose-title" id="mailComposeTitle">Nytt mejl</div>
+                <button class="mail-compose-close" onclick="closeCompose()" aria-label="Stäng">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+                </button>
+              </div>
+              <div class="mail-compose-body">
+                <div class="mail-field">
+                  <span class="mail-field-label">Från</span>
+                  <select class="mail-field-select" id="composeFrom"></select>
+                </div>
+                <div class="mail-field">
+                  <span class="mail-field-label">Till</span>
+                  <input class="mail-field-input" id="composeTo" type="text" placeholder="namn@example.com, annan@example.com">
+                  <div class="mail-field-togglebar">
+                    <button class="mail-field-toggle" id="composeCcToggle" onclick="_toggleCcBcc('cc')">Kopia</button>
+                    <button class="mail-field-toggle" id="composeBccToggle" onclick="_toggleCcBcc('bcc')">Hemlig kopia</button>
+                  </div>
+                </div>
+                <div class="mail-field" id="composeCcRow" style="display:none">
+                  <span class="mail-field-label">Kopia</span>
+                  <input class="mail-field-input" id="composeCc" type="text" placeholder="">
+                </div>
+                <div class="mail-field" id="composeBccRow" style="display:none">
+                  <span class="mail-field-label">Dold</span>
+                  <input class="mail-field-input" id="composeBcc" type="text" placeholder="">
+                </div>
+                <div class="mail-field">
+                  <span class="mail-field-label">Ämne</span>
+                  <input class="mail-field-input" id="composeSubject" type="text">
+                </div>
+                <textarea class="mail-compose-body-text" id="composeBody" placeholder="Skriv ditt meddelande…"></textarea>
+              </div>
+              <div class="mail-compose-foot">
+                <span class="mail-compose-status" id="composeStatus"></span>
+                <button class="mail-compose-send" id="composeSendBtn" onclick="_composeSend()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
+                  <span>Skicka</span>
+                </button>
+              </div>
+            </div>
+          </div>
         </div>
       </div>
       <!-- Voice button moved to dock sidebar -->
@@ -1640,7 +1776,10 @@ const _tabWebviews = new Map() // tabId → webview element
 
 // Lucide globe — used when a tab has no favicon or the favicon fails to load.
 // currentColor inherits from the tab's text color (muted / active).
-window._TAB_FAVICON_FALLBACK = '<svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
+// Orbit S mark — used as favicon fallback across tabs, bookmarks and
+// home-screen recent rows when a real favicon is missing or fails to load.
+window._ORBIT_MARK_INLINE = '<svg viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
+window._TAB_FAVICON_FALLBACK = window._ORBIT_MARK_INLINE.replace('<svg ', '<svg class="tab-ico" ')
 let wv = _wvTemplate // always points to the active tab's webview
 function getWV() { return wv }
 
@@ -2415,8 +2554,8 @@ async function renderHomeScreen() {
       const row = document.createElement('div')
       row.className = 'home-recent-item'
       const fav = r.favicon
-        ? `<img class="home-recent-fav" src="${esc(r.favicon)}" onerror="this.outerHTML='<svg class=\\'home-recent-fav-fb\\' viewBox=\\'0 0 24 24\\' fill=\\'none\\' stroke=\\'currentColor\\' stroke-width=\\'1.8\\'><circle cx=\\'12\\' cy=\\'12\\' r=\\'10\\'/></svg>'">`
-        : `<svg class="home-recent-fav-fb" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="10"/></svg>`
+        ? `<img class="home-recent-fav" src="${esc(r.favicon)}" onerror="this.outerHTML='<svg class=\\'home-recent-fav-fb\\' viewBox=\\'0 0 200 200\\' fill=\\'none\\' style=\\'opacity:.85\\'><circle cx=\\'100\\' cy=\\'100\\' r=\\'10\\' fill=\\'currentColor\\'/><path d=\\'M100 40 A 60 60 0 0 1 160 100\\' stroke=\\'currentColor\\' stroke-width=\\'18\\' stroke-linecap=\\'round\\'/><path d=\\'M100 160 A 60 60 0 0 1 40 100\\' stroke=\\'currentColor\\' stroke-width=\\'18\\' stroke-linecap=\\'round\\'/></svg>'">`
+        : `<svg class="home-recent-fav-fb" viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>`
       row.innerHTML = `${fav}<span class="home-recent-title2">${esc(r.title)}</span><span class="home-recent-url">${esc(r.url)}</span>`
       row.onclick = () => doNav(r.url)
       recentEl.appendChild(row)
@@ -2780,6 +2919,7 @@ window._mailOpen = async function(uid) {
     reader.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Kunde inte ladda mejlet: ${esc(res?.error || 'okänt')}</div>`
     return
   }
+  _lastOpenedMessage = res.message
   _renderReader(res.message)
   // Mark as read on the server if it was unread. Update local state so
   // the dot disappears without needing a full inbox refresh.
@@ -2829,6 +2969,20 @@ function _renderReader(msg) {
         ${ccLabel ? `<div><strong>Kopia:</strong> ${ccLabel}</div>` : ''}
         ${dateStr ? `<div><strong>Datum:</strong> ${esc(dateStr)}</div>` : ''}
       </div>
+    </div>
+    <div class="mail-reply-row">
+      <button class="mail-reply-btn" onclick="mailReply(false)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+        <span>Svara</span>
+      </button>
+      <button class="mail-reply-btn" onclick="mailReply(true)">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/></svg>
+        <span>Svara alla</span>
+      </button>
+      <button class="mail-reply-btn" onclick="mailForward()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+        <span>Vidarebefordra</span>
+      </button>
     </div>
     ${bodyHtml}
     ${attHtml}
@@ -2969,8 +3123,212 @@ window.mailOpenSetup = function() {
   if (body) _renderMailSetup(body)
 }
 window.mailCompose = function() {
-  toast('Compose kommer i Fas 4', 'var(--p)')
+  openCompose('new')
 }
+
+// ══════════════════════════════════════════════════════
+//  MAIL — compose (Fas 3)
+//  Uses SE.mail.send (SMTP in main). Plain-text body for v1; reply/forward
+//  quote-blocks as plain text too. No rich-text editor — keep surface small.
+// ══════════════════════════════════════════════════════
+const _composeState = {
+  open: false,
+  mode: 'new',          // 'new' | 'reply' | 'replyAll' | 'forward'
+  inReplyTo: null,      // Message-ID of message being replied to
+  references: [],       // References chain
+  sending: false,
+}
+
+function _composeFromOptions(cfg) {
+  // Primary address first, then aliases. Each rendered as "Name <email>".
+  const primary = cfg.displayName ? `"${cfg.displayName}" <${cfg.email}>` : cfg.email
+  const opts = [primary]
+  if (Array.isArray(cfg.fromAddresses)) {
+    for (const a of cfg.fromAddresses) {
+      if (!a) continue
+      const addr = a.includes('<') ? a : (cfg.displayName ? `"${cfg.displayName}" <${a}>` : a)
+      if (!opts.includes(addr)) opts.push(addr)
+    }
+  }
+  return opts
+}
+
+function _addrListToStr(arr) {
+  if (!Array.isArray(arr)) return ''
+  return arr.map(a => (a.name ? `"${a.name}" <${a.address}>` : a.address)).join(', ')
+}
+
+function _signatureBlock(cfg) {
+  const sig = cfg?.signature
+  if (!sig) return ''
+  return '\n\n-- \n' + sig
+}
+
+function _quoteBody(msg) {
+  const from = (msg.from && msg.from[0]) || {}
+  const name = from.name || from.address || '(okänd)'
+  const when = msg.date ? new Date(msg.date).toLocaleString('sv-SE') : ''
+  const src = (msg.text && msg.text.trim()) ? msg.text : _stripHtmlToText(msg.html || '')
+  const lines = src.split(/\r?\n/).map(l => '> ' + l).join('\n')
+  return `\n\nDen ${when}, ${name} skrev:\n${lines}\n`
+}
+
+function _stripHtmlToText(html) {
+  // Cheap HTML → text. Good enough for quoting in a reply; we're not
+  // trying to preserve formatting.
+  const tmp = document.createElement('div')
+  tmp.innerHTML = html || ''
+  return (tmp.textContent || tmp.innerText || '').trim()
+}
+
+window.openCompose = async function(mode, opts) {
+  if (_composeState.open) return
+  const cfg = _mailCfgMeta || await SE.mail.getConfig()
+  if (!cfg) { toast('Mejl ej anslutet', '#dc2626'); return }
+  _mailCfgMeta = cfg
+
+  _composeState.open = true
+  _composeState.mode = mode || 'new'
+  _composeState.inReplyTo = opts?.inReplyTo || null
+  _composeState.references = opts?.references || []
+  _composeState.sending = false
+
+  // Populate From dropdown
+  const fromSelect = document.getElementById('composeFrom')
+  if (fromSelect) {
+    const options = _composeFromOptions(cfg)
+    fromSelect.innerHTML = options.map(o => `<option value="${esc(o)}">${esc(o)}</option>`).join('')
+    fromSelect.value = options[0]
+  }
+
+  // Title
+  const titleMap = { new: 'Nytt mejl', reply: 'Svara', replyAll: 'Svara alla', forward: 'Vidarebefordra' }
+  const titleEl = document.getElementById('mailComposeTitle')
+  if (titleEl) titleEl.textContent = titleMap[_composeState.mode] || 'Nytt mejl'
+
+  // Prefill fields
+  const to = document.getElementById('composeTo')
+  const cc = document.getElementById('composeCc')
+  const bcc = document.getElementById('composeBcc')
+  const subj = document.getElementById('composeSubject')
+  const body = document.getElementById('composeBody')
+  if (to)   to.value = opts?.to || ''
+  if (cc)   cc.value = opts?.cc || ''
+  if (bcc)  bcc.value = opts?.bcc || ''
+  if (subj) subj.value = opts?.subject || ''
+  if (body) body.value = (opts?.body ?? '') + _signatureBlock(cfg)
+
+  // Collapse Cc/Bcc unless prefilled
+  document.getElementById('composeCcRow').style.display  = opts?.cc  ? '' : 'none'
+  document.getElementById('composeBccRow').style.display = opts?.bcc ? '' : 'none'
+  document.getElementById('composeCcToggle').classList.toggle('active',  !!opts?.cc)
+  document.getElementById('composeBccToggle').classList.toggle('active', !!opts?.bcc)
+
+  document.getElementById('composeStatus').textContent = ''
+  document.getElementById('composeStatus').classList.remove('err')
+  document.getElementById('mailComposeBg').classList.add('open')
+  // Focus: new → To, reply/forward → Body (recipient already set)
+  setTimeout(() => {
+    const target = (_composeState.mode === 'new' ? to : body)
+    if (target) { target.focus(); if (_composeState.mode !== 'new' && body) body.setSelectionRange(0, 0) }
+  }, 30)
+}
+
+window.closeCompose = function() {
+  _composeState.open = false
+  document.getElementById('mailComposeBg').classList.remove('open')
+}
+
+window._toggleCcBcc = function(which) {
+  const row = document.getElementById(which === 'cc' ? 'composeCcRow' : 'composeBccRow')
+  const toggle = document.getElementById(which === 'cc' ? 'composeCcToggle' : 'composeBccToggle')
+  if (!row) return
+  const now = row.style.display === ''
+  row.style.display = now ? 'none' : ''
+  toggle.classList.toggle('active', !now)
+  if (!now) {
+    const input = row.querySelector('input')
+    if (input) input.focus()
+  }
+}
+
+window._composeSend = async function() {
+  if (_composeState.sending) return
+  const to   = document.getElementById('composeTo').value.trim()
+  const cc   = document.getElementById('composeCc').value.trim()
+  const bcc  = document.getElementById('composeBcc').value.trim()
+  const subj = document.getElementById('composeSubject').value.trim()
+  const body = document.getElementById('composeBody').value
+  const from = document.getElementById('composeFrom').value
+  const status = document.getElementById('composeStatus')
+  const btn = document.getElementById('composeSendBtn')
+
+  if (!to) { status.textContent = 'Ange minst en mottagare.'; status.classList.add('err'); return }
+  if (!subj && !confirm('Skicka utan ämne?')) return
+
+  _composeState.sending = true
+  btn.disabled = true
+  status.classList.remove('err')
+  status.textContent = 'Skickar…'
+
+  const res = await SE.mail.send({
+    from, to, cc: cc || undefined, bcc: bcc || undefined,
+    subject: subj, text: body,
+    inReplyTo:  _composeState.inReplyTo || undefined,
+    references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
+  })
+
+  _composeState.sending = false
+  btn.disabled = false
+  if (res && res.ok) {
+    toast('Mejl skickat', '#2ca87f')
+    closeCompose()
+    // Refresh inbox so "Skickat"-tråden kanske dyker upp nästa sync
+    _mailLoadInbox()
+  } else {
+    status.textContent = 'Misslyckades: ' + (res?.error || 'okänt fel')
+    status.classList.add('err')
+  }
+}
+
+// ── Reply / reply-all / forward entry points from the reader ──
+window.mailReply = function(all) {
+  const msg = _lastOpenedMessage
+  if (!msg) return
+  const originals = [...(msg.from || [])]
+  const to = _addrListToStr(originals)
+  let cc = ''
+  if (all) {
+    const myAddrs = new Set([_mailCfgMeta?.email, ...((_mailCfgMeta?.fromAddresses) || [])].filter(Boolean).map(s => s.toLowerCase()))
+    const combined = [...(msg.to || []), ...(msg.cc || [])].filter(a =>
+      a.address && !myAddrs.has(a.address.toLowerCase()) &&
+      !originals.some(o => o.address && o.address.toLowerCase() === a.address.toLowerCase())
+    )
+    cc = _addrListToStr(combined)
+  }
+  const subject = /^re:/i.test(msg.subject || '') ? msg.subject : ('Re: ' + (msg.subject || ''))
+  const references = [...(msg.references || []), msg.messageId].filter(Boolean)
+  openCompose(all ? 'replyAll' : 'reply', {
+    to, cc, subject,
+    body: _quoteBody(msg),
+    inReplyTo: msg.messageId,
+    references,
+  })
+}
+
+window.mailForward = function() {
+  const msg = _lastOpenedMessage
+  if (!msg) return
+  const subject = /^(fwd|vb):/i.test(msg.subject || '') ? msg.subject : ('Fwd: ' + (msg.subject || ''))
+  const originals = _addrListToStr(msg.from || [])
+  const when = msg.date ? new Date(msg.date).toLocaleString('sv-SE') : ''
+  const body = `\n\n----- Vidarebefordrat meddelande -----\nFrån: ${originals}\nDatum: ${when}\nÄmne: ${msg.subject || ''}\n\n${msg.text || _stripHtmlToText(msg.html || '')}\n`
+  openCompose('forward', { subject, body })
+}
+
+// Cache the last loaded message so reply/forward can read its headers
+// without another IPC fetch.
+let _lastOpenedMessage = null
 
 const getActive = () => tabs.find(t => t.id === activeId)
 
@@ -4542,7 +4900,7 @@ function renderBmBar() {
       item.className = 'bm-drop-item'
       item.draggable = true
       item.dataset.bmid = b.id
-      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
+      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
       item.innerHTML = fav + `<span>${esc(b.title)}</span>`
       item.onclick = (e) => { e.stopPropagation(); wv.loadURL(b.url); closeAllDrops() }
       item.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, bmCtxItems(b)) }
@@ -4639,7 +4997,7 @@ function makeBmEl(b) {
   el.className = 'bm-item'
   el.draggable = true
   el.dataset.bmid = b.id
-  const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
+  const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
   el.innerHTML = fav + `<span>${esc(b.title)}</span>`
   el.onclick = () => wv.loadURL(b.url)
   el.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, bmCtxItems(b)) }

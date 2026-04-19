@@ -18,21 +18,23 @@ const PAPER = '#F6F4EF';
 
 // App-icon plate: warm paper ground with ink Orbit S — matches brand spec
 // (INK on PAPER, no gradients). Squircle radius ≈ 22.4%.
-// Icon variant uses heavier stroke than the brand 4% rule so the mark stays
-// legible at 16–48px where thin strokes disappear. Dot r=12, stroke 18 on
-// the 200-unit grid. Mark sits at 64% of the plate.
+// Mark at 82% of the plate (up from 64%) so the Orbit S fills much more
+// of the paper — reads as intentional at taskbar sizes instead of
+// floating. Stroke bumped to 20/200 and dot to 14/200 for visual balance
+// at the larger proportions; still legible at 16–24 px thanks to the
+// heavier-than-brand weight.
 function plateSvg(size) {
   const radius = Math.round(size * 0.224);
-  const markSize = Math.round(size * 0.64);
+  const markSize = Math.round(size * 0.82);
   const markOffset = Math.round((size - markSize) / 2);
   const scale = markSize / 200;
 
   return `<svg xmlns="http://www.w3.org/2000/svg" width="${size}" height="${size}" viewBox="0 0 ${size} ${size}">
   <rect x="0" y="0" width="${size}" height="${size}" rx="${radius}" ry="${radius}" fill="${PAPER}"/>
   <g transform="translate(${markOffset} ${markOffset}) scale(${scale})">
-    <circle cx="100" cy="100" r="12" fill="${INK}"/>
-    <path d="M100 40 A 60 60 0 0 1 160 100" fill="none" stroke="${INK}" stroke-width="18" stroke-linecap="round"/>
-    <path d="M100 160 A 60 60 0 0 1 40 100" fill="none" stroke="${INK}" stroke-width="18" stroke-linecap="round"/>
+    <circle cx="100" cy="100" r="14" fill="${INK}"/>
+    <path d="M100 40 A 60 60 0 0 1 160 100" fill="none" stroke="${INK}" stroke-width="20" stroke-linecap="round"/>
+    <path d="M100 160 A 60 60 0 0 1 40 100" fill="none" stroke="${INK}" stroke-width="20" stroke-linecap="round"/>
   </g>
 </svg>`;
 }

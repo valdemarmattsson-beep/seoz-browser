@@ -235,13 +235,13 @@ input,textarea,select{user-select:text}
 }
 .blocker-badge:empty{display:none}
 .flow-btn{
-  width:28px;height:28px;border-radius:6px;border:none;background:transparent;
+  width:34px;height:34px;border-radius:8px;border:none;background:transparent;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
   flex-shrink:0;transition:background .15s;
   -webkit-app-region:no-drag;padding:0;overflow:hidden;
 }
 .flow-btn:hover{background:var(--border)}
-.flow-btn img{width:18px;height:18px;border-radius:4px}
+.flow-btn img{width:26px;height:26px;border-radius:6px}
 
 /* Blocker popup */
 .blocker-popup{
@@ -371,6 +371,9 @@ input,textarea,select{user-select:text}
 .ctx-item.danger{color:var(--r)}
 .ctx-item.disabled{color:var(--muted);opacity:.4;cursor:default}
 .ctx-sep{height:1px;background:var(--border);margin:4px 8px}
+.ctx-ico{width:14px;height:14px;flex-shrink:0;display:inline-flex;align-items:center;justify-content:center;color:var(--muted)}
+.ctx-ico svg{width:13px;height:13px}
+.ctx-item.danger .ctx-ico{color:var(--r)}
 
 /* Bookmark edit modal */
 .bm-modal-bg{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center}
@@ -429,7 +432,8 @@ input,textarea,select{user-select:text}
 }
 .seoz-panel.open{width:var(--panel-w)}
 .panel-hdr{height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0;background:var(--panel)}
-.ph-mark{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;font-size:13px}
+.ph-mark{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ink-2,#888)}
+.ph-mark svg{width:15px;height:15px}
 .ph-tit{font-size:12px;font-weight:700;color:var(--head);flex:1}
 .ph-cls{width:22px;height:22px;border-radius:5px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);transition:background .15s}
 .ph-cls:hover{background:var(--border)}
@@ -808,7 +812,7 @@ input,textarea,select{user-select:text}
     <div class="pp-form" id="ppForm">
       <div class="pp-form-h">
         <span>Skapa ny profil</span>
-        <button class="pp-form-close" onclick="closePpForm()">✕</button>
+        <button class="pp-form-close" onclick="closePpForm()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="ac-lbl">Namn</div>
       <input class="ac-inp" id="ppName" placeholder="T.ex. Valdemar" onkeydown="if(event.key==='Enter')submitNewProfile()">
@@ -838,15 +842,21 @@ input,textarea,select{user-select:text}
       </div>
       <div class="ac-h">Anslut ditt konto</div>
       <div class="ac-sub">Gå till <strong>Inställningar → API</strong> i SEOZ, generera en nyckel och klistra in den nedan.</div>
-      <div class="ac-msg err" id="authErr">⚠️ Ogiltig nyckel — kontrollera och försök igen.</div>
-      <div class="ac-msg ok"  id="authOk">✓ Anslutning lyckades!</div>
+      <div class="ac-msg err" id="authErr"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.29 3.86-8.3 14.4a2 2 0 0 0 1.73 3h16.56a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg><span>Ogiltig nyckel — kontrollera och försök igen.</span></div>
+      <div class="ac-msg ok"  id="authOk"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Anslutning lyckades!</span></div>
       <div class="ac-lbl">API-nyckel</div>
       <input class="ac-inp" id="apiKeyInput" type="password" placeholder="seoz_live_••••••••••••••••" onkeydown="if(event.key==='Enter')doConnect()">
       <div class="ac-hint">Hittar du inte nyckeln? <a onclick="openApiKeyPage()">Skapa en på seoz.se →</a></div>
-      <button class="ac-btn" onclick="doConnect()">⚡ Anslut konto</button>
+      <button class="ac-btn" onclick="doConnect()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
+        Anslut konto
+      </button>
     </div>
     <div class="ac-foot">
-      <button class="ac-sec" onclick="openApiKeyPage()">🔑 Skapa API-nyckel i SEOZ</button>
+      <button class="ac-sec" onclick="openApiKeyPage()">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>
+        Skapa API-nyckel i SEOZ
+      </button>
       <button class="ac-sec" onclick="doConnect('demo')">Prova med demokonto</button>
     </div>
   </div>
@@ -878,7 +888,7 @@ input,textarea,select{user-select:text}
       <div class="nb" id="relBtn" onclick="wvReload()" title="Ladda om"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></div>
       <div class="url-wrap" onclick="document.getElementById('urlInput').focus()">
         <img class="url-fav" id="urlFav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
-        <span class="lock" id="urlLock">🔒</span>
+        <span class="lock" id="urlLock" aria-label="Säker anslutning"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
         <input id="urlInput" placeholder="Sök eller ange URL..."
                onkeydown="if(event.key==='Enter')doNav(this.value)"
                onfocus="this.select()">
@@ -888,14 +898,14 @@ input,textarea,select{user-select:text}
           <span class="zoom-bar-pct" id="zoomBarPct" onclick="event.stopPropagation();doZoom(0)" title="Återställ zoom">100%</span>
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(10)" title="Zooma in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
-        <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida">☆</button>
+        <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
         <div class="url-suggest" id="urlSuggest"></div>
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.se')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
-        <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering">🛡️<span class="blocker-badge" id="blockerBadge"></span></button>
+        <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering" aria-label="Innehållsblockering"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="blocker-badge" id="blockerBadge"></span></button>
         <div class="blocker-popup" id="blockerPopup">
-          <div class="blocker-popup-title">🛡️ SEOZ Shield</div>
+          <div class="blocker-popup-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>SEOZ Shield</div>
           <div class="blocker-stat" id="blockerStatNum">0</div>
           <div class="blocker-stat-label">annonser & trackers blockerade denna session</div>
           <div class="blocker-toggle">
@@ -917,7 +927,7 @@ input,textarea,select{user-select:text}
       <span class="find-count" id="findCount"></span>
       <button class="find-btn" onclick="doFindNav('back')" title="Föregående">▲</button>
       <button class="find-btn" onclick="doFindNav('fwd')" title="Nästa">▼</button>
-      <button class="find-btn" onclick="closeFindBar()" title="Stäng">✕</button>
+      <button class="find-btn" onclick="closeFindBar()" title="Stäng"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
 
     <!-- Update banner -->
@@ -937,7 +947,7 @@ input,textarea,select{user-select:text}
     <div class="bm-modal">
       <div class="bm-modal-hdr">
         <h3 id="bmModalTitle">Redigera bokmärke</h3>
-        <button class="ph-cls" onclick="closeBmModal()">✕</button>
+        <button class="ph-cls" onclick="closeBmModal()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="bm-modal-body">
         <label>Namn</label>
@@ -961,7 +971,7 @@ input,textarea,select{user-select:text}
     <div class="bm-modal" style="width:300px">
       <div class="bm-modal-hdr">
         <h3 id="promptTitle">Namn</h3>
-        <button class="ph-cls" onclick="resolvePrompt(null)">✕</button>
+        <button class="ph-cls" onclick="resolvePrompt(null)"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="bm-modal-body">
         <input id="promptInput" placeholder="" onkeydown="if(event.key==='Enter')resolvePrompt(this.value)">
@@ -995,10 +1005,10 @@ input,textarea,select{user-select:text}
     <div class="ss-editor">
       <div class="ss-toolbar">
         <span class="ss-toolbar-title">Skärmbild</span>
-        <button class="ss-btn" onclick="ssCropMode()" id="ssCropBtn">✂ Beskär</button>
-        <button class="ss-btn" onclick="ssCopyClipboard()">📋 Kopiera</button>
-        <button class="ss-btn primary" onclick="ssSaveFile()">💾 Spara</button>
-        <button class="ss-btn danger" onclick="ssClose()">✕</button>
+        <button class="ss-btn" onclick="ssCropMode()" id="ssCropBtn"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><circle cx="6" cy="6" r="3"/><circle cx="6" cy="18" r="3"/><line x1="20" y1="4" x2="8.12" y2="15.88"/><line x1="14.47" y1="14.48" x2="20" y2="20"/><line x1="8.12" y1="8.12" x2="12" y2="12"/></svg>Beskär</button>
+        <button class="ss-btn" onclick="ssCopyClipboard()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>Kopiera</button>
+        <button class="ss-btn primary" onclick="ssSaveFile()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:5px;vertical-align:-2px"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>Spara</button>
+        <button class="ss-btn danger" onclick="ssClose()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="ss-canvas-wrap">
         <canvas id="ssCanvas"></canvas>
@@ -1026,7 +1036,7 @@ input,textarea,select{user-select:text}
       <!-- SEOZ Inspector drawer -->
       <div class="inspector-drawer" id="inspectorDrawer">
         <div class="inspector-hdr" id="inspectorHdr">
-          <div class="inspector-hdr-title">🔬 SEOZ Inspector</div>
+          <div class="inspector-hdr-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>SEOZ Inspector</div>
           <div class="inspector-tabs" id="inspectorTabs">
             <div class="inspector-tab active" data-tab="overview" onclick="inspectorSwitchTab('overview')">Översikt</div>
             <div class="inspector-tab" data-tab="meta" onclick="inspectorSwitchTab('meta')">Meta</div>
@@ -1044,8 +1054,8 @@ input,textarea,select{user-select:text}
           <div class="inspector-hdr-spacer"></div>
           <button class="inspector-btn" id="elemPickerBtn" onclick="toggleElementPicker()" title="Välj element" style="font-size:14px;display:none">⊹</button>
           <button class="inspector-btn" onclick="runInspector()" title="Uppdatera analys">↻</button>
-          <button class="inspector-btn" onclick="copyInspectorData()" title="Kopiera JSON">📋</button>
-          <button class="inspector-btn" onclick="closeInspector()" title="Stäng">✕</button>
+          <button class="inspector-btn" onclick="copyInspectorData()" title="Kopiera JSON" aria-label="Kopiera JSON"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+          <button class="inspector-btn" onclick="closeInspector()" title="Stäng"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
         </div>
         <div class="inspector-body" id="inspectorBody">
           <div style="text-align:center;padding:30px;color:var(--muted)">Tryck ↻ eller F12 för att analysera sidan</div>
@@ -1056,9 +1066,9 @@ input,textarea,select{user-select:text}
     <!-- SEOZ Panel -->
     <div class="seoz-panel" id="seozPanel">
       <div class="panel-hdr">
-        <div class="ph-mark" id="phIcon">🔍</div>
+        <div class="ph-mark" id="phIcon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg></div>
         <div class="ph-tit" id="panelTitle">SEOZ</div>
-        <button class="ph-cls" onclick="closePanel()">✕</button>
+        <button class="ph-cls" onclick="closePanel()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
       </div>
       <div class="panel-body" id="panelBody"></div>
     </div>
@@ -1137,9 +1147,9 @@ input,textarea,select{user-select:text}
 <div class="history-overlay" id="historyOverlay" onclick="if(event.target===this)closeHistory()">
   <div class="history-box">
     <div class="history-hdr">
-      <h3>🕒 Historik</h3>
+      <h3><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>Historik</h3>
       <input class="history-search" id="historySearch" placeholder="Sök i historik..." oninput="renderHistory(this.value)">
-      <button class="ph-cls" onclick="closeHistory()">✕</button>
+      <button class="ph-cls" onclick="closeHistory()"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
     </div>
     <div class="history-list" id="historyList"></div>
     <div style="padding:8px 16px;border-top:1px solid var(--border);display:flex;gap:8px">
@@ -1316,6 +1326,10 @@ const synced = {
 const _wvStack = document.getElementById('wvStack')
 const _wvTemplate = document.getElementById('wv') // initial webview (tab 1)
 const _tabWebviews = new Map() // tabId → webview element
+
+// Lucide globe — used when a tab has no favicon or the favicon fails to load.
+// currentColor inherits from the tab's text color (muted / active).
+window._TAB_FAVICON_FALLBACK = '<svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
 let wv = _wvTemplate // always points to the active tab's webview
 function getWV() { return wv }
 
@@ -2034,7 +2048,7 @@ function renderTabs() {
       el.innerHTML = `
         <div class="tab-ico-wrap"></div>
         <div class="tab-title"></div>
-        <div class="tab-x">✕</div>
+        <div class="tab-x" aria-label="Stäng flik"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
         <div class="tab-tip">
           <div class="tab-tip-title"></div>
           <div class="tab-tip-url"></div>
@@ -2071,10 +2085,11 @@ function renderTabs() {
     } else if (tab.favicon) {
       const img = icoWrap.querySelector('img.tab-ico')
       if (!img || img.src !== tab.favicon) {
-        icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML='<span class=\\'tab-ico\\' style=\\'font-size:11px\\'>🌐</span>'">`
+        // If the favicon fails to load, fall back to a Lucide globe icon.
+        icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML=window._TAB_FAVICON_FALLBACK">`
       }
     } else {
-      if (!icoWrap.querySelector('span.tab-ico')) icoWrap.innerHTML = '<span class="tab-ico" style="font-size:11px">🌐</span>'
+      if (!icoWrap.querySelector('svg.tab-ico')) icoWrap.innerHTML = window._TAB_FAVICON_FALLBACK
     } // end icon update
 
     // Update title (only if changed)
@@ -2500,7 +2515,7 @@ async function renderSeoSubTab(tab) {
     el.innerHTML = `
       <div style="text-align:center;padding:16px">
         <div style="color:var(--muted);margin-bottom:12px;font-size:11px">Kör en Lighthouse-liknande prestandaanalys direkt i browsern</div>
-        <button class="act-btn" onclick="runLighthousePanel()">⚡ Kör Lighthouse-analys</button>
+        <button class="act-btn" onclick="runLighthousePanel()">${_BTN.zap}Kör Lighthouse-analys</button>
       </div>
     `
   }
@@ -2634,7 +2649,7 @@ async function runLighthousePanel() {
       }
     }
 
-    html += `<button class="act-btn" style="margin-top:14px" onclick="runLighthousePanel()">⚡ Kör igen</button>`
+    html += `<button class="act-btn" style="margin-top:14px" onclick="runLighthousePanel()">${_BTN.refresh}Kör igen</button>`
     el.innerHTML = html
 
   } catch(e) {
@@ -2686,13 +2701,58 @@ function closePanel() {
   document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
 }
 
+// Lucide line-icons for act-btn content inside panels. 13×13 inline,
+// vertical-aligned with text. Used to replace emoji prefixes like
+// "⚡ Kör Lighthouse" → "<zap svg>Kör Lighthouse".
+const _L = (path) => `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px">${path}</svg>`
+const _BTN = {
+  zap:      _L('<path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/>'),
+  search:   _L('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>'),
+  barChart: _L('<line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/>'),
+  sparkles: _L('<path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/>'),
+  book:     _L('<path d="M4 19.5A2.5 2.5 0 0 1 6.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 0 1 4 19.5v-15A2.5 2.5 0 0 1 6.5 2z"/>'),
+  music:    _L('<path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/>'),
+  briefcase:_L('<rect x="2" y="7" width="20" height="14" rx="2"/><path d="M16 21V5a2 2 0 0 0-2-2h-4a2 2 0 0 0-2 2v16"/>'),
+  users:    _L('<path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/>'),
+  key:      _L('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/>'),
+  edit:     _L('<path d="M11 4H4a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h14a2 2 0 0 0 2-2v-7"/><path d="M18.5 2.5a2.12 2.12 0 0 1 3 3L12 15l-4 1 1-4 9.5-9.5z"/>'),
+  globe:    _L('<circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/>'),
+  trash:    _L('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6"/><path d="M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/>'),
+  refresh:  _L('<polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/>'),
+  link:     _L('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+  linkExt:  _L('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>'),
+  folder:   _L('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>'),
+  folderPlus: _L('<path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/><line x1="12" y1="11" x2="12" y2="17"/><line x1="9" y1="14" x2="15" y2="14"/>'),
+  folderOpen: _L('<path d="M6 14l1.45-2.9A2 2 0 0 1 9.24 10H20a2 2 0 0 1 1.94 2.5l-1.55 6a2 2 0 0 1-1.94 1.5H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h3.9a2 2 0 0 1 1.69.9l.81 1.2a2 2 0 0 0 1.67.9H18a2 2 0 0 1 2 2v2"/>'),
+  moveUp:   _L('<polyline points="17 11 12 6 7 11"/><polyline points="17 18 12 13 7 18"/>'),
+  file:     _L('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'),
+  alertTri: _L('<path d="m10.29 3.86-8.3 14.4a2 2 0 0 0 1.73 3h16.56a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
+  check:    _L('<polyline points="20 6 9 17 4 12"/>'),
+}
+
+// Lucide line-icons for panel headers. 24-grid, 1.8 stroke, currentColor.
+const _PANEL_ICONS = {
+  search:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
+  trendUp:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 7 13.5 15.5 8.5 10.5 2 17"/><polyline points="16 7 22 7 22 13"/></svg>',
+  checkSq:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 11 12 14 22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>',
+  users:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  zap:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+  sparkles:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>',
+  eye:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>',
+  chat:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg>',
+  mic:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+  settings:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>',
+  download:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
+  clock:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>',
+}
+
 async function renderPanelContent(name) {
   const icon = document.getElementById('phIcon')
   const title = document.getElementById('panelTitle')
   const body = document.getElementById('panelBody')
 
   if (name === 'seo') {
-    icon.textContent = '🔍'; title.textContent = 'SEO-analys'
+    icon.innerHTML = _PANEL_ICONS.search; title.textContent = 'SEO-analys'
     // Sub-tab state
     if (!window._seoTab) window._seoTab = 'onpage'
     body.innerHTML = `
@@ -2705,7 +2765,7 @@ async function renderPanelContent(name) {
     `
     renderSeoSubTab(window._seoTab)
   } else if (name === 'tracking') {
-    icon.textContent = '📈'; title.textContent = 'Tracking'
+    icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Tracking'
     if (!window._trackingTab) window._trackingTab = 'keywords'
     body.innerHTML = `
       <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px">
@@ -2756,7 +2816,7 @@ async function renderPanelContent(name) {
       }
     }
   } else if (name === 'tasks') {
-    icon.textContent = '✅'; title.textContent = 'Tasks'
+    icon.innerHTML = _PANEL_ICONS.checkSq; title.textContent = 'Tasks'
     const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
     const cName = clientObj ? clientObj.name : null
     if (!window._tasksFilter) window._tasksFilter = 'open'
@@ -2902,7 +2962,7 @@ async function renderPanelContent(name) {
     }
     body.innerHTML = html
   } else if (name === 'clients') {
-    icon.textContent = '👥'; title.textContent = 'Klienter'
+    icon.innerHTML = _PANEL_ICONS.users; title.textContent = 'Klienter'
     if (synced.clients.length) {
       const colors = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
       let html = '<div class="sh">DINA KLIENTER</div>'
@@ -2917,61 +2977,61 @@ async function renderPanelContent(name) {
       body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Inga klienter hittade. Synka ditt konto.</p>'
     }
   } else if (name === 'cwv') {
-    icon.textContent = '⚡'; title.textContent = 'Core Web Vitals'
+    icon.innerHTML = _PANEL_ICONS.zap; title.textContent = 'Core Web Vitals'
     body.innerHTML = `
       <div class="sh">LIVE MÄTNING</div>
       <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Mäter CWV i realtid på aktiv sida. Påverkar Google Ads Quality Score och ranking.</p>
       <div id="cwvResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att mäta</div></div>
-      <button class="act-btn" style="margin-top:10px" onclick="measureCWV()">⚡ Mät Core Web Vitals</button>
-      <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">📊 Live-övervakning (auto)</button>
+      <button class="act-btn" style="margin-top:10px" onclick="measureCWV()">${_BTN.zap}Mät Core Web Vitals</button>
+      <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">${_BTN.barChart}Live-övervakning (auto)</button>
       <div id="cwvHistory" style="margin-top:14px"></div>
     `
   } else if (name === 'creative') {
-    icon.textContent = '✨'; title.textContent = 'Creative Intelligence'
+    icon.innerHTML = _PANEL_ICONS.sparkles; title.textContent = 'Creative Intelligence'
     body.innerHTML = `
       <div class="sh">AI ANNONSFÖRSLAG</div>
       <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Analyserar sidans H1, USPs och produktbeskrivning och genererar annonsförslag för Google Ads & Meta.</p>
       <div id="creativeResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att analysera sidan</div></div>
-      <button class="act-btn" style="margin-top:10px" onclick="generateCreative()">✨ Generera annonsförslag</button>
+      <button class="act-btn" style="margin-top:10px" onclick="generateCreative()">${_BTN.sparkles}Generera annonsförslag</button>
     `
   } else if (name === 'compads') {
-    icon.textContent = '👁'; title.textContent = 'Konkurrentannonser'
+    icon.innerHTML = _PANEL_ICONS.eye; title.textContent = 'Konkurrentannonser'
     const url = document.getElementById('urlInput').value
     let domain = ''
     try { domain = new URL(url).hostname.replace('www.','') } catch(_){}
     body.innerHTML = `
       <div class="sh">AD-NÄTVERK PÅ SIDAN</div>
       <div id="adNetResults"><div style="text-align:center;padding:12px;color:var(--muted)">Klicka nedan för att skanna</div></div>
-      <button class="act-btn" style="margin-top:8px" onclick="scanAdNetworks()">🔍 Skanna sidan efter ad-teknik</button>
+      <button class="act-btn" style="margin-top:8px" onclick="scanAdNetworks()">${_BTN.search}Skanna sidan efter ad-teknik</button>
 
       <div class="sh" style="margin-top:16px">ANNONSFORSKNING — ${esc(domain || 'domän')}</div>
       <p style="font-size:10px;color:var(--muted);margin-bottom:8px">Öppna annonsbibliotek direkt i browsern.</p>
-      <button class="act-btn" onclick="wv.loadURL('https://adstransparency.google.com/?region=SE&domain=${esc(encodeURIComponent(domain))}')">📊 Google Ads Transparency Center</button>
-      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=SE&q=${esc(encodeURIComponent(domain))}')">📘 Meta Ad Library</button>
-      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://library.tiktok.com/ads?region=SE&search_value=${esc(encodeURIComponent(domain))}')">🎵 TikTok Ad Library</button>
-      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://ads.linkedin.com/ads/library?q=${esc(encodeURIComponent(domain))}')">💼 LinkedIn Ad Library</button>
-      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.google.com/search?q=${esc(encodeURIComponent(domain))}+ads')">🔎 Google-sök "${esc(domain)} ads"</button>
+      <button class="act-btn" onclick="wv.loadURL('https://adstransparency.google.com/?region=SE&domain=${esc(encodeURIComponent(domain))}')">${_BTN.barChart}Google Ads Transparency Center</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.facebook.com/ads/library/?active_status=active&ad_type=all&country=SE&q=${esc(encodeURIComponent(domain))}')">${_BTN.book}Meta Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://library.tiktok.com/ads?region=SE&search_value=${esc(encodeURIComponent(domain))}')">${_BTN.music}TikTok Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://ads.linkedin.com/ads/library?q=${esc(encodeURIComponent(domain))}')">${_BTN.briefcase}LinkedIn Ad Library</button>
+      <button class="act-btn" style="margin-top:4px" onclick="wv.loadURL('https://www.google.com/search?q=${esc(encodeURIComponent(domain))}+ads')">${_BTN.search}Google-sök "${esc(domain)} ads"</button>
 
       <div class="sh" style="margin-top:16px">SÖK ANNAN DOMÄN</div>
       <input class="ac-inp" id="compAdsDomain" value="${esc(domain)}" placeholder="example.com" style="margin-bottom:6px;height:32px;font-size:11px">
-      <button class="act-btn" onclick="openAdResearch(document.getElementById('compAdsDomain').value)">🔍 Sök</button>
+      <button class="act-btn" onclick="openAdResearch(document.getElementById('compAdsDomain').value)">${_BTN.search}Sök</button>
 
       <div class="sh" style="margin-top:16px">SEOZ API</div>
       <div id="compAdsResults"><div style="text-align:center;padding:8px;color:var(--muted);font-size:10px">API-data visas här om tillgänglig</div></div>
-      <button class="act-btn" style="margin-top:4px" onclick="fetchCompAds()">⚡ Hämta via SEOZ API</button>
+      <button class="act-btn" style="margin-top:4px" onclick="fetchCompAds()">${_BTN.zap}Hämta via SEOZ API</button>
     `
     // Auto-scan on panel open
     scanAdNetworks()
   } else if (name === 'claude') {
-    icon.textContent = '💬'; title.textContent = 'Claude AI'
+    icon.innerHTML = _PANEL_ICONS.chat; title.textContent = 'Claude AI'
     body.innerHTML = `
       <div id="claudeChat" style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:300px">
         <div id="claudeMessages" style="flex:1;overflow-y:auto;padding:4px 0;display:flex;flex-direction:column;gap:6px"></div>
         <div style="border-top:1px solid var(--border);padding:8px 0 0">
           <div style="display:flex;gap:4px;margin-bottom:6px">
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('seo')">🔍 SEO-analys</button>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('improve')">✨ Förbättra</button>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('summary')">📝 Sammanfatta</button>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('seo')">${_BTN.search}SEO-analys</button>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('improve')">${_BTN.sparkles}Förbättra</button>
+            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('summary')">${_BTN.edit}Sammanfatta</button>
           </div>
           <div style="display:flex;gap:4px">
             <textarea id="claudeInput" placeholder="Fråga Claude om sidan..." style="flex:1;min-height:36px;max-height:120px;resize:vertical;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--txt);outline:none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendClaudeMessage()}"></textarea>
@@ -2988,7 +3048,7 @@ async function renderPanelContent(name) {
     if (!_claudeMessages.length) {
       document.getElementById('claudeMessages').innerHTML = `
         <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-          <div style="font-size:24px;margin-bottom:6px">💬</div>
+          <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
           <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
           <div style="font-size:10px;line-height:1.5">Ställ frågor om sidan du besöker, få SEO-tips, eller be Claude analysera innehållet. Claude har tillgång till sidans HTML, meta-data och mer.</div>
         </div>
@@ -2997,7 +3057,7 @@ async function renderPanelContent(name) {
       renderClaudeMessages()
     }
   } else if (name === 'voice') {
-    icon.textContent = '🎙️'; title.textContent = 'Röstchatt'
+    icon.innerHTML = _PANEL_ICONS.mic; title.textContent = 'Röstchatt'
     const elKey = await SE.storeGet('elevenlabsApiKey', '')
     const openaiKey = await SE.storeGet('openaiApiKey', '')
     const anthropicKey = await SE.storeGet('anthropicApiKey', '')
@@ -3041,7 +3101,7 @@ async function renderPanelContent(name) {
             </select>
           </div>
           <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!openaiKey ? '⚠️ Saknar OpenAI-nyckel (krävs för Whisper)' : !hasAI ? '⚠️ Saknar AI-nyckel' : hasEL ? '✅ Redo' : '✅ Redo (browser-TTS)'}</span>
+            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!openaiKey ? 'Saknar OpenAI-nyckel (krävs för Whisper)' : !hasAI ? 'Saknar AI-nyckel' : hasEL ? 'Redo' : 'Redo (browser-TTS)'}</span>
             <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearVoiceChat()">Rensa</button>
           </div>
           <div style="margin-top:6px;padding:4px 6px;background:var(--bg);border-radius:4px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
@@ -3062,7 +3122,7 @@ async function renderPanelContent(name) {
     if (!_voiceMessages.length) {
       document.getElementById('voiceMessages').innerHTML = `
         <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-          <div style="font-size:28px;margin-bottom:6px">🎙️</div>
+          <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
           <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
           <div style="font-size:10px;line-height:1.5">Tryck på mikrofonen för att aktivera. Säg sedan assistentens namn (<strong>"Anna"</strong> eller <strong>"David"</strong>) följt av din fråga — precis som Siri.</div>
           <div style="font-size:9px;color:var(--muted);margin-top:6px">Exempel: "Anna, vad tycker du om SEO:n?" eller "David, kör en audit"</div>
@@ -3072,7 +3132,7 @@ async function renderPanelContent(name) {
       renderVoiceMessages()
     }
   } else if (name === 'settings') {
-    icon.textContent = '⚙️'; title.textContent = 'Inställningar'
+    icon.innerHTML = _PANEL_ICONS.settings; title.textContent = 'Inställningar'
     const key = await SE.getApiKey()
     const masked = key ? key.slice(0,10) + '••••••••' : 'Ej ansluten'
     const { profile: activeProfile } = await SE.profileGetActive()
@@ -3082,15 +3142,15 @@ async function renderPanelContent(name) {
       <div class="sh">PROFIL</div>
       <div class="mr"><span class="mrl">Aktiv profil</span><span class="mrv">${profileName}</span></div>
       ${profileEmail ? `<div class="mr"><span class="mrl">E-post</span><span class="mrv" style="font-size:10px">${profileEmail}</span></div>` : ''}
-      <button class="act-btn" style="margin-top:8px" onclick="showProfilePicker()">👥 Byt profil</button>
+      <button class="act-btn" style="margin-top:8px" onclick="showProfilePicker()">${_BTN.users}Byt profil</button>
       <div class="sh" style="margin-top:18px">KONTO</div>
       <div class="mr"><span class="mrl">API-nyckel</span><span class="mrv" style="font-size:10px;font-family:monospace">${esc(masked)}</span></div>
       <div class="mr"><span class="mrl">Workspace</span><span class="mrv">${synced.workspace ? esc(synced.workspace.name || '—') : '—'}</span></div>
-      <button class="act-btn" style="margin-top:8px" onclick="openApiKeyPage()">🔑 Hantera nycklar på seoz.se</button>
+      <button class="act-btn" style="margin-top:8px" onclick="openApiKeyPage()">${_BTN.key}Hantera nycklar på seoz.se</button>
       <button class="act-btn" style="margin-top:6px;color:var(--r)" onclick="doDisconnect()">Koppla från</button>
       <div class="sh" style="margin-top:18px">SYNK</div>
       <div class="mr"><span class="mrl">Auto-synk</span><span class="mrv">Var 30:e sekund</span></div>
-      <button class="act-btn" style="margin-top:8px" onclick="syncNow()">⚡ Synka nu</button>
+      <button class="act-btn" style="margin-top:8px" onclick="syncNow()">${_BTN.refresh}Synka nu</button>
       <div class="sh" style="margin-top:18px">CLAUDE AI</div>
       <div class="mr"><span class="mrl">Anthropic API-nyckel</span><span class="mrv" id="settingsAnthropicKey" style="font-size:10px;font-family:monospace">Laddar...</span></div>
       <div style="display:flex;gap:4px;margin-top:6px">
@@ -3124,12 +3184,12 @@ async function renderPanelContent(name) {
 
       <div class="sh" style="margin-top:18px">STANDARDWEBBLÄSARE</div>
       <div class="mr"><span class="mrl">Status</span><span class="mrv" id="settingsDefaultBrowser">Kontrollerar...</span></div>
-      <button class="act-btn" style="margin-top:8px" id="setDefaultBrowserBtn" onclick="doSetDefaultBrowser()">🌐 Ange som standardwebbläsare</button>
+      <button class="act-btn" style="margin-top:8px" id="setDefaultBrowserBtn" onclick="doSetDefaultBrowser()">${_BTN.globe}Ange som standardwebbläsare</button>
       <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">Öppnar Windows-inställningar där du kan välja SEOZ Browser som din standardwebbläsare för http/https-länkar.</p>
 
       <div class="sh" style="margin-top:18px">UPPDATERINGAR</div>
       <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
-      <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">🔄 Sök efter uppdateringar</button>
+      <button class="act-btn" style="margin-top:8px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">${_BTN.refresh}Sök efter uppdateringar</button>
 
       <div class="sh" style="margin-top:18px;cursor:pointer;user-select:none" onclick="toggleTerminalSection()">
         TERMINAL <span id="termToggleIcon" style="font-size:10px;color:var(--muted)">▼</span>
@@ -3293,6 +3353,13 @@ async function init() {
   renderTabs()
 }
 
+// Lucide alert-triangle + span wrapper for auth errors (keeps icon layout
+// consistent with the static fallback in .ac-msg.err markup).
+const _warnIconSvg = '<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m10.29 3.86-8.3 14.4a2 2 0 0 0 1.73 3h16.56a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>'
+function _setAuthError(el, msg) {
+  el.innerHTML = _warnIconSvg + '<span>' + String(msg).replace(/&/g,'&amp;').replace(/</g,'&lt;') + '</span>'
+}
+
 async function doConnect(mode) {
   const errEl = document.getElementById('authErr')
   const okEl = document.getElementById('authOk')
@@ -3335,11 +3402,11 @@ async function doConnect(mode) {
         toast('Ansluten till SEOZ!', '#2ca87f')
       }, 800)
     } else {
-      errEl.textContent = '⚠️ ' + (res.error || 'Ogiltig nyckel')
+      _setAuthError(errEl, res.error || 'Ogiltig nyckel')
       errEl.classList.add('show')
     }
   } catch (e) {
-    errEl.textContent = '⚠️ Anslutningsfel: ' + e.message
+    _setAuthError(errEl, 'Anslutningsfel: ' + e.message)
     errEl.classList.add('show')
   }
 }
@@ -3472,7 +3539,7 @@ function renderBmBar() {
 
   // If empty, show hint
   if (!bookmarks.length && !getAllFolders().length) {
-    bar.innerHTML = '<div class="bm-empty">Klicka ☆ i adressfältet eller högerklicka här</div>'
+    bar.innerHTML = '<div class="bm-empty">Klicka stjärnan i adressfältet eller högerklicka här</div>'
     updateBmStar()
     return
   }
@@ -3488,7 +3555,7 @@ function renderBmBar() {
 
     const btn = document.createElement('div')
     btn.className = 'bm-item bm-folder-item'
-    btn.innerHTML = `📁 <span>${esc(fname)}</span><span class="bm-folder-arrow">▾</span>`
+    btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${esc(fname)}</span><span class="bm-folder-arrow">▾</span>`
     btn.onclick = () => toggleFolderDrop(wrap)
     btn.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, folderCtxItems(fname)) }
     // Drop target: drag bookmark onto folder
@@ -3509,7 +3576,7 @@ function renderBmBar() {
       item.className = 'bm-drop-item'
       item.draggable = true
       item.dataset.bmid = b.id
-      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<span class="bm-ico" style="font-size:11px">🌐</span>'
+      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
       item.innerHTML = fav + `<span>${esc(b.title)}</span>`
       item.onclick = (e) => { e.stopPropagation(); wv.loadURL(b.url); closeAllDrops() }
       item.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, bmCtxItems(b)) }
@@ -3606,7 +3673,7 @@ function makeBmEl(b) {
   el.className = 'bm-item'
   el.draggable = true
   el.dataset.bmid = b.id
-  const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<span class="bm-ico" style="font-size:11px">🌐</span>'
+  const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>'
   el.innerHTML = fav + `<span>${esc(b.title)}</span>`
   el.onclick = () => wv.loadURL(b.url)
   el.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, bmCtxItems(b)) }
@@ -3674,7 +3741,14 @@ function showCtx(e, items) {
     if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
     const el = document.createElement('div')
     el.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '')
-    el.textContent = item.label
+    // Support an optional `icon` (raw Lucide SVG string) rendered before
+    // the escaped label. Falls back to plain textContent when not provided.
+    if (item.icon) {
+      const safe = String(item.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+      el.innerHTML = '<span class="ctx-ico">' + item.icon + '</span><span>' + safe + '</span>'
+    } else {
+      el.textContent = item.label
+    }
     if (!item.disabled) el.onclick = () => { hideCtx(); item.action() }
     menu.appendChild(el)
   })
@@ -3692,13 +3766,13 @@ function bmCtxItems(bm) {
     action: () => moveBmToFolder(bm.id, f)
   }))
   return [
-    { label: '🔗 Öppna', action: () => wv.loadURL(bm.url) },
-    { label: '🔗 Öppna i ny flik', action: () => newTab(bm.url) },
+    { icon: _BTN.linkExt, label: 'Öppna', action: () => wv.loadURL(bm.url) },
+    { icon: _BTN.linkExt, label: 'Öppna i ny flik', action: () => newTab(bm.url) },
     '---',
-    { label: '✏️ Redigera', action: () => openBmEdit(bm.id) },
-    ...(moveItems.length ? [{ label: '📁 Flytta till mapp:', action: () => {} }, ...moveItems] : []),
-    ...(bm.folder ? [{ label: '📤 Flytta till fältet', action: () => moveBmToFolder(bm.id, null) }] : []),
-    { label: '📁 Ny mapp & flytta', action: async () => {
+    { icon: _BTN.edit, label: 'Redigera', action: () => openBmEdit(bm.id) },
+    ...(moveItems.length ? [{ icon: _BTN.folder, label: 'Flytta till mapp:', action: () => {} }, ...moveItems] : []),
+    ...(bm.folder ? [{ icon: _BTN.moveUp, label: 'Flytta till fältet', action: () => moveBmToFolder(bm.id, null) }] : []),
+    { icon: _BTN.folderPlus, label: 'Ny mapp & flytta', action: async () => {
       const name = await seozPrompt('Namn på ny mapp')
       if (name) {
         if (!bmFolders.includes(name)) bmFolders.push(name)
@@ -3706,13 +3780,13 @@ function bmCtxItems(bm) {
       }
     }},
     '---',
-    { label: '🗑 Ta bort', danger: true, action: () => { bookmarks = bookmarks.filter(b => b.id !== bm.id); saveBookmarks(); renderBmBar(); toast('Bokmärke borttaget','#e58a00') } },
+    { icon: _BTN.trash, label: 'Ta bort', danger: true, action: () => { bookmarks = bookmarks.filter(b => b.id !== bm.id); saveBookmarks(); renderBmBar(); toast('Bokmärke borttaget','#e58a00') } },
   ]
 }
 
 function folderCtxItems(fname) {
   return [
-    { label: '✏️ Byt namn', action: async () => {
+    { icon: _BTN.edit, label: 'Byt namn', action: async () => {
       const newName = await seozPrompt('Nytt namn på mapp', fname)
       if (newName && newName !== fname) {
         bookmarks.forEach(b => { if (b.folder === fname) b.folder = newName })
@@ -3721,18 +3795,18 @@ function folderCtxItems(fname) {
         saveBookmarks(); renderBmBar(); toast('Mapp omdöpt','#4680ff')
       }
     }},
-    { label: '📂 Öppna alla', action: () => {
+    { icon: _BTN.folderOpen, label: 'Öppna alla', action: () => {
       const inF = bookmarks.filter(b => b.folder === fname)
       inF.forEach(b => newTab(b.url))
     }},
     '---',
-    { label: '🗑 Ta bort mapp', danger: true, action: () => {
+    { icon: _BTN.trash, label: 'Ta bort mapp', danger: true, action: () => {
       // Move contents to root, delete folder
       bookmarks.forEach(b => { if (b.folder === fname) b.folder = null })
       bmFolders = bmFolders.filter(f => f !== fname)
       saveBookmarks(); renderBmBar(); toast('Mapp borttagen — bokmärken flyttade','#e58a00')
     }},
-    { label: '🗑 Ta bort mapp + innehåll', danger: true, action: () => {
+    { icon: _BTN.trash, label: 'Ta bort mapp + innehåll', danger: true, action: () => {
       bookmarks = bookmarks.filter(b => b.folder !== fname)
       bmFolders = bmFolders.filter(f => f !== fname)
       saveBookmarks(); renderBmBar(); toast('Mapp och innehåll borttaget','#e58a00')
@@ -3806,7 +3880,9 @@ function updateBmStar() {
   const url = document.getElementById('urlInput').value
   const star = document.getElementById('bmStar')
   const exists = bookmarks.some(b => b.url === url)
-  star.textContent = exists ? '★' : '☆'
+  // Toggle the fill of the inline star SVG instead of swapping ☆/★ glyphs.
+  const svg = star.querySelector('svg polygon')
+  if (svg) svg.setAttribute('fill', exists ? 'currentColor' : 'none')
   star.classList.toggle('saved', exists)
 }
 
@@ -3852,8 +3928,8 @@ function resolvePrompt(val) {
     if (e.target.closest('.bm-item') || e.target.closest('.bm-drop-item')) return
     e.preventDefault()
     showCtx(e, [
-      { label: '⭐ Bokmärk aktuell sida', action: () => toggleBookmark() },
-      { label: '📁 Ny mapp', action: async () => {
+      { icon: _L('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'), label: 'Bokmärk aktuell sida', action: () => toggleBookmark() },
+      { icon: _BTN.folderPlus, label: 'Ny mapp', action: async () => {
         const name = await seozPrompt('Namn på ny mapp')
         if (name) {
           if (!bmFolders.includes(name)) bmFolders.push(name)
@@ -4255,13 +4331,13 @@ function openDownloads() {
   } else {
     downloads.slice(0, 50).forEach(d => {
       const t = new Date(d.time).toLocaleString('sv-SE')
-      html += `<div class="mr"><span class="mrl" style="gap:5px"><span style="font-size:13px">📄</span>${esc(d.filename)}</span><span class="mrv" style="font-size:9px;color:var(--muted)">${t}</span></div>`
+      html += `<div class="mr"><span class="mrl" style="gap:5px"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="opacity:.7;flex-shrink:0"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>${esc(d.filename)}</span><span class="mrv" style="font-size:9px;color:var(--muted)">${t}</span></div>`
     })
   }
   html += '<button class="act-btn" style="margin-top:10px;color:var(--r)" onclick="clearDownloads()">Rensa nedladdningar</button>'
   // Render in SEOZ panel (manually to avoid renderPanelContent overwriting)
   currentPanel = '_downloads'
-  document.getElementById('phIcon').textContent = '⬇️'
+  document.getElementById('phIcon').innerHTML = _PANEL_ICONS.download
   document.getElementById('panelTitle').textContent = 'Nedladdningar'
   document.getElementById('panelBody').innerHTML = html
   document.getElementById('seozPanel').classList.add('open')
@@ -4534,7 +4610,7 @@ function renderCreativeResults(d, container) {
   })
 
   // Copy all button
-  html += `<button class="act-btn" style="margin-top:12px" onclick="copyCreativeOutput()">📋 Kopiera alla förslag</button>`
+  html += `<button class="act-btn" style="margin-top:12px" onclick="copyCreativeOutput()">${_L('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>')}Kopiera alla förslag</button>`
 
   container.innerHTML = html
 
@@ -4894,12 +4970,12 @@ ${ctx.text?.slice(0, 4000) || '(ej tillgängligt)'}` : 'Ingen sida är laddad ju
   try {
     const res = await SE.claudeChat({ messages: apiMessages, systemPrompt, apiKey: anthropicKey })
     if (res.error) {
-      addClaudeMessage('assistant', '⚠️ Fel: ' + res.error)
+      addClaudeMessage('assistant', 'Fel: ' + res.error)
     } else {
       addClaudeMessage('assistant', res.content)
     }
   } catch (err) {
-    addClaudeMessage('assistant', '⚠️ Kunde inte nå Claude: ' + (err.message || err))
+    addClaudeMessage('assistant', 'Kunde inte nå Claude: ' + (err.message || err))
   }
 
   _claudeStreaming = false
@@ -4916,7 +4992,7 @@ function clearClaudeChat() {
   const el = document.getElementById('claudeMessages')
   if (el) el.innerHTML = `
     <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-      <div style="font-size:24px;margin-bottom:6px">💬</div>
+      <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
       <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
       <div style="font-size:10px;line-height:1.5">Chatt rensad. Ställ en ny fråga!</div>
     </div>
@@ -6090,7 +6166,7 @@ function clearVoiceChat() {
   const el = document.getElementById('voiceMessages')
   if (el) el.innerHTML = `
     <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-      <div style="font-size:28px;margin-bottom:6px">🎙️</div>
+      <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
       <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
       <div style="font-size:10px;line-height:1.5">Chatt rensad. Tryck på mikrofonen för att starta ett nytt samtal!</div>
     </div>
@@ -6111,7 +6187,10 @@ function renderVoiceMessages() {
         ? 'background:linear-gradient(135deg, #a78bfa, #7c3aed);color:#fff;align-self:flex-end;border-bottom-right-radius:2px'
         : 'background:var(--panel);color:var(--txt);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:2px'
     }`
-    const icon = isUser ? '🎤 ' : '🔊 '
+    // Inline Lucide mic / speaker so voice-chat messages don't fall back to emoji
+    const icon = isUser
+      ? '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>'
+      : '<svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-1px;margin-right:4px"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M15.54 8.46a5 5 0 0 1 0 7.07"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14"/></svg>'
     let html = icon + esc(m.content)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:10px">$1</code>')
@@ -7514,7 +7593,7 @@ function renderInspPerf(d) {
 
 function renderInspRaw(d) {
   return `<div class="insp-section"><div class="insp-section-title">Rådata (JSON) — för crawlern</div>
-  <div style="margin-bottom:6px"><button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyInspectorData()">📋 Kopiera all data</button></div>
+  <div style="margin-bottom:6px"><button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyInspectorData()">${_L('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>')}Kopiera all data</button></div>
   <div class="insp-code" style="max-height:none">${esc(JSON.stringify(d, null, 2))}</div></div>`
 }
 
@@ -7542,7 +7621,7 @@ async function renderInspSource(container) {
 
     container.innerHTML = `
       <div style="display:flex;gap:6px;margin-bottom:8px">
-        <button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyPageSource()">📋 Kopiera källkod</button>
+        <button class="act-btn" style="width:auto;padding:0 12px;display:inline-flex" onclick="copyPageSource()">${_L('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>')}Kopiera källkod</button>
         <input class="ac-inp" id="sourceSearch" placeholder="Sök i källkoden..." style="flex:1;height:28px;font-size:10px" oninput="searchInSource(this.value)">
       </div>
       <div id="sourceContainer" style="font-family:Consolas,Monaco,monospace;font-size:10px;line-height:1.6;overflow:auto;max-height:calc(100% - 40px);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 0">${numbered}</div>
@@ -7652,7 +7731,7 @@ function renderInspConsole() {
   html += `<span class="insp-tag ${warns ? 'yellow' : 'green'}">${warns} varningar</span>`
   html += `<span class="insp-tag blue">${consoleMessages.length} totalt</span>`
   html += `<span style="flex:1"></span>`
-  html += `<button class="inspector-btn" onclick="consoleMessages=[];renderInspector()" title="Rensa" style="font-size:10px">🗑</button>`
+  html += `<button class="inspector-btn" onclick="consoleMessages=[];renderInspector()" title="Rensa" aria-label="Rensa" style="font-size:10px">${_BTN.trash}</button>`
   html += '</div>'
   // Show messages newest first
   const msgs = [...consoleMessages].reverse()

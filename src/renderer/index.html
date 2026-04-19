@@ -1353,24 +1353,31 @@ function scheduleRenderTabs() {
 // ── Anti-detection: make webview look like real Chrome to Google et al. ──
 // Google blocks Electron webviews by checking navigator properties.
 // We inject a small script on every page load to spoof Chrome fingerprints.
+// Minimal anti-fingerprint shim for <webview> guests. Only covers the
+// signals that Cloudflare / hCaptcha / Google actively flag on:
+//   1. window.chrome missing        → classic Electron tell
+//   2. navigator.webdriver = true   → top bot-detection signal
+//   3. navigator.plugins empty      → hCaptcha red flag
+//   4. navigator.userAgentData      → Cloudflare JS-side check (matches
+//                                     the Sec-CH-UA headers set in main.js)
+//   5. navigator.languages          → Accept-Language backstop
+// Dropped vs. the long version: enum constants inside chrome.app/runtime,
+// hardwareConcurrency/deviceMemory (rarely bot-checked), permissions.query
+// override. Re-add individually if a site regresses.
 const CHROME_SPOOF_SCRIPT = `
-  // Spoof window.chrome object (missing in Electron webviews)
   if (!window.chrome) {
-    window.chrome = {
-      app: { isInstalled: false, InstallState: { DISABLED: 'disabled', INSTALLED: 'installed', NOT_INSTALLED: 'not_installed' }, RunningState: { CANNOT_RUN: 'cannot_run', READY_TO_RUN: 'ready_to_run', RUNNING: 'running' } },
-      runtime: { OnInstalledReason: { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', SHARED_MODULE_UPDATE: 'shared_module_update', UPDATE: 'update' }, OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' }, PlatformArch: { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' }, PlatformNaclArch: { ARM: 'arm', MIPS: 'mips', MIPS64: 'mips64', X86_32: 'x86-32', X86_64: 'x86-64' }, PlatformOs: { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' }, RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' } },
-      csi: function(){},
-      loadTimes: function(){ return {} },
-    };
+    window.chrome = { app: {}, runtime: {}, csi: function(){}, loadTimes: function(){ return {} } };
   }
 
-  // Spoof navigator.plugins (empty array in Electron = red flag)
+  try { delete Object.getPrototypeOf(navigator).webdriver; } catch(_) {}
+  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+
   Object.defineProperty(navigator, 'plugins', {
     get: () => {
       const arr = [
-        { name: 'Chrome PDF Plugin', description: 'Portable Document Format', filename: 'internal-pdf-viewer', length: 1 },
-        { name: 'Chrome PDF Viewer', description: '', filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai', length: 1 },
-        { name: 'Native Client', description: '', filename: 'internal-nacl-plugin', length: 2 },
+        { name: 'Chrome PDF Plugin',  description: 'Portable Document Format',  filename: 'internal-pdf-viewer',                length: 1 },
+        { name: 'Chrome PDF Viewer',  description: '',                          filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',  length: 1 },
+        { name: 'Native Client',      description: '',                          filename: 'internal-nacl-plugin',               length: 2 },
       ];
       arr.item = i => arr[i] || null;
       arr.namedItem = n => arr.find(p => p.name === n) || null;
@@ -1379,66 +1386,24 @@ const CHROME_SPOOF_SCRIPT = `
     }
   });
 
-  // Spoof navigator.languages (Electron sometimes only has one)
-  Object.defineProperty(navigator, 'languages', {
-    get: () => ['sv-SE', 'sv', 'en-US', 'en']
-  });
+  Object.defineProperty(navigator, 'languages', { get: () => ['sv-SE', 'sv', 'en-US', 'en'] });
 
-  // Spoof webdriver flag (Google checks this) — delete first so the
-  // original descriptor is gone, then re-define as false
-  try { delete Object.getPrototypeOf(navigator).webdriver; } catch(_) {}
-  Object.defineProperty(navigator, 'webdriver', {
-    get: () => false,
-    configurable: true
-  });
-
-  // Spoof navigator.userAgentData (Chrome 90+ exposes this; empty = bot tell)
   if (!navigator.userAgentData) {
     const brands = [
-      { brand: 'Chromium', version: '140' },
-      { brand: 'Not=A?Brand', version: '24' },
+      { brand: 'Chromium',      version: '140' },
+      { brand: 'Not=A?Brand',   version: '24'  },
       { brand: 'Google Chrome', version: '140' },
     ];
     const uaData = {
-      brands,
-      mobile: false,
-      platform: 'Windows',
-      getHighEntropyValues: (hints) => Promise.resolve({
-        brands,
-        mobile: false,
-        platform: 'Windows',
-        platformVersion: '15.0.0',
-        architecture: 'x86',
-        bitness: '64',
-        model: '',
-        uaFullVersion: '140.0.0.0',
-        wow64: false,
+      brands, mobile: false, platform: 'Windows',
+      getHighEntropyValues: () => Promise.resolve({
+        brands, mobile: false, platform: 'Windows',
+        platformVersion: '15.0.0', architecture: 'x86', bitness: '64',
+        model: '', uaFullVersion: '140.0.0.0', wow64: false,
       }),
       toJSON: () => ({ brands, mobile: false, platform: 'Windows' }),
     };
-    Object.defineProperty(navigator, 'userAgentData', {
-      get: () => uaData,
-      configurable: true
-    });
-  }
-
-  // Spoof hardwareConcurrency / deviceMemory to typical consumer values
-  try {
-    Object.defineProperty(navigator, 'hardwareConcurrency', { get: () => 8, configurable: true });
-  } catch(_) {}
-  try {
-    Object.defineProperty(navigator, 'deviceMemory', { get: () => 8, configurable: true });
-  } catch(_) {}
-
-  // Spoof permissions API for notifications query
-  if (navigator.permissions) {
-    const origQuery = navigator.permissions.query.bind(navigator.permissions);
-    navigator.permissions.query = (params) => {
-      if (params.name === 'notifications') {
-        return Promise.resolve({ state: Notification.permission });
-      }
-      return origQuery(params);
-    };
+    Object.defineProperty(navigator, 'userAgentData', { get: () => uaData, configurable: true });
   }
 `
 
@@ -6475,6 +6440,21 @@ let _mcpColorIdx = 0
 const _MCP_INACTIVITY_MS = 8000 // Auto-close MCP tabs after 8s of inactivity
 const _mcpInactivityTimers = new Map() // sessionId -> timeoutId
 
+// ── MCP Per-Session Navigation History ──
+// Tracks last N URLs visited by each MCP session so get_session_state
+// can give Claude a quick "where have I been" view without needing
+// to poll did-navigate events.
+const _MCP_NAV_HISTORY_MAX = 20
+const _mcpNavHistory = new Map() // sessionId -> [url, url, ...]
+function _pushMcpNavHistory(sessionId, url) {
+  if (!sessionId || !url) return
+  const list = _mcpNavHistory.get(sessionId) || []
+  if (list[list.length - 1] === url) return
+  list.push(url)
+  if (list.length > _MCP_NAV_HISTORY_MAX) list.shift()
+  _mcpNavHistory.set(sessionId, list)
+}
+
 function _resetMcpInactivityTimer(sessionId) {
   // Clear any existing timer for this session
   if (_mcpInactivityTimers.has(sessionId)) {
@@ -6625,6 +6605,7 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
     case 'navigate': {
       let url = args.url || ''
       if (url && !url.match(/^https?:\/\//)) url = 'https://' + url
+      if (url) _pushMcpNavHistory(sessionId, url)
       if (wv) {
         const waitForLoad = args.wait !== false
         if (waitForLoad) {
@@ -6727,6 +6708,53 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
         return { mcpSession: sessionId, tabId: mcpTabId, info: 'This MCP session has its own tab. User tabs are not affected.', url: wv.getURL ? wv.getURL() : wv.src }
       }
       return tabs.map(t => ({ id: t.id, title: t.title, url: t.url, active: t.id === activeId, loading: t.loading, isMcp: !!t.isMcp }))
+    }
+
+    case 'get_session_state': {
+      // Snapshot so Claude can orient itself without spending a
+      // screenshot or full page-content on "where am I?".
+      const currentUrl = (wv && wv.getURL) ? wv.getURL() : (wv ? wv.src : '')
+      let pageState = { title: '', hasLoginForm: false, hasLogoutLink: false, hasLoginLink: false, likelyAuthenticated: false, userHints: [], cookieNames: [] }
+      if (wv && currentUrl && currentUrl !== 'about:blank') {
+        try {
+          pageState = await wv.executeJavaScript(`
+            (() => {
+              const lower = s => (s || '').toString().toLowerCase();
+              const labels = [...document.querySelectorAll('a,button,[role="button"]')]
+                .map(e => lower(e.innerText || e.getAttribute('aria-label') || ''))
+                .filter(Boolean);
+              const rxLogout = /\\blog ?out\\b|\\bsign ?out\\b|\\blogga ut\\b|\\blogg ut\\b/;
+              const rxLogin  = /\\blog ?in\\b|\\bsign ?in\\b|\\blogga in\\b/;
+              const hasLogoutLink = labels.some(t => rxLogout.test(t));
+              const hasLoginLink  = labels.some(t => rxLogin.test(t));
+              const hasLoginForm  = !!document.querySelector('input[type="password"]');
+              const userHints = [...document.querySelectorAll('[data-user],[data-username],[data-email],.username,.user-email,.user-name')]
+                .map(e => (e.textContent || '').trim())
+                .filter(Boolean)
+                .slice(0, 3);
+              const cookieNames = document.cookie
+                ? document.cookie.split(';').map(c => c.split('=')[0].trim()).filter(Boolean)
+                : [];
+              return {
+                title: document.title || '',
+                hasLoginForm,
+                hasLogoutLink,
+                hasLoginLink,
+                likelyAuthenticated: hasLogoutLink && !hasLoginForm,
+                userHints,
+                cookieNames: cookieNames.slice(0, 20),
+                cookieCount: cookieNames.length
+              };
+            })()
+          `)
+        } catch (e) { /* swallow — about:blank or detached guest */ }
+      }
+      return {
+        sessionId,
+        url: currentUrl,
+        ...pageState,
+        navHistory: (_mcpNavHistory.get(sessionId) || []).slice(-10)
+      }
     }
 
     case 'switch_tab': {

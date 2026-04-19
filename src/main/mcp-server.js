@@ -40,7 +40,11 @@ function getWindow() {
 }
 
 // ── Tool definitions ──
-// NOTE: Cowork has a ~19 tool limit per MCP server — keep the most important tools first!
+// NOTE: Cowork (Claude Desktop) shows at most ~19 tools per MCP server.
+// Tools tagged `visible: false` stay in the registry (tools/call still
+// works if Claude knows the name), but are hidden from tools/list so the
+// core set fits inside Cowork's budget. Treat `visible: false` as
+// "power-user / niche" — the 19 visible tools cover 95% of real use.
 const TOOLS = [
   {
     name: 'run_command',
@@ -56,12 +60,15 @@ const TOOLS = [
   },
   {
     name: 'search_session_history',
-    description: 'Search the session history database for past terminal commands and their output. Useful for finding what was done in previous sessions, recalling error messages, checking deployment history, etc.',
+    description: 'Search the session history database for past terminal commands and their output. Useful for finding what was done in previous sessions, recalling error messages, checking deployment history, etc. Filter by exit code to investigate failures only ({ failedOnly: true }) or confirmed successes ({ successOnly: true }).',
     inputSchema: {
       type: 'object',
       properties: {
-        query: { type: 'string', description: 'Search query — matches against commands, stdout, stderr, and working directory' },
-        limit: { type: 'number', description: 'Max number of results to return (default 20)' }
+        query: { type: 'string', description: 'Search query — matches against commands, stdout, stderr, and working directory. Leave empty to just list recent entries by filter.' },
+        limit: { type: 'number', description: 'Max number of results to return (default 20)' },
+        successOnly: { type: 'boolean', description: 'Only return commands that exited with code 0' },
+        failedOnly:  { type: 'boolean', description: 'Only return commands that exited with non-zero code (e.g. to debug failures)' },
+        exitCode:    { type: 'number',  description: 'Filter by exact exit code (e.g. 127 for "command not found")' }
       }
     }
   },
@@ -89,6 +96,7 @@ const TOOLS = [
   },
   {
     name: 'get_page_html',
+    visible: false,
     description: 'Get the raw HTML of the currently loaded page (or a specific element)',
     inputSchema: {
       type: 'object',
@@ -131,6 +139,11 @@ const TOOLS = [
       },
       required: ['selector', 'text']
     }
+  },
+  {
+    name: 'get_session_state',
+    description: 'Get a snapshot of the current MCP session state: URL, page title, cookies visible to the page, auth heuristics (login form / logout link presence), and recent navigation history. Use this at the start of a fresh conversation to understand where the session is, or after returning from a long gap, to avoid re-logging-in or re-navigating. Cheaper than screenshot + get_page_content for quick orientation.',
+    inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'get_tabs',
@@ -176,16 +189,19 @@ const TOOLS = [
   },
   {
     name: 'get_seo_analysis',
+    visible: false,
     description: 'Run a comprehensive SEO analysis on the current page (title, meta, headings, links, images, schema, performance)',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'get_console_logs',
+    visible: false,
     description: 'Get recent JavaScript console messages from the current page',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'get_network_requests',
+    visible: false,
     description: 'Get network requests made by the current page (via Performance API)',
     inputSchema: { type: 'object', properties: {} }
   },
@@ -248,6 +264,7 @@ const TOOLS = [
   },
   {
     name: 'select_option',
+    visible: false,
     description: 'Select an option from a <select> dropdown by its visible text or value. Can also list available options.',
     inputSchema: {
       type: 'object',
@@ -291,23 +308,31 @@ const TOOLS = [
     }
   },
   // ── Design Mode tools ──
+  // Hidden from tools/list — Design Mode is a user-driven feature (activated
+  // from the UI). Claude discovers these via design_get_selection payload
+  // once the user pushes changes. Keeps the visible tool budget for
+  // general-purpose work.
   {
     name: 'design_toggle',
+    visible: false,
     description: 'Toggle Design Mode on/off. Design Mode is a Figma-like overlay that lets the user inspect, annotate, and move elements on the page. Use this to activate the overlay before using other design_ tools.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'design_get_selection',
+    visible: false,
     description: 'Get the full Design Mode payload after the user clicked "Push till Claude". Returns all tracked changes (text edits, CSS changes, moved elements, hidden elements) with original and modified values, plus page URL and surrounding HTML context. Use this to understand what the user changed visually, then use run_command to find and edit the actual source files.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'design_get_changes',
+    visible: false,
     description: 'Get the list of visual changes the user made in Design Mode. Each change has: selector, type (text/css/move/hide), description, original value, and modified value. Use this to map DOM changes back to source code files.',
     inputSchema: { type: 'object', properties: {} }
   },
   {
     name: 'design_apply_css',
+    visible: false,
     description: 'Apply CSS changes to an element on the page. Takes a CSS selector and an object of CSS property-value pairs. Use this to implement design changes the user requested via Design Mode. Example: { "selector": ".hero-title", "css": { "fontSize": "48px", "color": "#1a1a1a" } }',
     inputSchema: {
       type: 'object',
@@ -320,6 +345,7 @@ const TOOLS = [
   },
   {
     name: 'design_apply_html',
+    visible: false,
     description: 'Replace an element\'s HTML on the page. Takes a CSS selector and the new outerHTML. Use for structural changes like rewriting a component\'s markup. The change is live-previewed in the browser.',
     inputSchema: {
       type: 'object',
@@ -332,6 +358,7 @@ const TOOLS = [
   },
   {
     name: 'design_set_text',
+    visible: false,
     description: 'Change the visible text content of an element on the page. Use this for simple text edits like updating headings, button labels, paragraphs, etc. Preserves child elements — only replaces text nodes.',
     inputSchema: {
       type: 'object',
@@ -359,8 +386,16 @@ async function executeTool(name, args, sessionId) {
 
   if (name === 'search_session_history') {
     if (!historySearchFn) throw new Error('History not initialised')
-    const results = historySearchFn(args.query, args.limit || 20)
-    if (!results.length) return 'No matching history entries found.'
+    const opts = {
+      successOnly: args.successOnly === true,
+      failedOnly:  args.failedOnly === true,
+      exitCode:    typeof args.exitCode === 'number' ? args.exitCode : undefined,
+    }
+    const results = historySearchFn(args.query, args.limit || 20, opts)
+    if (!results.length) {
+      const filterDesc = opts.successOnly ? ' (successOnly)' : opts.failedOnly ? ' (failedOnly)' : opts.exitCode !== undefined ? ` (exitCode=${opts.exitCode})` : ''
+      return `No matching history entries found${filterDesc}.`
+    }
     return results.map(e =>
       `[${e.timestamp}] (${e.source}) ${e.cwd}\n$ ${e.command}\n→ exit ${e.exitCode} (${e.duration}ms)${e.stdout ? '\n' + e.stdout.slice(0, 500) : ''}${e.stderr ? '\n[stderr] ' + e.stderr.slice(0, 200) : ''}`
     ).join('\n\n---\n\n')
@@ -403,7 +438,14 @@ async function handleRequest(body, sessionId) {
       return null // no response needed
 
     case 'tools/list':
-      return jsonrpcResult(id, { tools: TOOLS })
+      // Expose only tools marked as visible (undefined === visible by default).
+      // Strip our internal `visible` key before responding — MCP spec doesn't
+      // expect it and Cowork may reject unknown fields on strict parsers.
+      return jsonrpcResult(id, {
+        tools: TOOLS
+          .filter(t => t.visible !== false)
+          .map(({ visible, ...rest }) => rest)
+      })
 
     case 'tools/call': {
       const { name, arguments: args } = params || {}

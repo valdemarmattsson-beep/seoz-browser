@@ -11,6 +11,26 @@ const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHist
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
+// Cap stdout/stderr so we don't blow the JSON-RPC payload, but make it
+// visible to Claude when output was actually truncated (silently dropped
+// bytes lead to confusing "empty" tool results).
+const STDOUT_CAP = 50_000
+const STDERR_CAP = 10_000
+function _cap(raw, limit) {
+  const s = (raw || '').toString()
+  if (s.length <= limit) return s
+  const dropped = s.length - limit
+  const kb = (dropped / 1024).toFixed(1)
+  return s.slice(0, limit) + `\n\n[...truncated, ${dropped.toLocaleString()} bytes (${kb} KB) dropped — pipe to a file if full output is needed]`
+}
+// Convert child_process.exec error codes to a Claude-friendly reason string
+function _explainExecError(error) {
+  if (!error) return null
+  if (error.code === 'ERR_CHILD_PROCESS_STDIO_MAXBUFFER') return 'maxBuffer exceeded (output > 10 MB)'
+  if (error.killed && error.signal === 'SIGTERM') return 'killed by timeout (2 min limit)'
+  return null
+}
+
 // App icon (monkey emoji) — resolved once at startup
 const APP_ICON = nativeImage.createFromPath(
   path.join(__dirname, '../../assets/icon.ico')
@@ -671,14 +691,15 @@ ipcMain.handle('terminal-exec', async (_, { command, cwd, source }) => {
       env: { ...process.env, TERM: 'dumb' },
     }, (error, stdout, stderr) => {
       const duration = Date.now() - startTime
+      const reason = _explainExecError(error)
       const entry = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         timestamp: new Date().toISOString(),
         command,
         cwd: workDir,
-        stdout: (stdout || '').toString().slice(0, 50000),  // cap at 50 KB
-        stderr: (stderr || '').toString().slice(0, 10000),
-        exitCode: error ? (error.code ?? 1) : 0,
+        stdout: _cap(stdout, STDOUT_CAP),
+        stderr: _cap(stderr, STDERR_CAP) + (reason ? `\n[process: ${reason}]` : ''),
+        exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
         duration,
         source: source || 'terminal',
       }
@@ -730,22 +751,39 @@ function _saveHistoryEntry(entry) {
   historyStore.set('entries', entries)
 }
 
-function _searchHistory(query, limit) {
+// `opts` is optional for back-compat. Accepts:
+//   { exitCode: 0 | 1 | 'non-zero' }  → filter by exit code
+//   { successOnly: true }             → shorthand for exitCode:0
+//   { failedOnly: true }              → shorthand for exitCode:'non-zero'
+function _searchHistory(query, limit, opts) {
   const entries = historyStore.get('entries', [])
-  if (!query) return entries.slice(-limit)
-  const q = query.toLowerCase()
+  const o = opts || {}
+  const hasExitFilter =
+    o.exitCode !== undefined || o.successOnly === true || o.failedOnly === true
+  function matchesExit(e) {
+    if (!hasExitFilter) return true
+    if (o.successOnly === true) return e.exitCode === 0
+    if (o.failedOnly === true)  return e.exitCode !== 0
+    if (o.exitCode === 'non-zero') return e.exitCode !== 0
+    return e.exitCode === o.exitCode
+  }
+  const q = query ? query.toLowerCase() : ''
   return entries
-    .filter(e =>
-      e.command.toLowerCase().includes(q) ||
-      e.stdout.toLowerCase().includes(q) ||
-      e.stderr.toLowerCase().includes(q) ||
-      (e.cwd && e.cwd.toLowerCase().includes(q))
-    )
+    .filter(e => {
+      if (!matchesExit(e)) return false
+      if (!q) return true
+      return (
+        e.command.toLowerCase().includes(q) ||
+        e.stdout.toLowerCase().includes(q) ||
+        e.stderr.toLowerCase().includes(q) ||
+        (e.cwd && e.cwd.toLowerCase().includes(q))
+      )
+    })
     .slice(-limit)
 }
 
-ipcMain.handle('terminal-history-search', (_, { query, limit }) => {
-  return _searchHistory(query, limit || 50)
+ipcMain.handle('terminal-history-search', (_, { query, limit, exitCode, successOnly, failedOnly }) => {
+  return _searchHistory(query, limit || 50, { exitCode, successOnly, failedOnly })
 })
 ipcMain.handle('terminal-history-recent', (_, { limit }) => {
   const entries = historyStore.get('entries', [])
@@ -769,14 +807,15 @@ function terminalExecDirect(command, cwd, source) {
       env: { ...process.env, TERM: 'dumb' },
     }, (error, stdout, stderr) => {
       const duration = Date.now() - startTime
+      const reason = _explainExecError(error)
       const entry = {
         id: Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
         timestamp: new Date().toISOString(),
         command,
         cwd: workDir,
-        stdout: (stdout || '').toString().slice(0, 50000),
-        stderr: (stderr || '').toString().slice(0, 10000),
-        exitCode: error ? (error.code ?? 1) : 0,
+        stdout: _cap(stdout, STDOUT_CAP),
+        stderr: _cap(stderr, STDERR_CAP) + (reason ? `\n[process: ${reason}]` : ''),
+        exitCode: error ? (typeof error.code === 'number' ? error.code : 1) : 0,
         duration,
         source: source || 'mcp',
       }

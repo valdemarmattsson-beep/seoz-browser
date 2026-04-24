@@ -1068,6 +1068,27 @@ ipcMain.handle('mail:send', async (_evt, opts = {}) => {
   }
 })
 
+ipcMain.handle('mail:save-draft', async (_evt, opts = {}) => {
+  const cfg = _mailResolveAccount(opts.accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  try {
+    return await mail.saveDraft(cfg, opts)
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('mail:delete-draft', async (_evt, { accountId, uid } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  if (uid == null) return { ok: false, error: 'uid required' }
+  try {
+    return await mail.deleteDraft(cfg, uid)
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 // Download a single attachment from a message. Opens a Save dialog and
 // writes the file to the user-chosen path. Returns { ok, path } or
 // { ok:true, cancelled:true } if the user cancelled the dialog.

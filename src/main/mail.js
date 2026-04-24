@@ -323,6 +323,78 @@ async function _findFolderByKind(client, kind) {
   return null
 }
 
+// Build a draft, APPEND it to the Drafts folder with \Seen + \Draft flags.
+// If opts.replaceUid is given, the previous draft is deleted first so the
+// visible Drafts list always shows a single live copy per composer session.
+// Returns { ok, uid?, folder } — uid is what the server assigned on APPEND
+// (best-effort — some servers don't return it and the caller can refetch).
+async function saveDraft(cfg, opts) {
+  if (!cfg) throw new Error('No mail config')
+  const fromAddr = (opts.from && opts.from.includes('@')) ? opts.from
+    : `"${cfg.displayName || cfg.email}" <${cfg.email}>`
+  let attachments
+  if (Array.isArray(opts.attachments) && opts.attachments.length) {
+    const path = require('path')
+    attachments = opts.attachments
+      .filter(a => a && a.path)
+      .map(a => ({
+        path: a.path,
+        filename: a.filename || path.basename(a.path),
+        ...(a.contentType ? { contentType: a.contentType } : {}),
+      }))
+  }
+  const mailOpts = {
+    from: fromAddr,
+    to: opts.to,
+    cc: opts.cc,
+    bcc: opts.bcc,
+    subject: opts.subject,
+    text: opts.text,
+    html: opts.html,
+    inReplyTo: opts.inReplyTo,
+    references: opts.references,
+    ...(attachments ? { attachments } : {}),
+  }
+  const raw = await new MailComposer(mailOpts).compile().build()
+
+  const client = await _getClient(cfg)
+  const draftsPath = await _findFolderByKind(client, 'drafts')
+  if (!draftsPath) throw new Error('Ingen Drafts-folder hittades på servern')
+
+  // Replace-in-place: delete the prior draft before appending the new one
+  // so the user never sees two copies for the same in-progress message.
+  // messageDelete() sets \Deleted + runs EXPUNGE in one step.
+  if (opts.replaceUid) {
+    try {
+      await client.mailboxOpen(draftsPath)
+      await client.messageDelete({ uid: Number(opts.replaceUid) }, { uid: true })
+    } catch (_) { /* non-fatal — we still APPEND the new copy below */ }
+  }
+
+  const appendRes = await client.append(draftsPath, raw, ['\\Seen', '\\Draft'])
+  // imapflow returns { path, uidValidity, uid } when the server supports
+  // UIDPLUS. If absent, caller can re-fetch the Drafts folder list to find
+  // the newest message.
+  return {
+    ok: true,
+    folder: draftsPath,
+    uid: appendRes && appendRes.uid ? appendRes.uid : null,
+    uidValidity: appendRes && appendRes.uidValidity ? appendRes.uidValidity : null,
+  }
+}
+
+// Delete a draft by uid. Uses the Drafts folder specialUse resolution so
+// callers don't need to know the server-specific folder path.
+async function deleteDraft(cfg, uid) {
+  if (!cfg) throw new Error('No mail config')
+  const client = await _getClient(cfg)
+  const draftsPath = await _findFolderByKind(client, 'drafts')
+  if (!draftsPath) throw new Error('Ingen Drafts-folder hittades på servern')
+  await client.mailboxOpen(draftsPath)
+  await client.messageDelete({ uid: Number(uid) }, { uid: true })
+  return { ok: true }
+}
+
 async function sendMessage(cfg, opts) {
   if (!cfg) throw new Error('No mail config')
   const fromAddr = (opts.from && opts.from.includes('@')) ? opts.from
@@ -404,4 +476,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listFolders, listMessages, getMessage, getAttachment, setFlag, sendMessage, closeAccount, closeAll }
+module.exports = { testConnection, listFolders, listMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll }

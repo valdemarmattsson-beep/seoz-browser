@@ -71,6 +71,8 @@ contextBridge.exposeInMainWorld('seoz', {
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
     send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),
+    saveDraft:  (opts)     => ipcRenderer.invoke('mail:save-draft', opts || {}),
+    deleteDraft:(opts)     => ipcRenderer.invoke('mail:delete-draft', opts || {}),
     pickAttachments: ()        => ipcRenderer.invoke('mail:pick-attachments'),
     downloadAttachment: (opts) => ipcRenderer.invoke('mail:download-attachment', opts || {}),
   },

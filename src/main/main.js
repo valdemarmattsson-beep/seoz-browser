@@ -1216,6 +1216,38 @@ mail.events.on('mailbox', (payload) => {
   }
 })
 
+// Mail-unread badge. Renderer computes the count from loaded messages and
+// pushes it here; we mirror it to OS-level notifications so the taskbar /
+// dock shows when mail is waiting, even if the app is minimized.
+// app.setBadgeCount works on macOS + Linux (Unity). Windows has no native
+// number-badge API — we render the count as a small PNG and attach it via
+// win.setOverlayIcon() which shows on the taskbar thumbnail.
+let _currentBadgeCount = 0
+function _buildBadgeOverlay(count) {
+  if (!count || count < 0) return null
+  const text = count > 99 ? '99+' : String(count)
+  // 32×32 is Windows' sweet spot for overlay icons.
+  const svg = `<svg xmlns="http://www.w3.org/2000/svg" width="32" height="32"><circle cx="16" cy="16" r="14" fill="#dc2626" stroke="#fff" stroke-width="2"/><text x="16" y="22" font-family="Arial,sans-serif" font-size="${text.length > 2 ? 10 : 14}" font-weight="700" fill="#fff" text-anchor="middle">${text}</text></svg>`
+  try { return nativeImage.createFromBuffer(Buffer.from(svg, 'utf-8')) } catch (_) { return null }
+}
+ipcMain.handle('app:set-badge-count', (_evt, count) => {
+  const n = Math.max(0, Number(count) || 0)
+  if (n === _currentBadgeCount) return { ok: true }
+  _currentBadgeCount = n
+  try { app.setBadgeCount(n) } catch (_) {}
+  if (win && !win.isDestroyed()) {
+    if (n > 0) {
+      const overlay = _buildBadgeOverlay(n)
+      if (overlay) {
+        try { win.setOverlayIcon(overlay, `${n} oläst${n === 1 ? '' : 'a'} mejl`) } catch (_) {}
+      }
+    } else {
+      try { win.setOverlayIcon(null, '') } catch (_) {}
+    }
+  }
+  return { ok: true }
+})
+
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't
 // sit waiting for the idle timeout.
 app.on('before-quit', async () => { try { await mail.closeAll() } catch (_) {} })

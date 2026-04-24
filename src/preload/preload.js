@@ -80,6 +80,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // OS notifications
   notify:      (title, body) => ipcRenderer.send('send-notification', { title, body }),
+  setBadgeCount: (n)         => ipcRenderer.invoke('app:set-badge-count', n),
 
   // Open links in system browser
   openExternal: url => ipcRenderer.send('open-external', url),

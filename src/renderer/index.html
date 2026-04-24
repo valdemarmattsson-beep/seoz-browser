@@ -907,6 +907,19 @@ input,textarea,select{user-select:text}
 }
 .di:hover{background:rgba(70,128,255,.12)}
 .di.active{background:rgba(70,128,255,.15)}
+/* Unread-count badge positioned in the upper-right of any .di icon.
+   Hidden by default; rendered as a small pill with the count inside. */
+.di-badge{
+  position:absolute;top:1px;right:1px;
+  min-width:16px;height:16px;padding:0 4px;
+  border-radius:8px;background:var(--r,#dc2626);
+  color:#fff;font-size:9px;font-weight:700;line-height:16px;
+  display:none;align-items:center;justify-content:center;
+  font-variant-numeric:tabular-nums;
+  box-shadow:0 0 0 2px var(--card);   /* cut-out ring so it reads cleanly over the icon */
+  pointer-events:none;
+}
+.di-badge.show{display:inline-flex}
 .di.active::before{content:'';position:absolute;left:0;top:50%;transform:translateY(-50%);width:3px;height:18px;border-radius:0 3px 3px 0;background:var(--p)}
 .di svg{width:16px;height:16px;flex-shrink:0}
 .dock-sep{width:24px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0}
@@ -1738,6 +1751,7 @@ input,textarea,select{user-select:text}
       </div>
       <div class="di" id="di-mail" onclick="openMail()" style="color:#06b6d4">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+        <span class="di-badge" id="di-mail-badge">0</span>
         <div class="dtt">Mejl</div>
       </div>
       <div class="dock-sep"></div>
@@ -3113,6 +3127,30 @@ const _mailState = {
   searchDebounce: null,      // timer handle
 }
 
+// ── Unread badge (sidebar + OS taskbar/dock) ──────────────────────
+// Derives the count from whatever messages are currently loaded in
+// _mailState. Only counts when the user is on an Inbox-kind folder so
+// browsing Sent/Drafts/Trash doesn't zero the badge misleadingly.
+function _mailUpdateBadge() {
+  let count = 0
+  const current = _mailState.folders.find(f => f.path === _mailState.folder)
+  const countable = !current || current.kind === 'inbox'   // default folder is INBOX → countable
+  if (countable) {
+    for (const m of _mailState.messages) if (m.unread) count++
+  }
+  const badge = document.getElementById('di-mail-badge')
+  if (badge) {
+    if (count > 0) {
+      badge.textContent = count > 99 ? '99+' : String(count)
+      badge.classList.add('show')
+    } else {
+      badge.classList.remove('show')
+    }
+  }
+  // Mirror to OS — taskbar overlay on Windows, dock badge on macOS/Linux.
+  try { SE.setBadgeCount(count) } catch (_) {}
+}
+
 // ── Cache-backed list sync (Fas 5) ────────────────────────────────
 // When mail:list returns the cached snapshot, main kicks off a background
 // fetch and emits this event once the fresh list differs from the cache.
@@ -3408,6 +3446,10 @@ async function _mailLoadInbox(opts) {
 
 function _renderInboxList() {
   const pane = document.getElementById('mailInboxPane')
+  // Badge always reflects the current state of _mailState.messages, even
+  // when the mail pane isn't on screen — call it unconditionally so the
+  // sidebar + OS badges stay in sync after background refreshes too.
+  _mailUpdateBadge()
   if (!pane) return
   if (!_mailState.messages.length) {
     pane.innerHTML = '<div class="mail-empty-note">Inboxen är tom.</div>'

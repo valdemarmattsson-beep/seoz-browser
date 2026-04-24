@@ -497,7 +497,11 @@ input,textarea,select{user-select:text}
 
 .newtab{width:24px;height:24px;border-radius:5px;margin-left:6px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
 .newtab:hover{background:rgba(255,255,255,.08)}
-.tsp{flex:1;min-width:8px}
+/* Flex-spacer between last tab and window controls — this is the main
+   drag handle for the whole window (Chrome-style). The parent .tabbar is
+   no-drag (so HTML5 tab-reorder events fire on children), which causes
+   this child to inherit no-drag too — override it back to drag here. */
+.tsp{flex:1;min-width:8px;-webkit-app-region:drag}
 /* Window controls — SEOZ OS chrome spec: circular, 0.5px border, Lucide icons,
    semantic hover tint (min=warn, max=live, close=danger). */
 .wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center;align-self:center;gap:10px;padding-left:16px;margin:0 16px}

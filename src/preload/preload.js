@@ -52,15 +52,30 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Mail (IMAP/SMTP)
   mail: {
+    // Tests + deprecated single-account compat
     test:       (cfg)      => ipcRenderer.invoke('mail:test', cfg),
     saveConfig: (cfg)      => ipcRenderer.invoke('mail:save-config', cfg),
     hasConfig:  ()         => ipcRenderer.invoke('mail:has-config'),
     getConfig:  ()         => ipcRenderer.invoke('mail:get-config'),
     forget:     ()         => ipcRenderer.invoke('mail:forget'),
+    // Multi-account management
+    accountsList:     ()          => ipcRenderer.invoke('mail:accounts-list'),
+    accountAdd:       (cfg)       => ipcRenderer.invoke('mail:account-add', cfg),
+    accountUpdate:    (id, u)     => ipcRenderer.invoke('mail:account-update', { id, updates: u }),
+    accountDelete:    (id)        => ipcRenderer.invoke('mail:account-delete', id),
+    accountSetActive: (id)        => ipcRenderer.invoke('mail:account-set-active', id),
+    accountGetActive: ()          => ipcRenderer.invoke('mail:account-get-active'),
+    // Mail operations — opts may include { accountId } to override active account
+    foldersList: (opts)    => ipcRenderer.invoke('mail:folders-list', opts || {}),
     list:       (opts)     => ipcRenderer.invoke('mail:list', opts || {}),
+    search:     (opts)     => ipcRenderer.invoke('mail:search', opts || {}),
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
     send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),
+    saveDraft:  (opts)     => ipcRenderer.invoke('mail:save-draft', opts || {}),
+    deleteDraft:(opts)     => ipcRenderer.invoke('mail:delete-draft', opts || {}),
+    pickAttachments: ()        => ipcRenderer.invoke('mail:pick-attachments'),
+    downloadAttachment: (opts) => ipcRenderer.invoke('mail:download-attachment', opts || {}),
   },
 
   // OS notifications
@@ -105,7 +120,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

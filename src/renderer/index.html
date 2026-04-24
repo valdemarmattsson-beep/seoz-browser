@@ -198,7 +198,84 @@
 }
 .mail-topbar-title svg{width:16px;height:16px;color:var(--p)}
 .mail-topbar-addr{font-size:11px;color:var(--muted);font-family:monospace}
+.mail-acct-wrap{position:relative;display:inline-flex}
+.mail-acct-btn{
+  display:inline-flex;align-items:center;gap:6px;
+  background:none;border:none;padding:2px 6px;border-radius:4px;
+  font:inherit;font-size:11px;color:var(--muted);font-family:monospace;
+  cursor:pointer;transition:background .12s,color .12s;
+}
+.mail-acct-btn:hover{background:var(--card);color:var(--txt)}
+.mail-acct-btn svg{width:10px;height:10px;opacity:.7;flex-shrink:0}
+.mail-acct-menu{
+  position:absolute;top:calc(100% + 4px);left:0;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  min-width:240px;padding:4px;z-index:100;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  display:none;
+}
+.mail-acct-menu.show{display:block}
+.mail-acct-item{
+  display:flex;align-items:center;gap:8px;padding:7px 10px;
+  border-radius:4px;cursor:pointer;font-size:12px;color:var(--txt);
+}
+.mail-acct-item:hover{background:var(--panel)}
+.mail-acct-item-check{width:14px;flex-shrink:0;color:var(--p)}
+.mail-acct-item-check svg{width:12px;height:12px}
+.mail-acct-divider{height:1px;background:var(--border);margin:4px 2px}
+.mail-acct-add{color:var(--p);font-weight:500}
+/* Folder switcher — same skeleton as account switcher, stacks beside it. */
+.mail-folder-wrap{position:relative;display:inline-flex}
+.mail-folder-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  background:none;border:1px solid var(--border);padding:3px 8px 3px 7px;border-radius:999px;
+  font:inherit;font-size:10.5px;font-weight:600;color:var(--txt);letter-spacing:.01em;
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+}
+.mail-folder-btn:hover{background:var(--card);border-color:var(--p);color:var(--p)}
+.mail-folder-btn svg.mail-folder-chev{width:10px;height:10px;opacity:.65;flex-shrink:0}
+.mail-folder-btn-icon{width:12px;height:12px;flex-shrink:0;opacity:.85}
+.mail-folder-menu{
+  position:absolute;top:calc(100% + 4px);left:0;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  min-width:200px;max-height:60vh;overflow-y:auto;padding:4px;z-index:100;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  display:none;
+}
+.mail-folder-menu.show{display:block}
+.mail-folder-item{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  border-radius:4px;cursor:pointer;font-size:12px;color:var(--txt);
+}
+.mail-folder-item:hover{background:var(--panel)}
+.mail-folder-item.active{background:rgba(70,128,255,.08);color:var(--p);font-weight:500}
+.mail-folder-item-icon{width:14px;flex-shrink:0;opacity:.85;display:inline-flex;align-items:center;justify-content:center}
+.mail-folder-item-icon svg{width:13px;height:13px}
+.mail-folder-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mail-topbar-spacer{flex:1}
+/* Search box in mail topbar */
+.mail-search-wrap{
+  position:relative;display:flex;align-items:center;
+  height:28px;min-width:240px;max-width:360px;flex:0 1 320px;
+  background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  padding:0 8px;margin-right:8px;gap:6px;
+  transition:border-color .12s,background .12s;
+}
+.mail-search-wrap:focus-within{border-color:var(--p);background:var(--card)}
+.mail-search-wrap svg.mail-search-ico{width:12px;height:12px;color:var(--muted);flex-shrink:0}
+.mail-search-input{
+  flex:1;border:none;outline:none;background:transparent;
+  font:inherit;font-size:11px;color:var(--txt);
+}
+.mail-search-input::placeholder{color:var(--muted)}
+.mail-search-clear{
+  width:18px;height:18px;border-radius:50%;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .12s,color .12s;
+}
+.mail-search-clear:hover{background:var(--border);color:var(--txt)}
+.mail-search-clear svg{width:10px;height:10px}
+.mail-search-wrap.has-query .mail-search-clear{display:inline-flex}
 .mail-topbar-btn{
   height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);
   background:var(--panel);color:var(--txt);font-size:11px;font-weight:500;cursor:pointer;
@@ -272,6 +349,14 @@
   flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt);
 }
 .mail-row-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Thread size badge — only shown on rows that represent a conversation */
+.mail-row-count{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:16px;padding:0 5px;border-radius:8px;
+  background:rgba(70,128,255,.15);color:var(--p);
+  font-size:10px;font-weight:600;flex-shrink:0;
+  font-variant-numeric:tabular-nums;
+}
 .mail-row-subject{
   font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   padding-left:12px;
@@ -316,10 +401,22 @@
   color:var(--muted);margin-bottom:8px;
 }
 .mail-att-row{
-  display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
   font-size:11px;color:var(--txt);background:var(--panel);margin-bottom:4px;
+  cursor:pointer;border:1px solid transparent;
+  transition:background .12s,border-color .12s;
 }
-.mail-att-row svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+.mail-att-row:hover{background:var(--card);border-color:var(--p)}
+.mail-att-row svg.mail-att-row-ico{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+.mail-att-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-att-row-size{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;flex-shrink:0}
+.mail-att-row-dl{
+  width:24px;height:24px;border-radius:4px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:color .12s,background .12s;
+}
+.mail-att-row-dl:hover{color:var(--p);background:rgba(70,128,255,.12)}
+.mail-att-row-dl svg{width:13px;height:13px}
 
 /* Reply / reply-all / forward buttons under the message header */
 .mail-reply-row{
@@ -400,9 +497,41 @@
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 16px;border-top:1px solid var(--border);
   background:var(--panel);
+  gap:10px;
 }
-.mail-compose-status{font-size:10px;color:var(--muted);flex:1;margin-right:10px}
+.mail-compose-status{font-size:10px;color:var(--muted);flex:1;margin:0 10px}
 .mail-compose-status.err{color:var(--r)}
+.mail-compose-attach-btn{
+  width:32px;height:32px;border-radius:7px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.mail-compose-attach-btn:hover{background:var(--card);color:var(--p);border-color:var(--p)}
+.mail-compose-attach-btn svg{width:14px;height:14px}
+/* Chip-row above the textarea showing queued attachments */
+.mail-compose-att-row{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:8px 0 0;
+}
+.mail-compose-att-row:empty{display:none}
+.mail-compose-att-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  max-width:260px;
+  height:26px;padding:0 6px 0 9px;border-radius:999px;
+  background:var(--card);border:1px solid var(--border);
+  font-size:11px;color:var(--txt);
+}
+.mail-compose-att-chip svg.mail-compose-att-chip-icon{width:11px;height:11px;color:var(--muted);flex-shrink:0}
+.mail-compose-att-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.mail-compose-att-chip-size{color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0}
+.mail-compose-att-chip-x{
+  width:18px;height:18px;border-radius:50%;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;flex-shrink:0;
+}
+.mail-compose-att-chip-x:hover{background:rgba(220,38,38,.12);color:var(--r)}
+.mail-compose-att-chip-x svg{width:10px;height:10px}
 .mail-compose-send{
   height:32px;padding:0 18px;border-radius:7px;border:none;
   background:var(--p);color:#fff;font-size:12px;font-weight:600;cursor:pointer;
@@ -1423,9 +1552,30 @@ input,textarea,select{user-select:text}
             <div class="mail-topbar-title">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
               <span>Mejl</span>
-              <span class="mail-topbar-addr" id="mailAddr"></span>
+              <div class="mail-acct-wrap">
+                <button class="mail-acct-btn" id="mailAcctBtn" type="button" onclick="_mailToggleAcctMenu()" style="display:none">
+                  <span id="mailAddr"></span>
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="mail-acct-menu" id="mailAcctMenu"></div>
+              </div>
+              <div class="mail-folder-wrap">
+                <button class="mail-folder-btn" id="mailFolderBtn" type="button" onclick="_mailToggleFolderMenu()" style="display:none">
+                  <span class="mail-folder-btn-icon" id="mailFolderBtnIcon"></span>
+                  <span id="mailFolderBtnLabel">Inkorgen</span>
+                  <svg class="mail-folder-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="mail-folder-menu" id="mailFolderMenu"></div>
+              </div>
             </div>
             <div class="mail-topbar-spacer"></div>
+            <div class="mail-search-wrap" id="mailSearchWrap" style="display:none">
+              <svg class="mail-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input class="mail-search-input" id="mailSearchInput" type="search" placeholder="Sök i mejl…" autocomplete="off" oninput="_mailOnSearchInput(event)" onkeydown="if(event.key==='Escape')_mailClearSearch()">
+              <button class="mail-search-clear" id="mailSearchClear" type="button" onclick="_mailClearSearch()" aria-label="Rensa sökning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <button class="mail-topbar-btn" id="mailRefreshBtn" onclick="mailRefresh()" style="display:none" aria-label="Uppdatera">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               <span>Uppdatera</span>
@@ -1476,8 +1626,15 @@ input,textarea,select{user-select:text}
                   <input class="mail-field-input" id="composeSubject" type="text">
                 </div>
                 <textarea class="mail-compose-body-text" id="composeBody" placeholder="Skriv ditt meddelande…"></textarea>
+                <div class="mail-compose-att-row" id="composeAttRow"></div>
               </div>
               <div class="mail-compose-foot">
+                <button class="mail-compose-attach-btn" id="composeAttachBtn" type="button" onclick="_composeAttach()" title="Bifoga fil" aria-label="Bifoga fil">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
+                <button class="mail-compose-attach-btn" id="composeSaveDraftBtn" type="button" onclick="_composeSaveDraft()" title="Spara utkast" aria-label="Spara utkast">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
+                </button>
                 <span class="mail-compose-status" id="composeStatus"></span>
                 <button class="mail-compose-send" id="composeSendBtn" onclick="_composeSend()">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -2882,22 +3039,36 @@ window.openMail = function() {
 async function renderMailScreen() {
   const body = document.getElementById('mailBody')
   const addr = document.getElementById('mailAddr')
+  const acctBtn = document.getElementById('mailAcctBtn')
+  const folderBtn = document.getElementById('mailFolderBtn')
   const refreshBtn = document.getElementById('mailRefreshBtn')
   const composeBtn = document.getElementById('mailComposeBtn')
   const settingsBtn = document.getElementById('mailSettingsBtn')
   if (!body) return
 
-  // Load config (metadata only — password stays in main)
-  const cfg = await SE.mail.getConfig()
+  // Load all accounts + determine active. Metadata only — password stays in main.
+  _mailState.accounts = (await SE.mail.accountsList()) || []
+  const active = (await SE.mail.accountGetActive()) || _mailState.accounts[0] || null
+  _mailState.accountId = active ? active.id : null
+  const cfg = active
   _mailHasConfig = !!cfg
   _mailCfgMeta = cfg
 
   if (addr) addr.textContent = cfg ? cfg.email : ''
+  if (acctBtn) acctBtn.style.display = cfg ? '' : 'none'
+  if (folderBtn) folderBtn.style.display = cfg ? '' : 'none'
+  const searchWrap = document.getElementById('mailSearchWrap')
+  if (searchWrap) searchWrap.style.display = cfg ? '' : 'none'
   if (refreshBtn) refreshBtn.style.display = cfg ? '' : 'none'
   if (composeBtn) composeBtn.style.display = cfg ? '' : 'none'
   if (settingsBtn) settingsBtn.style.display = cfg ? '' : 'none'
 
-  if (!cfg) { _renderMailSetup(body); return }
+  if (!cfg) { _mailState.setupMode = 'first'; _renderMailSetup(body); return }
+
+  // Load folders in parallel with the inbox list below. Fire-and-forget so
+  // the inbox doesn't wait for the folder tree — the folder button updates
+  // itself once the list resolves.
+  _mailLoadFolders().then(() => _mailUpdateFolderBtn()).catch(() => {})
 
   // Two-pane inbox layout. Listan fylls asynkront — vi visar skeleton först.
   body.innerHTML = `
@@ -2916,17 +3087,300 @@ async function renderMailScreen() {
 // ══════════════════════════════════════════════════════
 const _mailState = {
   folder: 'INBOX',
+  folders: [],               // cached list of { path, name, kind, specialUse, depth, delimiter }
+  accountId: null,           // currently-active account id
+  accounts: [],              // cached list of { id, email, ... } (no passwords)
+  setupMode: 'first',        // 'first' (no accounts yet) | 'add' (adding another)
   messages: [],
   selectedUid: null,
   loading: false,
+  searchQuery: '',           // active search query (empty = normal list)
+  searchDebounce: null,      // timer handle
 }
 
-async function _mailLoadInbox() {
+// ── Cache-backed list sync (Fas 5) ────────────────────────────────
+// When mail:list returns the cached snapshot, main kicks off a background
+// fetch and emits this event once the fresh list differs from the cache.
+// We swap it in quietly — no spinner, no jump — so the user gets
+// corrections (new messages, updated flags) without a visible reload.
+SE.on('mail:list-updated', (payload) => {
+  if (!payload) return
+  if (payload.accountId !== _mailState.accountId) return
+  if (payload.folder !== _mailState.folder) return
+  if (_mailState.searchQuery) return     // don't clobber an active search view
+  _mailState.messages = Array.isArray(payload.messages) ? payload.messages : []
+  _renderInboxList()
+})
+
+// ── Live updates via IMAP IDLE (Fas 4.1) ──────────────────────────
+// Main forwards `mail:event` whenever IDLE surfaces EXISTS / EXPUNGE /
+// FLAGS on any account's currently-open mailbox. We reload the visible
+// list only when the event is for the account+folder the user is
+// actually looking at, so background accounts don't yank the UI around.
+SE.on('mail:event', (payload) => {
+  if (!payload || payload.accountId !== _mailState.accountId) return
+  if (payload.type === 'close') return   // socket closed — next _getClient will re-wire
+  // Events are scoped to whatever mailbox the pool's client has open; only
+  // react if that's also what the renderer is showing.
+  if (payload.folder && payload.folder !== _mailState.folder) return
+
+  if (payload.type === 'exists') {
+    // New mail! Reload unless the user is actively reading something —
+    // in that case, debounce a bit so we don't yank the reader out from
+    // under them on fast servers.
+    if (_mailState.searchQuery) return    // don't clobber active search
+    _mailLoadInbox()
+    // Tiny OS notification when it's the INBOX so the user knows without
+    // having to stare at the window.
+    const current = _mailState.folders.find(f => f.path === _mailState.folder)
+    if (current && current.kind === 'inbox' && (payload.prevCount == null || payload.count > payload.prevCount)) {
+      try { SE.notify('Nytt mejl', 'Du har fått ett nytt meddelande') } catch (_) {}
+    }
+  } else if (payload.type === 'flags') {
+    // Flag changes from another client (e.g. marked read on phone). Patch
+    // the local copy if we can see it — cheaper than a full refetch.
+    if (payload.uid != null) {
+      const m = _mailState.messages.find(x => x.uid === payload.uid)
+      if (m) {
+        m.unread = !payload.flags.includes('\\Seen')
+        m.flagged = payload.flags.includes('\\Flagged')
+        _renderInboxList()
+      }
+    }
+  } else if (payload.type === 'expunge') {
+    // A message was removed server-side; drop local copy and re-render.
+    if (payload.seq != null) {
+      const idx = payload.seq - 1
+      if (idx >= 0 && idx < _mailState.messages.length) {
+        _mailState.messages.splice(idx, 1)
+        _renderInboxList()
+      }
+    }
+  }
+})
+
+// ── Search (IMAP SEARCH via topbar input) ──────────────────────────
+window._mailOnSearchInput = function(e) {
+  const val = (e && e.target ? e.target.value : '').trim()
+  const wrap = document.getElementById('mailSearchWrap')
+  if (wrap) wrap.classList.toggle('has-query', !!val)
+  clearTimeout(_mailState.searchDebounce)
+  if (!val) {
+    _mailState.searchQuery = ''
+    _mailLoadInbox()
+    return
+  }
+  // 300 ms debounce so each keystroke doesn't fire a server round-trip.
+  _mailState.searchDebounce = setTimeout(() => {
+    _mailState.searchQuery = val
+    _mailRunSearch()
+  }, 300)
+}
+
+window._mailClearSearch = function() {
+  const input = document.getElementById('mailSearchInput')
+  if (input) input.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
+  clearTimeout(_mailState.searchDebounce)
+  _mailState.searchQuery = ''
+  _mailLoadInbox()
+}
+
+async function _mailRunSearch() {
+  if (!_mailState.searchQuery) return _mailLoadInbox()
+  if (_mailState.loading) return
+  _mailState.loading = true
+  const pane = document.getElementById('mailInboxPane')
+  if (pane) pane.innerHTML = '<div class="mail-empty-note">Söker…</div>'
+  const res = await SE.mail.search({
+    accountId: _mailState.accountId,
+    folder: _mailState.folder,
+    query: _mailState.searchQuery,
+    limit: 100,
+  })
+  _mailState.loading = false
+  if (!res || !res.ok) {
+    if (pane) pane.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Sökning misslyckades: ${esc(res?.error || 'okänt')}</div>`
+    return
+  }
+  _mailState.messages = Array.isArray(res.messages) ? res.messages : []
+  if (!_mailState.messages.length) {
+    if (pane) pane.innerHTML = `<div class="mail-empty-note">Inga träffar för "${esc(_mailState.searchQuery)}"</div>`
+    return
+  }
+  _renderInboxList()
+}
+
+// ── Folder switcher (mail topbar dropdown) ─────────────────────────
+// Localized display names for well-known folder kinds. Falls back to the
+// server-supplied name for custom folders.
+const _FOLDER_KIND_LABEL = {
+  inbox:   'Inkorgen',
+  drafts:  'Utkast',
+  sent:    'Skickat',
+  archive: 'Arkiv',
+  junk:    'Skräppost',
+  trash:   'Papperskorg',
+  all:     'All mejl',
+}
+// Inline SVG icons per folder kind (Lucide-style, matches app look).
+const _FOLDER_KIND_ICON = {
+  inbox:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  drafts:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  sent:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+  junk:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+  trash:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+  all:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>',
+  custom:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+}
+
+function _mailFolderDisplay(f) {
+  if (!f) return 'INBOX'
+  return _FOLDER_KIND_LABEL[f.kind] || f.name || f.path
+}
+
+async function _mailLoadFolders() {
+  const res = await SE.mail.foldersList({ accountId: _mailState.accountId })
+  if (!res || !res.ok) { _mailState.folders = []; return [] }
+  _mailState.folders = Array.isArray(res.folders) ? res.folders : []
+  return _mailState.folders
+}
+
+function _mailRenderFolderMenu() {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu) return
+  if (!_mailState.folders.length) {
+    menu.innerHTML = '<div class="mail-folder-item" style="color:var(--muted);cursor:default">Laddar…</div>'
+    return
+  }
+  menu.innerHTML = _mailState.folders.map(f => {
+    const active = f.path === _mailState.folder
+    const icon = _FOLDER_KIND_ICON[f.kind] || _FOLDER_KIND_ICON.custom
+    return `
+      <div class="mail-folder-item${active ? ' active' : ''}" onclick="_mailSwitchFolder('${esc(f.path).replace(/'/g, "\\'")}')">
+        <span class="mail-folder-item-icon">${icon}</span>
+        <span class="mail-folder-item-name">${esc(_mailFolderDisplay(f))}</span>
+      </div>
+    `
+  }).join('')
+}
+
+function _mailUpdateFolderBtn() {
+  const btn = document.getElementById('mailFolderBtn')
+  const label = document.getElementById('mailFolderBtnLabel')
+  const iconEl = document.getElementById('mailFolderBtnIcon')
+  if (!btn || !label || !iconEl) return
+  const current = _mailState.folders.find(f => f.path === _mailState.folder)
+  const kind = current ? current.kind : 'inbox'
+  label.textContent = current ? _mailFolderDisplay(current) : _mailState.folder
+  iconEl.innerHTML = _FOLDER_KIND_ICON[kind] || _FOLDER_KIND_ICON.custom
+}
+
+window._mailToggleFolderMenu = function() {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) _mailRenderFolderMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+window._mailSwitchFolder = async function(path) {
+  document.getElementById('mailFolderMenu')?.classList.remove('show')
+  if (!path || path === _mailState.folder) return
+  _mailState.folder = path
+  _mailState.messages = []
+  _mailState.selectedUid = null
+  // Clear search when switching folders — a query scoped to the old folder
+  // is rarely what the user wants in the new one.
+  _mailState.searchQuery = ''
+  const searchInput = document.getElementById('mailSearchInput')
+  if (searchInput) searchInput.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
+  // Clear reader pane — the selected message belongs to the old folder
+  const reader = document.getElementById('mailReaderPane')
+  if (reader) reader.innerHTML = '<div class="mail-empty-note">Välj ett mejl från inboxen för att läsa det här.</div>'
+  _mailUpdateFolderBtn()
+  await _mailLoadInbox()
+}
+
+// Close folder dropdown on outside click (mirrors account-switcher behavior)
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('mailFolderBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
+
+// ── Account switcher (mail topbar dropdown) ─────────────────────────
+function _mailRenderAcctMenu() {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu) return
+  const check = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg>'
+  const rows = _mailState.accounts.map(a => `
+    <div class="mail-acct-item" onclick="_mailSwitchAccount('${esc(a.id)}')">
+      <span class="mail-acct-item-check">${a.id === _mailState.accountId ? check : ''}</span>
+      <span>${esc(a.email)}</span>
+    </div>
+  `).join('')
+  menu.innerHTML = `
+    ${rows}
+    ${_mailState.accounts.length ? '<div class="mail-acct-divider"></div>' : ''}
+    <div class="mail-acct-item mail-acct-add" onclick="_mailAddAccountFlow()">+ Lägg till konto</div>
+  `
+}
+
+window._mailToggleAcctMenu = function() {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) _mailRenderAcctMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+// Close dropdown on outside click
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('mailAcctMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('mailAcctBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
+
+window._mailSwitchAccount = async function(id) {
+  document.getElementById('mailAcctMenu')?.classList.remove('show')
+  if (id === _mailState.accountId) return
+  const res = await SE.mail.accountSetActive(id)
+  if (!res || !res.ok) { toast('Kunde inte byta konto: ' + (res?.error || ''), '#dc2626'); return }
+  _mailState.accountId = id
+  _mailState.folder = 'INBOX'     // every account starts on its own inbox
+  _mailState.folders = []          // drop cached folder tree from previous account
+  _mailState.messages = []
+  _mailState.selectedUid = null
+  _mailState.searchQuery = ''      // reset search when swapping identities
+  const searchInput = document.getElementById('mailSearchInput')
+  if (searchInput) searchInput.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
+  await renderMailScreen()
+}
+
+window._mailAddAccountFlow = function() {
+  document.getElementById('mailAcctMenu')?.classList.remove('show')
+  _mailState.setupMode = 'add'
+  _mailCfgMeta = null
+  const body = document.getElementById('mailBody')
+  if (body) _renderMailSetup(body)
+}
+
+async function _mailLoadInbox(opts) {
   if (_mailState.loading) return
   _mailState.loading = true
   const pane = document.getElementById('mailInboxPane')
   if (pane) pane.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
-  const res = await SE.mail.list({ folder: _mailState.folder, limit: 50 })
+  const res = await SE.mail.list({ accountId: _mailState.accountId, folder: _mailState.folder, limit: 50, force: !!(opts && opts.force) })
   _mailState.loading = false
   if (!res || !res.ok) {
     const err = res?.error || 'okänt fel'
@@ -2944,20 +3398,99 @@ function _renderInboxList() {
     pane.innerHTML = '<div class="mail-empty-note">Inboxen är tom.</div>'
     return
   }
-  pane.innerHTML = _mailState.messages.map(_inboxRowHtml).join('')
+  const threads = _buildThreads(_mailState.messages)
+  pane.innerHTML = threads.map(_threadRowHtml).join('')
 }
 
-function _inboxRowHtml(m) {
+// Union-find thread grouping. Messages share a thread when they reference
+// any common Message-ID (via In-Reply-To or References headers). Pure
+// client-side — no IMAP THREAD extension required, so it works on any
+// server. Orphan messages (no messageId / no refs) get their own group.
+function _buildThreads(messages) {
+  const parent = new Map()
+  const find = (x) => {
+    let root = x
+    while (parent.get(root) && parent.get(root) !== root) root = parent.get(root)
+    // Path compression
+    let cur = x
+    while (cur !== root) {
+      const next = parent.get(cur)
+      parent.set(cur, root)
+      cur = next
+    }
+    return root
+  }
+  const union = (a, b) => {
+    const ra = find(a), rb = find(b)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+  // Seed: every messageId (and every reference we see) is its own group
+  for (const m of messages) {
+    if (m.messageId && !parent.has(m.messageId)) parent.set(m.messageId, m.messageId)
+    if (m.inReplyTo && !parent.has(m.inReplyTo)) parent.set(m.inReplyTo, m.inReplyTo)
+    for (const r of (m.references || [])) {
+      if (r && !parent.has(r)) parent.set(r, r)
+    }
+  }
+  // Union: a message is in same group as its inReplyTo + each reference
+  for (const m of messages) {
+    const id = m.messageId
+    if (!id) continue
+    if (m.inReplyTo) union(id, m.inReplyTo)
+    for (const r of (m.references || [])) if (r) union(id, r)
+  }
+  // Bucket messages by resolved root
+  const groups = new Map()
+  for (const m of messages) {
+    const key = m.messageId ? find(m.messageId) : `__orphan:${m.uid}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(m)
+  }
+  // Materialize: each thread's "display" message is the newest one;
+  // the thread inherits its slot in the list from that message's date.
+  const threads = []
+  for (const msgs of groups.values()) {
+    msgs.sort((a, b) => new Date(b.date) - new Date(a.date))
+    threads.push({
+      latest: msgs[0],
+      count: msgs.length,
+      hasUnread: msgs.some(m => m.unread),
+      messages: msgs,
+    })
+  }
+  threads.sort((a, b) => new Date(b.latest.date) - new Date(a.latest.date))
+  return threads
+}
+
+function _threadRowHtml(t) {
+  const m = t.latest
   const from = (m.from && m.from[0]) || { name: '', address: '' }
   const fromLabel = from.name || from.address || '(okänd)'
   const selected = m.uid === _mailState.selectedUid
+  const unread = t.hasUnread
+  // If multiple senders participated, show "Alice, Bob (+1)" style.
+  let senderLabel = fromLabel
+  if (t.count > 1) {
+    const uniqueNames = []
+    const seen = new Set()
+    for (const mm of t.messages) {
+      const f = (mm.from && mm.from[0]) || null
+      const n = f ? (f.name || f.address || '') : ''
+      if (n && !seen.has(n)) { seen.add(n); uniqueNames.push(n) }
+      if (uniqueNames.length >= 2) break
+    }
+    if (uniqueNames.length === 2) senderLabel = `${uniqueNames[0]}, ${uniqueNames[1]}`
+    else if (uniqueNames.length === 1) senderLabel = uniqueNames[0]
+  }
+  const countBadge = t.count > 1 ? `<span class="mail-row-count">${t.count}</span>` : ''
   return `
-    <div class="mail-row${m.unread ? ' unread' : ''}${selected ? ' selected' : ''}"
+    <div class="mail-row${unread ? ' unread' : ''}${selected ? ' selected' : ''}"
          onclick="_mailOpen(${m.uid})"
          data-uid="${m.uid}">
       <div class="mail-row-line1">
-        <span class="mail-row-dot" style="${m.unread ? '' : 'visibility:hidden'}"></span>
-        <span class="mail-row-from">${esc(fromLabel)}</span>
+        <span class="mail-row-dot" style="${unread ? '' : 'visibility:hidden'}"></span>
+        <span class="mail-row-from">${esc(senderLabel)}</span>
+        ${countBadge}
         <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
       </div>
       <div class="mail-row-subject">${esc(m.subject || '(utan ämne)')}</div>
@@ -2984,13 +3517,34 @@ function _formatMailDate(iso) {
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+window._mailDownloadAttachment = async function(uid, index, filename) {
+  const res = await SE.mail.downloadAttachment({
+    accountId: _mailState.accountId,
+    uid, index,
+    folder: _mailState.folder,
+    suggestedName: filename,
+  })
+  if (!res) { toast('Nedladdning misslyckades', '#dc2626'); return }
+  if (res.cancelled) return
+  if (!res.ok) { toast('Nedladdning misslyckades: ' + (res.error || ''), '#dc2626'); return }
+  toast('Bilaga sparad', '#2ca87f')
+}
+
 window._mailOpen = async function(uid) {
+  // If we're inside the Drafts folder, a click means "continue editing".
+  // Route to the compose modal instead of the read-only reader pane.
+  const currentFolder = _mailState.folders.find(f => f.path === _mailState.folder)
+  if (currentFolder && currentFolder.kind === 'drafts') {
+    _mailState.selectedUid = uid
+    _renderInboxList()
+    return _mailEditDraft(uid)
+  }
   _mailState.selectedUid = uid
   _renderInboxList()  // refresh to mark selected row
   const reader = document.getElementById('mailReaderPane')
   if (!reader) return
   reader.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
-  const res = await SE.mail.get({ uid, folder: _mailState.folder })
+  const res = await SE.mail.get({ accountId: _mailState.accountId, uid, folder: _mailState.folder })
   if (!res || !res.ok || !res.message) {
     reader.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Kunde inte ladda mejlet: ${esc(res?.error || 'okänt')}</div>`
     return
@@ -3002,7 +3556,7 @@ window._mailOpen = async function(uid) {
   const local = _mailState.messages.find(m => m.uid === uid)
   if (local && local.unread) {
     local.unread = false
-    SE.mail.flag({ uid, flag: '\\Seen', value: true, folder: _mailState.folder }).catch(() => {})
+    SE.mail.flag({ accountId: _mailState.accountId, uid, flag: '\\Seen', value: true, folder: _mailState.folder }).catch(() => {})
     _renderInboxList()
   }
 }
@@ -3028,12 +3582,19 @@ function _renderReader(msg) {
   const attHtml = atts.length ? `
     <div class="mail-attachments">
       <div class="mail-attachments-title">Bilagor (${atts.length})</div>
-      ${atts.map(a => `
-        <div class="mail-att-row" title="${esc(a.contentType || '')}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.filename || 'bilaga')}</span>
-          <span style="color:var(--muted);font-size:10px">${((a.size || 0) / 1024).toFixed(0)} KB</span>
-        </div>`).join('')}
+      ${atts.map((a, i) => {
+        const idx = a.index != null ? a.index : i
+        const name = esc(a.filename || 'bilaga')
+        return `
+        <div class="mail-att-row" title="${esc(a.contentType || '')}" onclick="_mailDownloadAttachment(${msg.uid}, ${idx}, '${name.replace(/'/g, "\\'")}')">
+          <svg class="mail-att-row-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="mail-att-row-name">${name}</span>
+          <span class="mail-att-row-size">${_composeFormatBytes(a.size || 0)}</span>
+          <button class="mail-att-row-dl" type="button" onclick="event.stopPropagation();_mailDownloadAttachment(${msg.uid}, ${idx}, '${name.replace(/'/g, "\\'")}')" aria-label="Ladda ner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>`
+      }).join('')}
     </div>
   ` : ''
   reader.innerHTML = `
@@ -3184,15 +3745,20 @@ window._mailSaveConfig = async function() {
   _mailMsg('ok', 'Testar och sparar…')
   const test = await SE.mail.test(cfg)
   if (!test.ok) { _mailMsg('err', 'Anslutning misslyckades: ' + (test.error || '')); return }
-  const save = await SE.mail.saveConfig(cfg)
+  const save = await SE.mail.accountAdd(cfg)
   if (!save.ok) { _mailMsg('err', 'Kunde inte spara: ' + (save.error || '')); return }
+  // Make the newly-added account the active one so the UI flips straight to its inbox
+  if (save.id) await SE.mail.accountSetActive(save.id)
+  _mailState.setupMode = 'first'
   toast('Mejl ansluten: ' + cfg.email, '#2ca87f')
   renderMailScreen()
 }
 
 window.mailRefresh = function() {
   // Keep the currently-selected message visible while the list reloads.
-  _mailLoadInbox()
+  // If a search is active, re-run it instead of reloading the full inbox.
+  if (_mailState.searchQuery) return _mailRunSearch()
+  _mailLoadInbox({ force: true })    // bypass cache — user explicitly asked for fresh
 }
 window.mailOpenSetup = function() {
   const body = document.getElementById('mailBody')
@@ -3209,10 +3775,125 @@ window.mailCompose = function() {
 // ══════════════════════════════════════════════════════
 const _composeState = {
   open: false,
-  mode: 'new',          // 'new' | 'reply' | 'replyAll' | 'forward'
+  mode: 'new',          // 'new' | 'reply' | 'replyAll' | 'forward' | 'edit-draft'
   inReplyTo: null,      // Message-ID of message being replied to
   references: [],       // References chain
   sending: false,
+  saving: false,        // currently saving draft
+  draftUid: null,       // uid of the live draft on server (null until first save)
+  attachments: [],      // [{ path, filename, size, contentType }]
+}
+
+// ── Compose attachments ────────────────────────────────────────────
+function _composeFormatBytes(n) {
+  if (!n && n !== 0) return ''
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+  return (n / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function _composeRenderAttachments() {
+  const row = document.getElementById('composeAttRow')
+  if (!row) return
+  const paperclip = '<svg class="mail-compose-att-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+  const xIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+  row.innerHTML = _composeState.attachments.map((a, i) => `
+    <span class="mail-compose-att-chip" title="${esc(a.path || a.filename)}">
+      ${paperclip}
+      <span class="mail-compose-att-chip-name">${esc(a.filename || '')}</span>
+      <span class="mail-compose-att-chip-size">${_composeFormatBytes(a.size)}</span>
+      <button class="mail-compose-att-chip-x" type="button" onclick="_composeRemoveAttachment(${i})" aria-label="Ta bort bilaga">${xIcon}</button>
+    </span>
+  `).join('')
+}
+
+window._composeAttach = async function() {
+  const res = await SE.mail.pickAttachments()
+  if (!res || !res.ok) { if (res?.error) toast('Kunde inte välja bilaga: ' + res.error, '#dc2626'); return }
+  if (!res.attachments || !res.attachments.length) return
+  // Dedupe on path so picking the same file twice doesn't double-attach.
+  const existing = new Set(_composeState.attachments.map(a => a.path))
+  for (const a of res.attachments) {
+    if (!existing.has(a.path)) _composeState.attachments.push(a)
+  }
+  _composeRenderAttachments()
+}
+
+window._composeRemoveAttachment = function(idx) {
+  _composeState.attachments.splice(idx, 1)
+  _composeRenderAttachments()
+}
+
+// Collect compose fields into the shape SE.mail.send / SE.mail.saveDraft expect.
+function _composeCollect() {
+  const from = document.getElementById('composeFrom')?.value || ''
+  const to = document.getElementById('composeTo')?.value || ''
+  const cc = document.getElementById('composeCc')?.value || ''
+  const bcc = document.getElementById('composeBcc')?.value || ''
+  const subject = document.getElementById('composeSubject')?.value || ''
+  const body = document.getElementById('composeBody')?.value || ''
+  const attachments = _composeState.attachments.length
+    ? _composeState.attachments.map(a => ({ path: a.path, filename: a.filename, contentType: a.contentType }))
+    : undefined
+  return { from, to, cc, bcc, subject, text: body, attachments }
+}
+
+window._composeSaveDraft = async function() {
+  if (_composeState.saving) return
+  const payload = _composeCollect()
+  // Don't save completely empty drafts — that just pollutes the Drafts folder.
+  if (!payload.to && !payload.cc && !payload.bcc && !payload.subject && !payload.text && !payload.attachments) {
+    toast('Inget att spara', '#e58a00')
+    return
+  }
+  _composeState.saving = true
+  const btn = document.getElementById('composeSaveDraftBtn')
+  if (btn) btn.disabled = true
+  const status = document.getElementById('composeStatus')
+  if (status) { status.classList.remove('err'); status.textContent = 'Sparar utkast…' }
+
+  const res = await SE.mail.saveDraft({
+    accountId: _mailState.accountId,
+    ...payload,
+    inReplyTo: _composeState.inReplyTo || undefined,
+    references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
+    replaceUid: _composeState.draftUid || undefined,
+  })
+
+  _composeState.saving = false
+  if (btn) btn.disabled = false
+  if (!res || !res.ok) {
+    if (status) { status.textContent = 'Utkast misslyckades: ' + (res?.error || 'okänt'); status.classList.add('err') }
+    return
+  }
+  if (res.uid) _composeState.draftUid = res.uid
+  if (status) status.textContent = 'Utkast sparat ' + new Date().toLocaleTimeString('sv-SE', { hour: '2-digit', minute: '2-digit' })
+  toast('Utkast sparat', '#2ca87f')
+  // Refresh the inbox list so the new/updated draft appears if user is
+  // already viewing the Drafts folder.
+  const current = _mailState.folders.find(f => f.path === _mailState.folder)
+  if (current && current.kind === 'drafts') _mailLoadInbox()
+}
+
+// Open an existing draft in the compose modal for continued editing.
+// Called from _mailOpen when the user clicks a row while viewing the
+// Drafts folder, instead of opening it in the read-only reader pane.
+async function _mailEditDraft(uid) {
+  const res = await SE.mail.get({ accountId: _mailState.accountId, uid, folder: _mailState.folder })
+  if (!res || !res.ok || !res.message) {
+    toast('Kunde inte ladda utkast: ' + (res?.error || 'okänt'), '#dc2626')
+    return
+  }
+  const msg = res.message
+  await openCompose('edit-draft', {
+    draftUid: uid,
+    to: _addrListToStr(msg.to),
+    cc: _addrListToStr(msg.cc),
+    subject: msg.subject || '',
+    body: msg.text || '',
+    inReplyTo: msg.inReplyTo || null,
+    references: Array.isArray(msg.references) ? msg.references : (msg.references ? [msg.references] : []),
+  })
 }
 
 function _composeFromOptions(cfg) {
@@ -3268,6 +3949,10 @@ window.openCompose = async function(mode, opts) {
   _composeState.inReplyTo = opts?.inReplyTo || null
   _composeState.references = opts?.references || []
   _composeState.sending = false
+  _composeState.saving = false
+  _composeState.draftUid = opts?.draftUid || null  // set when resuming an existing draft
+  _composeState.attachments = []       // fresh compose → no attached files
+  _composeRenderAttachments()
 
   // Populate From dropdown
   const fromSelect = document.getElementById('composeFrom')
@@ -3278,7 +3963,7 @@ window.openCompose = async function(mode, opts) {
   }
 
   // Title
-  const titleMap = { new: 'Nytt mejl', reply: 'Svara', replyAll: 'Svara alla', forward: 'Vidarebefordra' }
+  const titleMap = { new: 'Nytt mejl', reply: 'Svara', replyAll: 'Svara alla', forward: 'Vidarebefordra', 'edit-draft': 'Utkast' }
   const titleEl = document.getElementById('mailComposeTitle')
   if (titleEl) titleEl.textContent = titleMap[_composeState.mode] || 'Nytt mejl'
 
@@ -3292,7 +3977,12 @@ window.openCompose = async function(mode, opts) {
   if (cc)   cc.value = opts?.cc || ''
   if (bcc)  bcc.value = opts?.bcc || ''
   if (subj) subj.value = opts?.subject || ''
-  if (body) body.value = (opts?.body ?? '') + _signatureBlock(cfg)
+  // edit-draft restores the saved body as-is (signature is already in there
+  // from when the draft was first written). Other modes append the signature.
+  if (body) {
+    const base = opts?.body ?? ''
+    body.value = _composeState.mode === 'edit-draft' ? base : base + _signatureBlock(cfg)
+  }
 
   // Collapse Cc/Bcc unless prefilled
   document.getElementById('composeCcRow').style.display  = opts?.cc  ? '' : 'none'
@@ -3347,17 +4037,36 @@ window._composeSend = async function() {
   status.classList.remove('err')
   status.textContent = 'Skickar…'
 
+  const attachments = _composeState.attachments.length
+    ? _composeState.attachments.map(a => ({ path: a.path, filename: a.filename, contentType: a.contentType }))
+    : undefined
   const res = await SE.mail.send({
+    accountId: _mailState.accountId,
     from, to, cc: cc || undefined, bcc: bcc || undefined,
     subject: subj, text: body,
     inReplyTo:  _composeState.inReplyTo || undefined,
     references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
+    attachments,
   })
 
   _composeState.sending = false
   btn.disabled = false
   if (res && res.ok) {
-    toast('Mejl skickat', '#2ca87f')
+    // If we sent from a draft, delete the draft copy on the server now that
+    // the mail has left — fire and forget, we don't block the UX on it.
+    if (_composeState.draftUid) {
+      const draftUid = _composeState.draftUid
+      _composeState.draftUid = null
+      SE.mail.deleteDraft({ accountId: _mailState.accountId, uid: draftUid }).catch(() => {})
+    }
+    // If the APPEND-to-Sent fallback failed, surface it as a muted warning
+    // so the user knows to check their Sent folder. The mail itself reached
+    // the recipient — this is about local copy hygiene.
+    if (res.sent && res.sent.saved === false) {
+      toast('Mejl skickat (men ej sparat i Skickat-mappen)', '#e58a00')
+    } else {
+      toast('Mejl skickat', '#2ca87f')
+    }
     closeCompose()
     // Refresh inbox so "Skickat"-tråden kanske dyker upp nästa sync
     _mailLoadInbox()

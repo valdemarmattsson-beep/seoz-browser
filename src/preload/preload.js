@@ -71,6 +71,7 @@ contextBridge.exposeInMainWorld('seoz', {
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
     send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),
+    pickAttachments: ()    => ipcRenderer.invoke('mail:pick-attachments'),
   },
 
   // OS notifications

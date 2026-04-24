@@ -1068,6 +1068,46 @@ ipcMain.handle('mail:send', async (_evt, opts = {}) => {
   }
 })
 
+// File picker for compose-attach. Returns metadata only (no file contents) —
+// nodemailer reads the file from path at send-time so we avoid copying large
+// files through IPC. The MIME type is guessed from extension for the UI.
+ipcMain.handle('mail:pick-attachments', async () => {
+  const res = await dialog.showOpenDialog(win, {
+    title: 'Välj bilagor',
+    properties: ['openFile', 'multiSelections'],
+  })
+  if (res.canceled || !res.filePaths || !res.filePaths.length) return { ok: true, attachments: [] }
+  const fs = require('fs')
+  const path = require('path')
+  // Lightweight extension → MIME map. Anything not in the map falls back to
+  // application/octet-stream, which nodemailer accepts fine.
+  const MIME = {
+    pdf: 'application/pdf', png: 'image/png', jpg: 'image/jpeg', jpeg: 'image/jpeg',
+    gif: 'image/gif', webp: 'image/webp', svg: 'image/svg+xml',
+    txt: 'text/plain', csv: 'text/csv', json: 'application/json',
+    doc: 'application/msword',
+    docx: 'application/vnd.openxmlformats-officedocument.wordprocessingml.document',
+    xls: 'application/vnd.ms-excel',
+    xlsx: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+    ppt: 'application/vnd.ms-powerpoint',
+    pptx: 'application/vnd.openxmlformats-officedocument.presentationml.presentation',
+    zip: 'application/zip',
+    mp3: 'audio/mpeg', mp4: 'video/mp4', mov: 'video/quicktime',
+  }
+  const attachments = res.filePaths.map(p => {
+    let size = 0
+    try { size = fs.statSync(p).size } catch (_) {}
+    const ext = path.extname(p).toLowerCase().replace(/^\./, '')
+    return {
+      path: p,
+      filename: path.basename(p),
+      size,
+      contentType: MIME[ext] || 'application/octet-stream',
+    }
+  })
+  return { ok: true, attachments }
+})
+
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't
 // sit waiting for the idle timeout.
 app.on('before-quit', async () => { try { await mail.closeAll() } catch (_) {} })

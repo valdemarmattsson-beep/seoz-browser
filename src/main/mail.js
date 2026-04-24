@@ -295,6 +295,22 @@ async function sendMessage(cfg, opts) {
   })
   const fromAddr = (opts.from && opts.from.includes('@')) ? opts.from
     : `"${cfg.displayName || cfg.email}" <${cfg.email}>`
+
+  // Attachments: renderer sends [{ path, filename?, contentType? }]. We pass
+  // `path` through to nodemailer which reads the file at send-time (streamed,
+  // so a 20 MB PDF doesn't balloon memory). Filename defaults to basename.
+  let attachments
+  if (Array.isArray(opts.attachments) && opts.attachments.length) {
+    const path = require('path')
+    attachments = opts.attachments
+      .filter(a => a && a.path)
+      .map(a => ({
+        path: a.path,
+        filename: a.filename || path.basename(a.path),
+        ...(a.contentType ? { contentType: a.contentType } : {}),
+      }))
+  }
+
   const info = await transporter.sendMail({
     from: fromAddr,
     to: opts.to,
@@ -305,6 +321,7 @@ async function sendMessage(cfg, opts) {
     html: opts.html,
     inReplyTo: opts.inReplyTo,
     references: opts.references,
+    ...(attachments ? { attachments } : {}),
   })
   return { ok: true, messageId: info.messageId }
 }

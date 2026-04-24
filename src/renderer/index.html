@@ -454,9 +454,41 @@
   display:flex;align-items:center;justify-content:space-between;
   padding:12px 16px;border-top:1px solid var(--border);
   background:var(--panel);
+  gap:10px;
 }
-.mail-compose-status{font-size:10px;color:var(--muted);flex:1;margin-right:10px}
+.mail-compose-status{font-size:10px;color:var(--muted);flex:1;margin:0 10px}
 .mail-compose-status.err{color:var(--r)}
+.mail-compose-attach-btn{
+  width:32px;height:32px;border-radius:7px;border:1px solid var(--border);
+  background:transparent;color:var(--muted);cursor:pointer;flex-shrink:0;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s,border-color .12s;
+}
+.mail-compose-attach-btn:hover{background:var(--card);color:var(--p);border-color:var(--p)}
+.mail-compose-attach-btn svg{width:14px;height:14px}
+/* Chip-row above the textarea showing queued attachments */
+.mail-compose-att-row{
+  display:flex;flex-wrap:wrap;gap:6px;
+  padding:8px 0 0;
+}
+.mail-compose-att-row:empty{display:none}
+.mail-compose-att-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  max-width:260px;
+  height:26px;padding:0 6px 0 9px;border-radius:999px;
+  background:var(--card);border:1px solid var(--border);
+  font-size:11px;color:var(--txt);
+}
+.mail-compose-att-chip svg.mail-compose-att-chip-icon{width:11px;height:11px;color:var(--muted);flex-shrink:0}
+.mail-compose-att-chip-name{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex:1}
+.mail-compose-att-chip-size{color:var(--muted);font-variant-numeric:tabular-nums;flex-shrink:0}
+.mail-compose-att-chip-x{
+  width:18px;height:18px;border-radius:50%;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;flex-shrink:0;
+}
+.mail-compose-att-chip-x:hover{background:rgba(220,38,38,.12);color:var(--r)}
+.mail-compose-att-chip-x svg{width:10px;height:10px}
 .mail-compose-send{
   height:32px;padding:0 18px;border-radius:7px;border:none;
   background:var(--p);color:#fff;font-size:12px;font-weight:600;cursor:pointer;
@@ -1540,8 +1572,12 @@ input,textarea,select{user-select:text}
                   <input class="mail-field-input" id="composeSubject" type="text">
                 </div>
                 <textarea class="mail-compose-body-text" id="composeBody" placeholder="Skriv ditt meddelande…"></textarea>
+                <div class="mail-compose-att-row" id="composeAttRow"></div>
               </div>
               <div class="mail-compose-foot">
+                <button class="mail-compose-attach-btn" id="composeAttachBtn" type="button" onclick="_composeAttach()" title="Bifoga fil" aria-label="Bifoga fil">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
+                </button>
                 <span class="mail-compose-status" id="composeStatus"></span>
                 <button class="mail-compose-send" id="composeSendBtn" onclick="_composeSend()">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
@@ -3450,6 +3486,47 @@ const _composeState = {
   inReplyTo: null,      // Message-ID of message being replied to
   references: [],       // References chain
   sending: false,
+  attachments: [],      // [{ path, filename, size, contentType }]
+}
+
+// ── Compose attachments ────────────────────────────────────────────
+function _composeFormatBytes(n) {
+  if (!n && n !== 0) return ''
+  if (n < 1024) return n + ' B'
+  if (n < 1024 * 1024) return (n / 1024).toFixed(1) + ' KB'
+  return (n / (1024 * 1024)).toFixed(1) + ' MB'
+}
+
+function _composeRenderAttachments() {
+  const row = document.getElementById('composeAttRow')
+  if (!row) return
+  const paperclip = '<svg class="mail-compose-att-chip-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>'
+  const xIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+  row.innerHTML = _composeState.attachments.map((a, i) => `
+    <span class="mail-compose-att-chip" title="${esc(a.path || a.filename)}">
+      ${paperclip}
+      <span class="mail-compose-att-chip-name">${esc(a.filename || '')}</span>
+      <span class="mail-compose-att-chip-size">${_composeFormatBytes(a.size)}</span>
+      <button class="mail-compose-att-chip-x" type="button" onclick="_composeRemoveAttachment(${i})" aria-label="Ta bort bilaga">${xIcon}</button>
+    </span>
+  `).join('')
+}
+
+window._composeAttach = async function() {
+  const res = await SE.mail.pickAttachments()
+  if (!res || !res.ok) { if (res?.error) toast('Kunde inte välja bilaga: ' + res.error, '#dc2626'); return }
+  if (!res.attachments || !res.attachments.length) return
+  // Dedupe on path so picking the same file twice doesn't double-attach.
+  const existing = new Set(_composeState.attachments.map(a => a.path))
+  for (const a of res.attachments) {
+    if (!existing.has(a.path)) _composeState.attachments.push(a)
+  }
+  _composeRenderAttachments()
+}
+
+window._composeRemoveAttachment = function(idx) {
+  _composeState.attachments.splice(idx, 1)
+  _composeRenderAttachments()
 }
 
 function _composeFromOptions(cfg) {
@@ -3505,6 +3582,8 @@ window.openCompose = async function(mode, opts) {
   _composeState.inReplyTo = opts?.inReplyTo || null
   _composeState.references = opts?.references || []
   _composeState.sending = false
+  _composeState.attachments = []       // fresh compose → no attached files
+  _composeRenderAttachments()
 
   // Populate From dropdown
   const fromSelect = document.getElementById('composeFrom')
@@ -3584,12 +3663,16 @@ window._composeSend = async function() {
   status.classList.remove('err')
   status.textContent = 'Skickar…'
 
+  const attachments = _composeState.attachments.length
+    ? _composeState.attachments.map(a => ({ path: a.path, filename: a.filename, contentType: a.contentType }))
+    : undefined
   const res = await SE.mail.send({
     accountId: _mailState.accountId,
     from, to, cc: cc || undefined, bcc: bcc || undefined,
     subject: subj, text: body,
     inReplyTo:  _composeState.inReplyTo || undefined,
     references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
+    attachments,
   })
 
   _composeState.sending = false

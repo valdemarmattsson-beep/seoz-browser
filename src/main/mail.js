@@ -549,6 +549,7 @@ async function sendMessage(cfg, opts) {
     inReplyTo: opts.inReplyTo,
     references: opts.references,
     ...(attachments ? { attachments } : {}),
+    ...(opts.headers ? { headers: opts.headers } : {}),   // custom headers (Auto-Submitted etc.)
   }
 
   // Build the RFC822 source once so we can both (a) send it via SMTP and

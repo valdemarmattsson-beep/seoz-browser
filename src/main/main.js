@@ -868,23 +868,42 @@ function _mailResolveAccount(explicitId) {
   return first ? _mailHydrateAccount(first.id) : null
 }
 
+// Fields we accept on the account object. Kept in one place so add/update
+// can't drift (earlier, add quietly dropped fromAddresses + signature).
+const _MAIL_ACCOUNT_FIELDS = [
+  'email', 'displayName',
+  'imapHost', 'imapPort', 'imapSecure',
+  'smtpHost', 'smtpPort', 'smtpSecure',
+  'username',
+  'fromAddresses',        // array of alias addresses
+  'signature',             // plain-text signature
+  'avatarDataUrl',         // data-URL PNG (sender avatar, UI-only)
+  'autoReply',             // { enabled, subject, body }
+]
+
 function _mailAddAccount(cfg) {
   if (!cfg || !cfg.email) throw new Error('email required')
   const accounts = _mailListAccounts()
   const account = {
     id: crypto.randomBytes(8).toString('hex'),
-    email: cfg.email,
-    displayName: cfg.displayName || '',
-    imapHost: cfg.imapHost,
-    imapPort: Number(cfg.imapPort) || 993,
-    imapSecure: cfg.imapSecure !== false,
-    smtpHost: cfg.smtpHost,
-    smtpPort: Number(cfg.smtpPort) || 465,
-    smtpSecure: cfg.smtpSecure !== false,
-    username: cfg.username || null,
+    imapPort: 993,
+    imapSecure: true,
+    smtpPort: 465,
+    smtpSecure: true,
+    username: null,
+    fromAddresses: [],
+    signature: '',
+    avatarDataUrl: null,
+    autoReply: { enabled: false, subject: '', body: '' },
     passwordEnc: _encryptPassword(cfg.password),
     createdAt: new Date().toISOString(),
   }
+  for (const key of _MAIL_ACCOUNT_FIELDS) {
+    if (cfg[key] !== undefined) account[key] = cfg[key]
+  }
+  // Normalize a couple of ports in case the renderer sent them as strings.
+  account.imapPort = Number(account.imapPort) || 993
+  account.smtpPort = Number(account.smtpPort) || 465
   accounts.push(account)
   _mailSaveAccounts(accounts)
   if (!_mailGetActiveAccountId()) _mailSetActiveAccountId(account.id)
@@ -895,8 +914,7 @@ function _mailUpdateAccount(id, updates) {
   const accounts = _mailListAccounts()
   const idx = accounts.findIndex(a => a.id === id)
   if (idx === -1) throw new Error('account not found')
-  const allowed = ['email', 'displayName', 'imapHost', 'imapPort', 'imapSecure', 'smtpHost', 'smtpPort', 'smtpSecure', 'username']
-  for (const key of allowed) {
+  for (const key of _MAIL_ACCOUNT_FIELDS) {
     if (updates[key] !== undefined) accounts[idx][key] = updates[key]
   }
   if (updates.password) accounts[idx].passwordEnc = _encryptPassword(updates.password)
@@ -1214,7 +1232,108 @@ mail.events.on('mailbox', (payload) => {
   if (win && !win.isDestroyed() && win.webContents) {
     try { win.webContents.send('mail:event', payload) } catch (_) {}
   }
+  // Auto-responder: when an EXISTS event signals new mail on any account
+  // that has autoReply.enabled, fire a best-effort reply to the sender.
+  if (payload && payload.type === 'exists' && payload.count > (payload.prevCount || 0)) {
+    _mailHandleAutoReply(payload).catch(err => {
+      console.warn('[auto-reply]', err?.message || err)
+    })
+  }
 })
+
+// In-memory dedup so we don't spam the same sender or loop against another
+// auto-responder. Reset at app start (acceptable for v1 — serious dedup
+// would persist this across restarts).
+const _autoReplySentTo = new Map()   // accountId → Map<senderEmail, timestamp>
+const AUTO_REPLY_TTL_MS = 24 * 60 * 60 * 1000  // don't reply to the same sender more than once per day
+
+function _autoReplyRecentlySentTo(accountId, sender) {
+  const bucket = _autoReplySentTo.get(accountId)
+  if (!bucket) return false
+  const ts = bucket.get(sender)
+  return ts && (Date.now() - ts) < AUTO_REPLY_TTL_MS
+}
+function _autoReplyRemember(accountId, sender) {
+  let bucket = _autoReplySentTo.get(accountId)
+  if (!bucket) { bucket = new Map(); _autoReplySentTo.set(accountId, bucket) }
+  bucket.set(sender, Date.now())
+}
+
+// Heuristics to avoid replying to bulk/auto mail — these headers are the
+// standard signals used across RFC 3834 + common vendors.
+function _autoReplyShouldSkip(msg, selfAddresses) {
+  const from = (msg.from && msg.from[0]) || {}
+  const fromAddr = (from.address || '').toLowerCase()
+  if (!fromAddr) return true
+  if (selfAddresses.has(fromAddr)) return true  // don't reply to ourselves
+  // Skip common bounce / automation senders
+  if (/^(mailer-daemon|postmaster|no[-_.]?reply|noreply|do[-_.]?not[-_.]?reply|bounce|notifications?)@/i.test(fromAddr)) return true
+  // Skip if the subject looks like an auto-reply already (loop guard)
+  const subj = (msg.subject || '').toLowerCase()
+  if (/^(auto(matic)?[- ]?reply|out of office|frånvaro(meddelande)?|på semester)/i.test(subj)) return true
+  return false
+}
+
+async function _mailHandleAutoReply(payload) {
+  const account = _mailListAccounts().find(a => a.id === payload.accountId)
+  if (!account || !account.autoReply || !account.autoReply.enabled) return
+  // Only INBOX — replies in Sent/Drafts would be nonsense
+  const folder = payload.folder
+  if (folder && folder.toLowerCase() !== 'inbox' && folder !== 'INBOX') return
+
+  const cfg = _mailHydrateAccount(account.id)
+  if (!cfg || !cfg.password) return
+
+  // Fetch the newest messages so we can pick out what just arrived. Limit
+  // to the delta between prevCount and count; if prevCount is missing,
+  // fetch just the latest to avoid a storm on first connect.
+  const fetchCount = Math.max(1, Math.min(10, (payload.count || 1) - (payload.prevCount || payload.count - 1)))
+  let latest
+  try {
+    latest = await mail.listMessages(cfg, folder || 'INBOX', fetchCount)
+  } catch (_) { return }
+  if (!Array.isArray(latest) || !latest.length) return
+
+  const selfAddresses = new Set(
+    [account.email, ...(account.fromAddresses || [])]
+      .filter(Boolean)
+      .map(s => s.toLowerCase())
+  )
+
+  for (const msg of latest) {
+    if (_autoReplyShouldSkip(msg, selfAddresses)) continue
+    const sender = (msg.from?.[0]?.address || '').toLowerCase()
+    if (!sender) continue
+    if (_autoReplyRecentlySentTo(account.id, sender)) continue
+
+    // Build the reply. Use the configured subject or fall back to "Re: …".
+    const subject = account.autoReply.subject
+      ? account.autoReply.subject
+      : `Re: ${msg.subject || ''}`.trim()
+    const body = account.autoReply.body || ''
+    if (!body) continue  // empty body → don't send blank replies
+
+    try {
+      await mail.sendMessage(cfg, {
+        to: msg.from[0].address,
+        subject,
+        text: body,
+        inReplyTo: msg.messageId || undefined,
+        references: msg.messageId || undefined,
+        // Tag as an auto-reply so downstream servers can skip it (RFC 3834)
+        headers: {
+          'Auto-Submitted': 'auto-replied',
+          'X-Auto-Response-Suppress': 'All',
+          'Precedence': 'auto_reply',
+        },
+      })
+      _autoReplyRemember(account.id, sender)
+      console.log('[auto-reply] sent →', sender, 'from account', account.email)
+    } catch (err) {
+      console.warn('[auto-reply] send failed:', err?.message || err)
+    }
+  }
+}
 
 // Mail-unread badge. Renderer computes the count from loaded messages and
 // pushes it here along with a pre-rasterized PNG (rendered via Canvas in

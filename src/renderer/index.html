@@ -3131,7 +3131,42 @@ const _mailState = {
 // Derives the count from whatever messages are currently loaded in
 // _mailState. Only counts when the user is on an Inbox-kind folder so
 // browsing Sent/Drafts/Trash doesn't zero the badge misleadingly.
-function _mailUpdateBadge() {
+
+// Rasterize the numbered badge to a PNG Uint8Array. Electron's main
+// process can't decode SVG via nativeImage.createFromBuffer on Windows
+// (the format parser only accepts PNG/JPEG/GIF/BMP/ICO), so the
+// taskbar overlay never rendered. Drawing on a Canvas gets us a real
+// PNG blob that Windows' ITaskbarList3 will accept.
+async function _mailRenderBadgePng(count) {
+  if (!count) return null
+  const text = count > 99 ? '99+' : String(count)
+  // OffscreenCanvas works in renderer context without attaching to DOM.
+  const canvas = (typeof OffscreenCanvas !== 'undefined')
+    ? new OffscreenCanvas(32, 32)
+    : Object.assign(document.createElement('canvas'), { width: 32, height: 32 })
+  const ctx = canvas.getContext('2d')
+  // Red fill + white stroke circle — matches the sidebar badge styling.
+  ctx.fillStyle = '#dc2626'
+  ctx.beginPath()
+  ctx.arc(16, 16, 14, 0, 2 * Math.PI)
+  ctx.fill()
+  ctx.strokeStyle = '#ffffff'
+  ctx.lineWidth = 2
+  ctx.stroke()
+  // Count text — scale down when we need room for '99+' so it still fits.
+  ctx.fillStyle = '#ffffff'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'middle'
+  ctx.font = `700 ${text.length > 2 ? 11 : 15}px Arial, sans-serif`
+  ctx.fillText(text, 16, 17)
+  const blob = canvas.convertToBlob
+    ? await canvas.convertToBlob({ type: 'image/png' })
+    : await new Promise(res => canvas.toBlob(res, 'image/png'))
+  const ab = await blob.arrayBuffer()
+  return new Uint8Array(ab)
+}
+
+async function _mailUpdateBadge() {
   let count = 0
   const current = _mailState.folders.find(f => f.path === _mailState.folder)
   const countable = !current || current.kind === 'inbox'   // default folder is INBOX → countable
@@ -3147,8 +3182,13 @@ function _mailUpdateBadge() {
       badge.classList.remove('show')
     }
   }
-  // Mirror to OS — taskbar overlay on Windows, dock badge on macOS/Linux.
-  try { SE.setBadgeCount(count) } catch (_) {}
+  // Mirror to OS. We pass a pre-rasterized PNG so Windows can actually
+  // render the taskbar overlay; main falls back to app.setBadgeCount
+  // (macOS/Linux) regardless of whether the PNG is present.
+  try {
+    const png = await _mailRenderBadgePng(count)
+    SE.setBadgeCount(count, png)
+  } catch (_) {}
 }
 
 // ── Cache-backed list sync (Fas 5) ────────────────────────────────

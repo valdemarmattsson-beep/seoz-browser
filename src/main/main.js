@@ -1161,6 +1161,16 @@ ipcMain.handle('mail:pick-attachments', async () => {
   return { ok: true, attachments }
 })
 
+// Forward mailbox events from IMAP IDLE to the renderer. Events fire on
+// the currently-open mailbox for each account; the renderer filters by
+// accountId + folder so it only acts on events for what the user is
+// actively looking at.
+mail.events.on('mailbox', (payload) => {
+  if (win && !win.isDestroyed() && win.webContents) {
+    try { win.webContents.send('mail:event', payload) } catch (_) {}
+  }
+})
+
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't
 // sit waiting for the idle timeout.
 app.on('before-quit', async () => { try { await mail.closeAll() } catch (_) {} })

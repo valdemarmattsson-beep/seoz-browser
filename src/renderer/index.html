@@ -3086,6 +3086,53 @@ const _mailState = {
   searchDebounce: null,      // timer handle
 }
 
+// ── Live updates via IMAP IDLE (Fas 4.1) ──────────────────────────
+// Main forwards `mail:event` whenever IDLE surfaces EXISTS / EXPUNGE /
+// FLAGS on any account's currently-open mailbox. We reload the visible
+// list only when the event is for the account+folder the user is
+// actually looking at, so background accounts don't yank the UI around.
+SE.on('mail:event', (payload) => {
+  if (!payload || payload.accountId !== _mailState.accountId) return
+  if (payload.type === 'close') return   // socket closed — next _getClient will re-wire
+  // Events are scoped to whatever mailbox the pool's client has open; only
+  // react if that's also what the renderer is showing.
+  if (payload.folder && payload.folder !== _mailState.folder) return
+
+  if (payload.type === 'exists') {
+    // New mail! Reload unless the user is actively reading something —
+    // in that case, debounce a bit so we don't yank the reader out from
+    // under them on fast servers.
+    if (_mailState.searchQuery) return    // don't clobber active search
+    _mailLoadInbox()
+    // Tiny OS notification when it's the INBOX so the user knows without
+    // having to stare at the window.
+    const current = _mailState.folders.find(f => f.path === _mailState.folder)
+    if (current && current.kind === 'inbox' && (payload.prevCount == null || payload.count > payload.prevCount)) {
+      try { SE.notify('Nytt mejl', 'Du har fått ett nytt meddelande') } catch (_) {}
+    }
+  } else if (payload.type === 'flags') {
+    // Flag changes from another client (e.g. marked read on phone). Patch
+    // the local copy if we can see it — cheaper than a full refetch.
+    if (payload.uid != null) {
+      const m = _mailState.messages.find(x => x.uid === payload.uid)
+      if (m) {
+        m.unread = !payload.flags.includes('\\Seen')
+        m.flagged = payload.flags.includes('\\Flagged')
+        _renderInboxList()
+      }
+    }
+  } else if (payload.type === 'expunge') {
+    // A message was removed server-side; drop local copy and re-render.
+    if (payload.seq != null) {
+      const idx = payload.seq - 1
+      if (idx >= 0 && idx < _mailState.messages.length) {
+        _mailState.messages.splice(idx, 1)
+        _renderInboxList()
+      }
+    }
+  }
+})
+
 // ── Search (IMAP SEARCH via topbar input) ──────────────────────────
 window._mailOnSearchInput = function(e) {
   const val = (e && e.target ? e.target.value : '').trim()

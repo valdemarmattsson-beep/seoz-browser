@@ -31,6 +31,12 @@ const { simpleParser } = require('mailparser')
 const nodemailer = require('nodemailer')
 const MailComposer = require('nodemailer/lib/mail-composer')
 const sanitizeHtml = require('sanitize-html')
+const { EventEmitter } = require('events')
+
+// Mailbox-event stream — main.js subscribes and forwards the events to the
+// renderer over IPC. Event payloads are always `{ accountId, folder, ... }`
+// so the UI can ignore events for folders it's not looking at right now.
+const events = new EventEmitter()
 
 // sanitize-html allowlist for email bodies. Keeps presentation tags &
 // inline styles (emails rely on them) but strips anything active:
@@ -70,9 +76,38 @@ function _fingerprint(cfg) {
   return `${cfg.imapHost}:${cfg.imapPort || 993}:${cfg.username || cfg.email}`
 }
 
+function _wireClientEvents(slot, accountId) {
+  if (!slot.client || slot.eventsWired) return
+  // ImapFlow auto-enters IDLE on the currently-open mailbox when no other
+  // command is pending. These events fire during IDLE without us having to
+  // manage the IDLE loop explicitly.
+  slot.client.on('exists', (data) => {
+    // data = { path, count, prevCount } — new message(s) appeared.
+    events.emit('mailbox', { accountId, type: 'exists', folder: data.path, count: data.count, prevCount: data.prevCount })
+  })
+  slot.client.on('expunge', (data) => {
+    // data = { path, seq, vanished? } — a message was removed.
+    events.emit('mailbox', { accountId, type: 'expunge', folder: data.path, seq: data.seq })
+  })
+  slot.client.on('flags', (data) => {
+    // data = { path, uid?, seq, flags (Set), modseq } — flag changes on
+    // existing messages (e.g. marked read from another client).
+    events.emit('mailbox', {
+      accountId, type: 'flags', folder: data.path,
+      uid: data.uid || null, seq: data.seq || null,
+      flags: data.flags instanceof Set ? Array.from(data.flags) : (Array.isArray(data.flags) ? data.flags : []),
+    })
+  })
+  slot.client.on('close', () => {
+    events.emit('mailbox', { accountId, type: 'close' })
+    slot.eventsWired = false   // allow re-wire on next connection
+  })
+  slot.eventsWired = true
+}
+
 async function _getClient(cfg) {
   if (!cfg || !cfg.id) throw new Error('cfg.id required for pooled client')
-  const slot = _pool.get(cfg.id) || { client: null, lock: Promise.resolve(), cfgFingerprint: null }
+  const slot = _pool.get(cfg.id) || { client: null, lock: Promise.resolve(), cfgFingerprint: null, eventsWired: false }
   const prev = slot.lock
   let release
   slot.lock = new Promise(r => { release = r })
@@ -90,8 +125,10 @@ async function _getClient(cfg) {
       auth: { user: cfg.username || cfg.email, pass: cfg.password },
       logger: false,
     })
+    slot.eventsWired = false
     await slot.client.connect()
     slot.cfgFingerprint = fp
+    _wireClientEvents(slot, cfg.id)
     return slot.client
   } finally {
     release()
@@ -553,4 +590,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listFolders, listMessages, searchMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll }
+module.exports = { testConnection, listFolders, listMessages, searchMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll, events }

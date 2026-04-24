@@ -120,7 +120,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

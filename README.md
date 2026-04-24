@@ -48,7 +48,7 @@ seoz-browser/
 
 ## API-nyckel
 
-Hämta under **seoz.se → Inställningar → Integrationer → API**.
+Hämta under **seoz.io → Inställningar → Integrationer → API**.
 
 Format: `seoz_live_[32 hex chars]`
 

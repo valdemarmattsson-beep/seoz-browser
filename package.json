@@ -3,7 +3,7 @@
   "version": "1.4.26",
   "description": "SEOZ Desktop Browser",
   "main": "src/main/main.js",
-  "author": "SEOZ <hello@seoz.se>",
+  "author": "SEOZ <hello@seoz.io>",
   "license": "MIT",
   "scripts": {
     "start": "electron .",

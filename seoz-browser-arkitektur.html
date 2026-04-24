@@ -762,7 +762,7 @@ body {
           <div class="arch-node" onclick="highlightNode(this)">
             <span class="node-badge badge-exists">Finns</span>
             <div class="node-icon icon-blue">&#128187;</div>
-            <div class="node-title">seoz.se/api</div>
+            <div class="node-title">seoz.io/api</div>
             <div class="node-desc">Befintligt REST-API: klienter, keywords, tasks, snapshots, notifications.</div>
           </div>
           <div class="arch-node" onclick="highlightNode(this)">
@@ -916,7 +916,7 @@ body {
         <div class="step-num">5</div>
         <div class="step-content">
           <div class="step-title">POST till SEOZ-plattformen</div>
-          <div class="step-desc">Browsern postar till <code>seoz.se/api/insights</code> via befintliga <code>SeozApiClient</code>. Ingen lokal IPC-brygga behövs — API:t är redan kopplat.</div>
+          <div class="step-desc">Browsern postar till <code>seoz.io/api/insights</code> via befintliga <code>SeozApiClient</code>. Ingen lokal IPC-brygga behövs — API:t är redan kopplat.</div>
           <div class="step-tech">SeozApiClient.post('/api/insights', insightCard)</div>
         </div>
       </div>
@@ -959,7 +959,7 @@ body {
     <div style="margin-bottom: 20px;">
       <div class="layer-label">Kommunikationsarkitektur</div>
       <p style="color: var(--secondary-text); font-size: 0.8125rem; margin-bottom: 8px;">
-        Ingen lokal WebSocket-brygga behövs. Browsern har redan en HTTP-koppling till seoz.se/api. Nya endpoints + klientkontext i electron-store räcker.
+        Ingen lokal WebSocket-brygga behövs. Browsern har redan en HTTP-koppling till seoz.io/api. Nya endpoints + klientkontext i electron-store räcker.
       </p>
     </div>
 

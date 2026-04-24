@@ -2,7 +2,7 @@
 <html lang="sv" data-theme="dark">
 <head>
 <meta charset="UTF-8">
-<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.se https://seoz.se; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; media-src 'self' blob: data:">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.io https://seoz.io; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; media-src 'self' blob: data:">
 <title>SEOZ Browser</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -1195,7 +1195,7 @@ input,textarea,select{user-select:text}
       <div class="ac-msg ok"  id="authOk"><svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="20 6 9 17 4 12"/></svg><span>Anslutning lyckades!</span></div>
       <div class="ac-lbl">API-nyckel</div>
       <input class="ac-inp" id="apiKeyInput" type="password" placeholder="seoz_live_••••••••••••••••" onkeydown="if(event.key==='Enter')doConnect()">
-      <div class="ac-hint">Hittar du inte nyckeln? <a onclick="openApiKeyPage()">Skapa en på seoz.se →</a></div>
+      <div class="ac-hint">Hittar du inte nyckeln? <a onclick="openApiKeyPage()">Skapa en på seoz.io →</a></div>
       <button class="ac-btn" onclick="doConnect()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px"><path d="M5 12h14m-7-7 7 7-7 7"/></svg>
         Anslut konto
@@ -1250,7 +1250,7 @@ input,textarea,select{user-select:text}
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
         <div class="url-suggest" id="urlSuggest"></div>
       </div>
-      <button class="flow-btn" onclick="doNav('https://flow.seoz.se')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
+      <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
         <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering" aria-label="Innehållsblockering"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="blocker-badge" id="blockerBadge"></span></button>
         <div class="blocker-popup" id="blockerPopup">
@@ -4870,7 +4870,7 @@ function updateSyncUI() {
 }
 
 function openApiKeyPage() {
-  wv.loadURL('https://seoz.se/dashboard/verktyg/api')
+  wv.loadURL('https://seoz.io/dashboard/verktyg/api')
   document.getElementById('auth').classList.add('gone')
 }
 
@@ -5784,10 +5784,10 @@ function copyUrl() {
 //  THEME TOGGLE & SYNC
 // ══════════════════════════════════════════════════════
 
-/** Map SEOZ.se theme values to browser-supported themes */
+/** Map SEOZ.io theme values to browser-supported themes */
 function mapSeozTheme(seozTheme) {
   // Browser supports: 'dark', 'light'
-  // SEOZ.se has: 'dark', 'light', 'retro', 'neo', 'geocities'
+  // SEOZ.io has: 'dark', 'light', 'retro', 'neo', 'geocities'
   if (seozTheme === 'light') return 'light'
   return 'dark' // dark, retro, neo, geocities → dark
 }
@@ -6097,7 +6097,7 @@ function copyCreativeOutput() {
 }
 
 // ══════════════════════════════════════════════════════
-//  TASKS — synced with seoz.se backend
+//  TASKS — synced with seoz.io backend
 // ══════════════════════════════════════════════════════
 
 async function createTask() {
@@ -6905,7 +6905,7 @@ SEOZ-FUNKTIONER (lokala):
 - {"type":"screenshot"} — ta en screenshot av sidan
 - {"type":"scan_ads"} — skanna sidan för annonsnätverk
 
-SEOZ FLOW API (hämtar data från flow.seoz.se):
+SEOZ FLOW API (hämtar data från flow.seoz.io):
 - {"type":"flow_keywords"} — hämta sökord och GSC-data för aktiv klient
 - {"type":"flow_keywords","url":"..."} — hämta sökord för en specifik URL
 - {"type":"flow_site_audit"} — hämta SEO-analys från SEOZ backend (mer detaljerad än lokal)
@@ -7383,7 +7383,7 @@ async function _flowApiCall(path, params = {}) {
   const clientId = await SE.storeGet('activeClientId', '')
   if (clientId) params.clientId = clientId
 
-  const url = new URL('https://seoz.se/api' + path)
+  const url = new URL('https://seoz.io/api' + path)
   Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, v))
 
   const res = await fetch(url.toString(), {
@@ -7402,7 +7402,7 @@ async function _flowApiPost(path, body = {}) {
   const clientId = await SE.storeGet('activeClientId', '')
   if (clientId) body.clientId = clientId
 
-  const res = await fetch('https://seoz.se/api' + path, {
+  const res = await fetch('https://seoz.io/api' + path, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify(body)
@@ -7418,7 +7418,7 @@ async function _flowApiPatch(path, body = {}) {
   const apiKey = await SE.getApiKey()
   if (!apiKey) throw new Error('Ingen SEOZ API-nyckel konfigurerad')
 
-  const res = await fetch('https://seoz.se/api' + path, {
+  const res = await fetch('https://seoz.io/api' + path, {
     method: 'PATCH',
     headers: { 'Content-Type': 'application/json', 'Authorization': `Bearer ${apiKey}` },
     body: JSON.stringify(body)

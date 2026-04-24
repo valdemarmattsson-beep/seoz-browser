@@ -349,6 +349,14 @@
   flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt);
 }
 .mail-row-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Thread size badge — only shown on rows that represent a conversation */
+.mail-row-count{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:16px;padding:0 5px;border-radius:8px;
+  background:rgba(70,128,255,.15);color:var(--p);
+  font-size:10px;font-weight:600;flex-shrink:0;
+  font-variant-numeric:tabular-nums;
+}
 .mail-row-subject{
   font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   padding-left:12px;
@@ -3372,20 +3380,99 @@ function _renderInboxList() {
     pane.innerHTML = '<div class="mail-empty-note">Inboxen är tom.</div>'
     return
   }
-  pane.innerHTML = _mailState.messages.map(_inboxRowHtml).join('')
+  const threads = _buildThreads(_mailState.messages)
+  pane.innerHTML = threads.map(_threadRowHtml).join('')
 }
 
-function _inboxRowHtml(m) {
+// Union-find thread grouping. Messages share a thread when they reference
+// any common Message-ID (via In-Reply-To or References headers). Pure
+// client-side — no IMAP THREAD extension required, so it works on any
+// server. Orphan messages (no messageId / no refs) get their own group.
+function _buildThreads(messages) {
+  const parent = new Map()
+  const find = (x) => {
+    let root = x
+    while (parent.get(root) && parent.get(root) !== root) root = parent.get(root)
+    // Path compression
+    let cur = x
+    while (cur !== root) {
+      const next = parent.get(cur)
+      parent.set(cur, root)
+      cur = next
+    }
+    return root
+  }
+  const union = (a, b) => {
+    const ra = find(a), rb = find(b)
+    if (ra !== rb) parent.set(ra, rb)
+  }
+  // Seed: every messageId (and every reference we see) is its own group
+  for (const m of messages) {
+    if (m.messageId && !parent.has(m.messageId)) parent.set(m.messageId, m.messageId)
+    if (m.inReplyTo && !parent.has(m.inReplyTo)) parent.set(m.inReplyTo, m.inReplyTo)
+    for (const r of (m.references || [])) {
+      if (r && !parent.has(r)) parent.set(r, r)
+    }
+  }
+  // Union: a message is in same group as its inReplyTo + each reference
+  for (const m of messages) {
+    const id = m.messageId
+    if (!id) continue
+    if (m.inReplyTo) union(id, m.inReplyTo)
+    for (const r of (m.references || [])) if (r) union(id, r)
+  }
+  // Bucket messages by resolved root
+  const groups = new Map()
+  for (const m of messages) {
+    const key = m.messageId ? find(m.messageId) : `__orphan:${m.uid}`
+    if (!groups.has(key)) groups.set(key, [])
+    groups.get(key).push(m)
+  }
+  // Materialize: each thread's "display" message is the newest one;
+  // the thread inherits its slot in the list from that message's date.
+  const threads = []
+  for (const msgs of groups.values()) {
+    msgs.sort((a, b) => new Date(b.date) - new Date(a.date))
+    threads.push({
+      latest: msgs[0],
+      count: msgs.length,
+      hasUnread: msgs.some(m => m.unread),
+      messages: msgs,
+    })
+  }
+  threads.sort((a, b) => new Date(b.latest.date) - new Date(a.latest.date))
+  return threads
+}
+
+function _threadRowHtml(t) {
+  const m = t.latest
   const from = (m.from && m.from[0]) || { name: '', address: '' }
   const fromLabel = from.name || from.address || '(okänd)'
   const selected = m.uid === _mailState.selectedUid
+  const unread = t.hasUnread
+  // If multiple senders participated, show "Alice, Bob (+1)" style.
+  let senderLabel = fromLabel
+  if (t.count > 1) {
+    const uniqueNames = []
+    const seen = new Set()
+    for (const mm of t.messages) {
+      const f = (mm.from && mm.from[0]) || null
+      const n = f ? (f.name || f.address || '') : ''
+      if (n && !seen.has(n)) { seen.add(n); uniqueNames.push(n) }
+      if (uniqueNames.length >= 2) break
+    }
+    if (uniqueNames.length === 2) senderLabel = `${uniqueNames[0]}, ${uniqueNames[1]}`
+    else if (uniqueNames.length === 1) senderLabel = uniqueNames[0]
+  }
+  const countBadge = t.count > 1 ? `<span class="mail-row-count">${t.count}</span>` : ''
   return `
-    <div class="mail-row${m.unread ? ' unread' : ''}${selected ? ' selected' : ''}"
+    <div class="mail-row${unread ? ' unread' : ''}${selected ? ' selected' : ''}"
          onclick="_mailOpen(${m.uid})"
          data-uid="${m.uid}">
       <div class="mail-row-line1">
-        <span class="mail-row-dot" style="${m.unread ? '' : 'visibility:hidden'}"></span>
-        <span class="mail-row-from">${esc(fromLabel)}</span>
+        <span class="mail-row-dot" style="${unread ? '' : 'visibility:hidden'}"></span>
+        <span class="mail-row-from">${esc(senderLabel)}</span>
+        ${countBadge}
         <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
       </div>
       <div class="mail-row-subject">${esc(m.subject || '(utan ämne)')}</div>

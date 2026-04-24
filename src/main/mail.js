@@ -271,12 +271,21 @@ async function listMessages(cfg, folder = 'INBOX', limit = 50) {
     flags: true,
     internalDate: true,
     bodyStructure: true,
+    headers: ['references'],    // needed for client-side thread grouping
   })) {
     const env = msg.envelope || {}
     const flags = msg.flags instanceof Set ? Array.from(msg.flags) : (Array.isArray(msg.flags) ? msg.flags : [])
+    // Parse References header — it's a whitespace-separated list of
+    // <Message-ID> tokens. imapflow gives us the raw header block.
+    const refsRaw = msg.headers ? msg.headers.toString('utf-8') : ''
+    const references = []
+    const refMatch = refsRaw.match(/<[^<>\s]+>/g)
+    if (refMatch) for (const r of refMatch) references.push(r)
     out.push({
       uid: msg.uid,
       messageId: env.messageId || null,
+      inReplyTo: env.inReplyTo || null,
+      references,
       from: (env.from || []).map(a => ({ name: a.name, address: a.address })),
       to:   (env.to   || []).map(a => ({ name: a.name, address: a.address })),
       subject: env.subject || '',

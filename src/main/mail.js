@@ -252,6 +252,83 @@ async function listMessages(cfg, folder = 'INBOX', limit = 50) {
   return out.reverse()  // newest first
 }
 
+// Free-text / structured search across a folder. `query` is either a plain
+// string (matched against Subject + From + To + body) or an object with
+// any of: { from, to, subject, body, text, since, before, unseen }.
+// Returns the same shape as listMessages (envelope + flags), newest first.
+async function searchMessages(cfg, folder = 'INBOX', query, limit = 100) {
+  const client = await _getClient(cfg)
+  await client.mailboxOpen(folder)
+
+  // Build imapflow search criteria. ImapFlow accepts an object whose keys
+  // mirror the IMAP SEARCH keys; multiple keys are ANDed.
+  let criteria
+  if (!query || (typeof query === 'string' && !query.trim())) {
+    // Empty query → list latest N (same as listMessages, but through SEARCH
+    // so callers can keep a uniform flow). Use `all: true`.
+    criteria = { all: true }
+  } else if (typeof query === 'string') {
+    // Free-text: match ANY of subject/from/to/body via an OR construct.
+    // imapflow uses the `or` key with an array of sub-criteria.
+    const q = query.trim()
+    criteria = {
+      or: [
+        { subject: q },
+        { from: q },
+        { to: q },
+        { body: q },
+      ],
+    }
+  } else {
+    criteria = {}
+    if (query.from)    criteria.from    = query.from
+    if (query.to)      criteria.to      = query.to
+    if (query.subject) criteria.subject = query.subject
+    if (query.body)    criteria.body    = query.body
+    if (query.text)    criteria.body    = query.text  // alias
+    if (query.since)   criteria.since   = new Date(query.since)
+    if (query.before)  criteria.before  = new Date(query.before)
+    if (query.unseen)  criteria.unseen  = true
+  }
+
+  let uids
+  try {
+    uids = await client.search(criteria, { uid: true })
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+  if (!Array.isArray(uids) || !uids.length) return { ok: true, messages: [] }
+
+  // IMAP returns UIDs oldest-first; we want newest-first, and we cap to the
+  // limit to avoid pulling envelopes for potentially thousands of hits.
+  uids = uids.slice(-limit).reverse()
+  const range = uids.join(',')
+  const out = []
+  for await (const msg of client.fetch(range, {
+    envelope: true,
+    flags: true,
+    internalDate: true,
+    bodyStructure: true,
+  }, { uid: true })) {
+    const env = msg.envelope || {}
+    const flags = msg.flags instanceof Set ? Array.from(msg.flags) : (Array.isArray(msg.flags) ? msg.flags : [])
+    out.push({
+      uid: msg.uid,
+      messageId: env.messageId || null,
+      from: (env.from || []).map(a => ({ name: a.name, address: a.address })),
+      to:   (env.to   || []).map(a => ({ name: a.name, address: a.address })),
+      subject: env.subject || '',
+      date: (env.date || msg.internalDate || new Date()).toISOString(),
+      unread: !flags.includes('\\Seen'),
+      flagged: flags.includes('\\Flagged'),
+      hasAttachments: _bodyStructureHasAttachment(msg.bodyStructure),
+    })
+  }
+  // Preserve server's relevance order (newest first) — out may arrive in any order.
+  out.sort((a, b) => new Date(b.date) - new Date(a.date))
+  return { ok: true, messages: out }
+}
+
 async function getMessage(cfg, uid, folder = 'INBOX') {
   const client = await _getClient(cfg)
   await client.mailboxOpen(folder)
@@ -476,4 +553,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listFolders, listMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll }
+module.exports = { testConnection, listFolders, listMessages, searchMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll }

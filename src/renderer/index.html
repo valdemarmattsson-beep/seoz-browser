@@ -253,6 +253,29 @@
 .mail-folder-item-icon svg{width:13px;height:13px}
 .mail-folder-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mail-topbar-spacer{flex:1}
+/* Search box in mail topbar */
+.mail-search-wrap{
+  position:relative;display:flex;align-items:center;
+  height:28px;min-width:240px;max-width:360px;flex:0 1 320px;
+  background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  padding:0 8px;margin-right:8px;gap:6px;
+  transition:border-color .12s,background .12s;
+}
+.mail-search-wrap:focus-within{border-color:var(--p);background:var(--card)}
+.mail-search-wrap svg.mail-search-ico{width:12px;height:12px;color:var(--muted);flex-shrink:0}
+.mail-search-input{
+  flex:1;border:none;outline:none;background:transparent;
+  font:inherit;font-size:11px;color:var(--txt);
+}
+.mail-search-input::placeholder{color:var(--muted)}
+.mail-search-clear{
+  width:18px;height:18px;border-radius:50%;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .12s,color .12s;
+}
+.mail-search-clear:hover{background:var(--border);color:var(--txt)}
+.mail-search-clear svg{width:10px;height:10px}
+.mail-search-wrap.has-query .mail-search-clear{display:inline-flex}
 .mail-topbar-btn{
   height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);
   background:var(--panel);color:var(--txt);font-size:11px;font-weight:500;cursor:pointer;
@@ -1534,6 +1557,13 @@ input,textarea,select{user-select:text}
               </div>
             </div>
             <div class="mail-topbar-spacer"></div>
+            <div class="mail-search-wrap" id="mailSearchWrap" style="display:none">
+              <svg class="mail-search-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+              <input class="mail-search-input" id="mailSearchInput" type="search" placeholder="Sök i mejl…" autocomplete="off" oninput="_mailOnSearchInput(event)" onkeydown="if(event.key==='Escape')_mailClearSearch()">
+              <button class="mail-search-clear" id="mailSearchClear" type="button" onclick="_mailClearSearch()" aria-label="Rensa sökning">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+              </button>
+            </div>
             <button class="mail-topbar-btn" id="mailRefreshBtn" onclick="mailRefresh()" style="display:none" aria-label="Uppdatera">
               <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
               <span>Uppdatera</span>
@@ -3015,6 +3045,8 @@ async function renderMailScreen() {
   if (addr) addr.textContent = cfg ? cfg.email : ''
   if (acctBtn) acctBtn.style.display = cfg ? '' : 'none'
   if (folderBtn) folderBtn.style.display = cfg ? '' : 'none'
+  const searchWrap = document.getElementById('mailSearchWrap')
+  if (searchWrap) searchWrap.style.display = cfg ? '' : 'none'
   if (refreshBtn) refreshBtn.style.display = cfg ? '' : 'none'
   if (composeBtn) composeBtn.style.display = cfg ? '' : 'none'
   if (settingsBtn) settingsBtn.style.display = cfg ? '' : 'none'
@@ -3050,6 +3082,60 @@ const _mailState = {
   messages: [],
   selectedUid: null,
   loading: false,
+  searchQuery: '',           // active search query (empty = normal list)
+  searchDebounce: null,      // timer handle
+}
+
+// ── Search (IMAP SEARCH via topbar input) ──────────────────────────
+window._mailOnSearchInput = function(e) {
+  const val = (e && e.target ? e.target.value : '').trim()
+  const wrap = document.getElementById('mailSearchWrap')
+  if (wrap) wrap.classList.toggle('has-query', !!val)
+  clearTimeout(_mailState.searchDebounce)
+  if (!val) {
+    _mailState.searchQuery = ''
+    _mailLoadInbox()
+    return
+  }
+  // 300 ms debounce so each keystroke doesn't fire a server round-trip.
+  _mailState.searchDebounce = setTimeout(() => {
+    _mailState.searchQuery = val
+    _mailRunSearch()
+  }, 300)
+}
+
+window._mailClearSearch = function() {
+  const input = document.getElementById('mailSearchInput')
+  if (input) input.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
+  clearTimeout(_mailState.searchDebounce)
+  _mailState.searchQuery = ''
+  _mailLoadInbox()
+}
+
+async function _mailRunSearch() {
+  if (!_mailState.searchQuery) return _mailLoadInbox()
+  if (_mailState.loading) return
+  _mailState.loading = true
+  const pane = document.getElementById('mailInboxPane')
+  if (pane) pane.innerHTML = '<div class="mail-empty-note">Söker…</div>'
+  const res = await SE.mail.search({
+    accountId: _mailState.accountId,
+    folder: _mailState.folder,
+    query: _mailState.searchQuery,
+    limit: 100,
+  })
+  _mailState.loading = false
+  if (!res || !res.ok) {
+    if (pane) pane.innerHTML = `<div class="mail-empty-note" style="color:var(--r)">Sökning misslyckades: ${esc(res?.error || 'okänt')}</div>`
+    return
+  }
+  _mailState.messages = Array.isArray(res.messages) ? res.messages : []
+  if (!_mailState.messages.length) {
+    if (pane) pane.innerHTML = `<div class="mail-empty-note">Inga träffar för "${esc(_mailState.searchQuery)}"</div>`
+    return
+  }
+  _renderInboxList()
 }
 
 // ── Folder switcher (mail topbar dropdown) ─────────────────────────
@@ -3132,6 +3218,12 @@ window._mailSwitchFolder = async function(path) {
   _mailState.folder = path
   _mailState.messages = []
   _mailState.selectedUid = null
+  // Clear search when switching folders — a query scoped to the old folder
+  // is rarely what the user wants in the new one.
+  _mailState.searchQuery = ''
+  const searchInput = document.getElementById('mailSearchInput')
+  if (searchInput) searchInput.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
   // Clear reader pane — the selected message belongs to the old folder
   const reader = document.getElementById('mailReaderPane')
   if (reader) reader.innerHTML = '<div class="mail-empty-note">Välj ett mejl från inboxen för att läsa det här.</div>'
@@ -3195,6 +3287,10 @@ window._mailSwitchAccount = async function(id) {
   _mailState.folders = []          // drop cached folder tree from previous account
   _mailState.messages = []
   _mailState.selectedUid = null
+  _mailState.searchQuery = ''      // reset search when swapping identities
+  const searchInput = document.getElementById('mailSearchInput')
+  if (searchInput) searchInput.value = ''
+  document.getElementById('mailSearchWrap')?.classList.remove('has-query')
   await renderMailScreen()
 }
 
@@ -3508,6 +3604,8 @@ window._mailSaveConfig = async function() {
 
 window.mailRefresh = function() {
   // Keep the currently-selected message visible while the list reloads.
+  // If a search is active, re-run it instead of reloading the full inbox.
+  if (_mailState.searchQuery) return _mailRunSearch()
   _mailLoadInbox()
 }
 window.mailOpenSetup = function() {

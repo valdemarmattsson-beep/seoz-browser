@@ -68,6 +68,7 @@ contextBridge.exposeInMainWorld('seoz', {
     // Mail operations — opts may include { accountId } to override active account
     foldersList: (opts)    => ipcRenderer.invoke('mail:folders-list', opts || {}),
     list:       (opts)     => ipcRenderer.invoke('mail:list', opts || {}),
+    search:     (opts)     => ipcRenderer.invoke('mail:search', opts || {}),
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
     send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),

@@ -1037,6 +1037,16 @@ ipcMain.handle('mail:list', async (_evt, { accountId, folder, limit } = {}) => {
   }
 })
 
+ipcMain.handle('mail:search', async (_evt, { accountId, folder, query, limit } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  try {
+    return await mail.searchMessages(cfg, folder || 'INBOX', query, Number(limit) || 100)
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 ipcMain.handle('mail:get', async (_evt, { accountId, uid, folder } = {}) => {
   const cfg = _mailResolveAccount(accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }

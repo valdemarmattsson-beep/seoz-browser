@@ -11,6 +11,7 @@ const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHist
 const mail = require('./mail')
 const mailCache = require('./mail-cache')
 const mailScheduler = require('./mail-scheduler')
+const mailClassifier = require('./mail-classifier')
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
@@ -880,6 +881,7 @@ const _MAIL_ACCOUNT_FIELDS = [
   'signature',             // plain-text signature
   'avatarDataUrl',         // data-URL PNG (sender avatar, UI-only)
   'autoReply',             // { enabled, subject, body }
+  'pinnedFolders',         // array of folder paths the user pinned to the top of the switcher
 ]
 
 function _mailAddAccount(cfg) {
@@ -1517,6 +1519,59 @@ mail.events.on('mailbox', () => {
 ipcMain.handle('mail:unread-total', async () => {
   const res = await _computeUnifiedUnread()
   return { ok: true, ...res }
+})
+
+// ── Templates (quick replies) — per profile, shared across accounts ─
+// Lives in the profile store so switching browser profiles also swaps
+// the template library. Structure: [{ id, name, subject?, body }]
+ipcMain.handle('mail:templates-list', async () => {
+  return PM.profileGet('mailTemplates', [])
+})
+
+ipcMain.handle('mail:template-save', async (_evt, { id, name, subject, body } = {}) => {
+  if (!name || !body) return { ok: false, error: 'name + body required' }
+  const all = PM.profileGet('mailTemplates', [])
+  if (id) {
+    const idx = all.findIndex(t => t.id === id)
+    if (idx === -1) return { ok: false, error: 'template not found' }
+    all[idx] = { id, name, subject: subject || '', body }
+  } else {
+    all.push({
+      id: crypto.randomBytes(6).toString('hex'),
+      name, subject: subject || '', body,
+    })
+  }
+  PM.profileSet('mailTemplates', all)
+  return { ok: true }
+})
+
+ipcMain.handle('mail:template-delete', async (_evt, id) => {
+  const all = PM.profileGet('mailTemplates', []).filter(t => t.id !== id)
+  PM.profileSet('mailTemplates', all)
+  return { ok: true }
+})
+
+// ── AI Smart Inbox — classify messages via Claude ───────────────────
+// Renderer sends { items: [{ messageId, from, subject }] }. Response
+// splits into `cached` (already classified) + `classified` (freshly
+// done via Claude). The renderer can merge them into its local map.
+ipcMain.handle('mail:classify', async (_evt, { items } = {}) => {
+  if (!Array.isArray(items) || !items.length) return { ok: true, cached: {}, classified: {} }
+  const ids = items.map(i => i && i.messageId).filter(Boolean)
+  const cached = mailClassifier.getCached(ids)
+  const todo = items.filter(i => i && i.messageId && !cached[i.messageId])
+  if (!todo.length) return { ok: true, cached, classified: {} }
+  // Reuse the active profile's stored Anthropic key (same key the Claude
+  // panel uses). Renderer stashes it in the profile store under
+  // 'anthropicKey'.
+  const apiKey = PM.profileGet('anthropicKey', null)
+  if (!apiKey) return { ok: true, cached, classified: {}, reason: 'no-api-key' }
+  try {
+    const classified = await mailClassifier.classify(todo, apiKey)
+    return { ok: true, cached, classified }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err), cached, classified: {} }
+  }
 })
 
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't

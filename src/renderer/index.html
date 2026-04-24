@@ -260,6 +260,18 @@
 .mail-folder-item-icon{width:14px;flex-shrink:0;opacity:.85;display:inline-flex;align-items:center;justify-content:center}
 .mail-folder-item-icon svg{width:13px;height:13px}
 .mail-folder-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+/* Pin toggle inside each folder row — visible on hover or when pinned. */
+.mail-folder-item-pin{
+  width:20px;height:20px;border-radius:4px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;
+  flex-shrink:0;transition:color .12s,background .12s;padding:0;
+}
+.mail-folder-item:hover .mail-folder-item-pin,
+.mail-folder-item-pin.pinned{display:inline-flex}
+.mail-folder-item-pin.pinned{color:#f59e0b}
+.mail-folder-item-pin:hover{background:var(--card);color:#f59e0b}
+.mail-folder-item-pin svg{width:12px;height:12px}
+.mail-folder-divider{height:1px;background:var(--border);margin:4px 6px}
 .mail-topbar-spacer{flex:1}
 /* Search box in mail topbar */
 .mail-search-wrap{
@@ -467,6 +479,20 @@
   font-size:10px;font-weight:600;flex-shrink:0;
   font-variant-numeric:tabular-nums;
 }
+/* AI category chip — small colored pill in front of the subject. */
+.mail-row-cat{
+  display:inline-flex;align-items:center;height:15px;padding:0 6px;
+  border-radius:3px;font-size:9px;font-weight:700;
+  text-transform:uppercase;letter-spacing:.04em;
+  margin-right:6px;flex-shrink:0;vertical-align:1px;
+}
+.mail-row-cat.personlig{background:rgba(44,168,127,.15);color:#2ca87f}
+.mail-row-cat.arbete{background:rgba(70,128,255,.15);color:var(--p)}
+.mail-row-cat.notifiering{background:rgba(245,158,11,.15);color:#f59e0b}
+.mail-row-cat.nyhetsbrev{background:rgba(139,92,246,.15);color:#a78bfa}
+.mail-row-cat.reklam{background:rgba(148,163,184,.18);color:#94a3b8}
+.mail-row-cat.social{background:rgba(6,182,212,.15);color:#06b6d4}
+.mail-row-cat.transaktion{background:rgba(217,70,239,.15);color:#d946ef}
 .mail-row-subject{
   font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   padding-left:12px;
@@ -618,6 +644,33 @@
   transition:background .12s,color .12s,border-color .12s;
 }
 .mail-compose-attach-btn:hover{background:var(--card);color:var(--p);border-color:var(--p)}
+.mail-compose-attach-btn.active{background:var(--p);color:#fff;border-color:var(--p)}
+/* Templates menu — pops ABOVE the compose footer since that's where the
+   button lives. */
+.mail-compose-tpl-wrap{position:relative;display:inline-flex}
+.mail-compose-tpl-menu{
+  position:absolute;bottom:calc(100% + 6px);left:0;
+  min-width:260px;max-width:360px;max-height:50vh;overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);padding:4px;z-index:200;
+  display:none;
+}
+.mail-compose-tpl-menu.show{display:block}
+.mail-compose-tpl-item{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  padding:8px 10px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--txt);
+}
+.mail-compose-tpl-item:hover{background:var(--panel)}
+.mail-compose-tpl-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:500}
+.mail-compose-tpl-item-del{
+  width:20px;height:20px;border-radius:4px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;
+  flex-shrink:0;
+}
+.mail-compose-tpl-item:hover .mail-compose-tpl-item-del{display:inline-flex}
+.mail-compose-tpl-item-del:hover{background:rgba(220,38,38,.15);color:var(--r)}
+.mail-compose-tpl-item-del svg{width:11px;height:11px}
+.mail-compose-tpl-item.mail-compose-tpl-add{color:var(--p);font-weight:600;border-top:1px solid var(--border);margin-top:2px}
 .mail-compose-attach-btn svg{width:14px;height:14px}
 /* Chip-row above the textarea showing queued attachments */
 .mail-compose-att-row{
@@ -1767,6 +1820,15 @@ input,textarea,select{user-select:text}
                 <div class="mail-compose-att-row" id="composeAttRow"></div>
               </div>
               <div class="mail-compose-foot">
+                <button class="mail-compose-attach-btn" id="composeMdBtn" type="button" onclick="_composeToggleMarkdown()" title="Markdown på/av — **fet**, *kursiv*, [länk](url), - lista" aria-label="Markdown">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="5" width="20" height="14" rx="2"/><polyline points="7 15 7 10 9 12 11 10 11 15"/><polyline points="14 10 14 15 17 15 17 10 15 12 14 10"/></svg>
+                </button>
+                <div class="mail-compose-tpl-wrap">
+                  <button class="mail-compose-attach-btn" id="composeTplBtn" type="button" onclick="_composeToggleTplMenu()" title="Mallar" aria-label="Mallar">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/><line x1="9" y1="13" x2="15" y2="13"/><line x1="9" y1="17" x2="15" y2="17"/></svg>
+                  </button>
+                  <div class="mail-compose-tpl-menu" id="composeTplMenu"></div>
+                </div>
                 <button class="mail-compose-attach-btn" id="composeAttachBtn" type="button" onclick="_composeAttach()" title="Bifoga fil" aria-label="Bifoga fil">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m21.44 11.05-9.19 9.19a6 6 0 0 1-8.49-8.49l9.19-9.19a4 4 0 0 1 5.66 5.66l-9.2 9.19a2 2 0 0 1-2.83-2.83l8.49-8.48"/></svg>
                 </button>
@@ -3311,6 +3373,35 @@ async function _mailUpdateBadge() {
   } catch (_) {}
 }
 
+// ── AI Smart Inbox classifier ───────────────────────────────────
+// messageId → category string. Populated by calling SE.mail.classify
+// whenever new messages show up. The backend handles caching so we
+// only pay tokens for messages we've never seen before.
+const _mailClassifications = {}
+
+async function _mailRunClassifier() {
+  if (!_mailState.messages.length) return
+  const items = _mailState.messages
+    .filter(m => m.messageId && !_mailClassifications[m.messageId])
+    .map(m => ({
+      messageId: m.messageId,
+      from: (m.from?.[0]?.address || ''),
+      subject: m.subject || '',
+    }))
+  if (!items.length) {
+    // Still populate from cache so previously-classified rows get chips
+    // right away without a network round-trip.
+    const res = await SE.mail.classify({ items: _mailState.messages.map(m => ({ messageId: m.messageId, from: '', subject: '' })) })
+    if (res?.cached) Object.assign(_mailClassifications, res.cached)
+    _renderInboxList()
+    return
+  }
+  const res = await SE.mail.classify({ items })
+  if (!res || !res.ok) return
+  Object.assign(_mailClassifications, res.cached || {}, res.classified || {})
+  _renderInboxList()
+}
+
 // Main pushes a cross-account unread total after polling STATUS on each
 // account's INBOX. Use it as the authoritative count for the badges so
 // background accounts contribute too.
@@ -3483,16 +3574,47 @@ function _mailRenderFolderMenu() {
     menu.innerHTML = '<div class="mail-folder-item" style="color:var(--muted);cursor:default">Laddar…</div>'
     return
   }
-  menu.innerHTML = _mailState.folders.map(f => {
+  const activeAcct = _mailState.accounts.find(a => a.id === _mailState.accountId)
+  const pinnedSet = new Set(activeAcct?.pinnedFolders || [])
+  const pinIconFilled = '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2l3 7 7 .5-5.5 4.5L18 22l-6-3-6 3 1.5-8L2 9.5 9 9z"/></svg>'
+  const pinIconOutline = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M9 10V4h6v6l3 3H6z"/></svg>'
+  const renderItem = f => {
     const active = f.path === _mailState.folder
     const icon = _FOLDER_KIND_ICON[f.kind] || _FOLDER_KIND_ICON.custom
+    const pinned = pinnedSet.has(f.path)
     return `
       <div class="mail-folder-item${active ? ' active' : ''}" onclick="_mailSwitchFolder('${esc(f.path).replace(/'/g, "\\'")}')">
         <span class="mail-folder-item-icon">${icon}</span>
         <span class="mail-folder-item-name">${esc(_mailFolderDisplay(f))}</span>
+        <button class="mail-folder-item-pin${pinned ? ' pinned' : ''}" type="button"
+                onclick="event.stopPropagation();_mailToggleFolderPin('${esc(f.path).replace(/'/g, "\\'")}', ${!pinned})"
+                aria-label="${pinned ? 'Ta bort från favoriter' : 'Fäst som favorit'}">${pinned ? pinIconFilled : pinIconOutline}</button>
       </div>
     `
-  }).join('')
+  }
+  // Pinned first (in pin-order), then the rest in their natural order.
+  const pinned = Array.from(pinnedSet)
+    .map(p => _mailState.folders.find(f => f.path === p))
+    .filter(Boolean)
+  const rest = _mailState.folders.filter(f => !pinnedSet.has(f.path))
+  const hasPinned = pinned.length > 0
+  menu.innerHTML =
+    (hasPinned ? pinned.map(renderItem).join('') + '<div class="mail-folder-divider"></div>' : '')
+    + rest.map(renderItem).join('')
+}
+
+window._mailToggleFolderPin = async function(path, next) {
+  const accountId = _mailState.accountId
+  const acct = _mailState.accounts.find(a => a.id === accountId)
+  if (!acct) return
+  const current = new Set(acct.pinnedFolders || [])
+  if (next) current.add(path); else current.delete(path)
+  const arr = Array.from(current)
+  acct.pinnedFolders = arr    // optimistic
+  _mailRenderFolderMenu()
+  try {
+    await SE.mail.accountUpdate(accountId, { pinnedFolders: arr })
+  } catch (_) { toast('Kunde inte spara', '#dc2626') }
 }
 
 function _mailUpdateFolderBtn() {
@@ -3626,6 +3748,9 @@ async function _mailLoadInbox(opts) {
   }
   _mailState.messages = Array.isArray(res.messages) ? res.messages : []
   _renderInboxList()
+  // Kick off AI classification in the background — any new messageIds
+  // get a category chip once Claude responds (or instantly from cache).
+  _mailRunClassifier().catch(() => {})
 }
 
 function _renderInboxList() {
@@ -3724,6 +3849,9 @@ function _threadRowHtml(t) {
     else if (uniqueNames.length === 1) senderLabel = uniqueNames[0]
   }
   const countBadge = t.count > 1 ? `<span class="mail-row-count">${t.count}</span>` : ''
+  const cat = _mailClassifications[m.messageId]
+  const catLabels = { personlig: 'Privat', arbete: 'Jobb', notifiering: 'Notis', nyhetsbrev: 'Nyhetsbrev', reklam: 'Reklam', social: 'Social', transaktion: 'Kvitto' }
+  const catChip = cat ? `<span class="mail-row-cat ${esc(cat)}" title="AI-kategori: ${esc(cat)}">${esc(catLabels[cat] || cat)}</span>` : ''
   const starred = t.messages.some(mm => mm.flagged)
   const starIcon = starred
     ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
@@ -3741,7 +3869,7 @@ function _threadRowHtml(t) {
                 aria-label="${starred ? 'Ta bort stjärna' : 'Stjärnmärk'}">${starIcon}</button>
         <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
       </div>
-      <div class="mail-row-subject">${esc(m.subject || '(utan ämne)')}</div>
+      <div class="mail-row-subject">${catChip}${esc(m.subject || '(utan ämne)')}</div>
       <div class="mail-row-actions" onclick="event.stopPropagation()">
         <button class="mail-row-action snooze" type="button" title="Snooze"
                 onclick="_mailSnoozeRow(${m.uid})" aria-label="Snooze">
@@ -4283,6 +4411,7 @@ const _composeState = {
   saving: false,        // currently saving draft
   draftUid: null,       // uid of the live draft on server (null until first save)
   attachments: [],      // [{ path, filename, size, contentType }]
+  markdown: false,      // render body as Markdown → HTML on send
 }
 
 // ── Compose attachments ────────────────────────────────────────────
@@ -4323,6 +4452,144 @@ window._composeAttach = async function() {
 window._composeRemoveAttachment = function(idx) {
   _composeState.attachments.splice(idx, 1)
   _composeRenderAttachments()
+}
+
+// ── Markdown → HTML (mini parser) ──────────────────────────────────
+// Supports the subset that actually matters for email bodies: bold,
+// italic, inline code, links, # headings, - bullet lists, > quotes,
+// horizontal rules, paragraphs. We avoid pulling in a full MD lib
+// because this runs in-renderer and the subset covers 95% of use cases.
+function _mdToHtml(src) {
+  const escHtml = s => s.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+  const lines = src.split(/\r?\n/)
+  let out = [], inUl = false, inQuote = false
+  const close = () => {
+    if (inUl) { out.push('</ul>'); inUl = false }
+    if (inQuote) { out.push('</blockquote>'); inQuote = false }
+  }
+  const inline = s => {
+    let t = escHtml(s)
+    // Links [text](url)
+    t = t.replace(/\[([^\]]+)\]\((https?:\/\/[^\s)]+)\)/g, '<a href="$2" target="_blank" rel="noopener noreferrer">$1</a>')
+    // Bold **text**
+    t = t.replace(/\*\*([^*\n]+)\*\*/g, '<strong>$1</strong>')
+    // Italic *text*
+    t = t.replace(/(^|[^*])\*([^*\n]+)\*(?!\*)/g, '$1<em>$2</em>')
+    // Inline code `text`
+    t = t.replace(/`([^`\n]+)`/g, '<code style="background:#f3f4f6;color:#111;padding:1px 5px;border-radius:3px;font-family:monospace;font-size:12px">$1</code>')
+    // Autolink bare URLs
+    t = t.replace(/(^|[^"'>=])(https?:\/\/[^\s<]+)/g, '$1<a href="$2" target="_blank" rel="noopener noreferrer">$2</a>')
+    return t
+  }
+  for (const raw of lines) {
+    const line = raw.replace(/\s+$/, '')
+    if (!line.trim()) { close(); continue }
+    if (/^-{3,}$/.test(line.trim())) { close(); out.push('<hr>'); continue }
+    const h = line.match(/^(#{1,6})\s+(.*)$/)
+    if (h) { close(); out.push(`<h${h[1].length}>${inline(h[2])}</h${h[1].length}>`); continue }
+    const q = line.match(/^>\s?(.*)$/)
+    if (q) {
+      if (inUl) { out.push('</ul>'); inUl = false }
+      if (!inQuote) { out.push('<blockquote style="border-left:3px solid #cbd5e1;margin:0;padding:4px 12px;color:#475569">'); inQuote = true }
+      out.push(`<p style="margin:2px 0">${inline(q[1])}</p>`)
+      continue
+    }
+    const li = line.match(/^\s*[-*]\s+(.*)$/)
+    if (li) {
+      if (inQuote) { out.push('</blockquote>'); inQuote = false }
+      if (!inUl) { out.push('<ul style="margin:8px 0;padding-left:22px">'); inUl = true }
+      out.push(`<li>${inline(li[1])}</li>`)
+      continue
+    }
+    close()
+    out.push(`<p style="margin:8px 0">${inline(line)}</p>`)
+  }
+  close()
+  return out.join('\n')
+}
+
+window._composeToggleMarkdown = function() {
+  _composeState.markdown = !_composeState.markdown
+  const btn = document.getElementById('composeMdBtn')
+  if (btn) btn.classList.toggle('active', _composeState.markdown)
+  toast(_composeState.markdown ? 'Markdown på' : 'Markdown av', '#4680ff')
+}
+
+// ── Templates / quick replies ────────────────────────────────────
+async function _composeRenderTplMenu() {
+  const menu = document.getElementById('composeTplMenu')
+  if (!menu) return
+  const tpls = (await SE.mail.templatesList()) || []
+  const xIcon = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>'
+  const items = tpls.map(t => `
+    <div class="mail-compose-tpl-item" onclick="_composeInsertTpl('${esc(t.id)}')">
+      <span class="mail-compose-tpl-item-name">${esc(t.name)}</span>
+      <button class="mail-compose-tpl-item-del" type="button" onclick="event.stopPropagation();_composeDeleteTpl('${esc(t.id)}')" aria-label="Ta bort">${xIcon}</button>
+    </div>
+  `).join('')
+  menu.innerHTML = items + `
+    <div class="mail-compose-tpl-item mail-compose-tpl-add" onclick="_composeSaveAsTpl()">
+      + Spara aktuell text som mall
+    </div>
+  `
+}
+
+window._composeToggleTplMenu = async function() {
+  const menu = document.getElementById('composeTplMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) await _composeRenderTplMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+// Close template menu on outside click
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('composeTplMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('composeTplBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
+
+window._composeInsertTpl = async function(id) {
+  document.getElementById('composeTplMenu')?.classList.remove('show')
+  const tpls = (await SE.mail.templatesList()) || []
+  const t = tpls.find(x => x.id === id)
+  if (!t) return
+  // If subject field is empty and template has one, fill it. Otherwise
+  // leave whatever the user already typed.
+  if (t.subject) {
+    const subj = document.getElementById('composeSubject')
+    if (subj && !subj.value.trim()) subj.value = t.subject
+  }
+  // Insert body at the cursor position in the textarea so templates can
+  // be mixed with existing draft text.
+  const ta = document.getElementById('composeBody')
+  if (!ta) return
+  const start = ta.selectionStart, end = ta.selectionEnd
+  ta.value = ta.value.slice(0, start) + t.body + ta.value.slice(end)
+  const pos = start + t.body.length
+  ta.setSelectionRange(pos, pos)
+  ta.focus()
+}
+
+window._composeSaveAsTpl = async function() {
+  document.getElementById('composeTplMenu')?.classList.remove('show')
+  const subj = document.getElementById('composeSubject')?.value || ''
+  const body = document.getElementById('composeBody')?.value || ''
+  if (!body.trim()) { toast('Inget att spara — skriv något först', '#e58a00'); return }
+  const name = prompt('Namn på mallen:', '')
+  if (!name || !name.trim()) return
+  const res = await SE.mail.templateSave({ name: name.trim(), subject: subj, body })
+  if (res && res.ok) toast('Mall sparad: ' + name, '#2ca87f')
+  else toast('Kunde inte spara mall', '#dc2626')
+}
+
+window._composeDeleteTpl = async function(id) {
+  if (!confirm('Ta bort mallen?')) return
+  await SE.mail.templateDelete(id)
+  _composeRenderTplMenu()   // refresh list in menu (if still open)
 }
 
 // Schedule-send picker. Offers a handful of presets + a manual datetime
@@ -4581,10 +4848,14 @@ window._composeSend = async function() {
   const attachments = _composeState.attachments.length
     ? _composeState.attachments.map(a => ({ path: a.path, filename: a.filename, contentType: a.contentType }))
     : undefined
+  // Markdown mode: keep the plain-text body too so clients without HTML
+  // support (and archival grep) still see readable content; mail clients
+  // prefer the HTML alternative via multipart/alternative.
+  const html = _composeState.markdown ? _mdToHtml(body) : undefined
   const res = await SE.mail.send({
     accountId: _mailState.accountId,
     from, to, cc: cc || undefined, bcc: bcc || undefined,
-    subject: subj, text: body,
+    subject: subj, text: body, html,
     inReplyTo:  _composeState.inReplyTo || undefined,
     references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
     attachments,

@@ -370,10 +370,22 @@
   color:var(--muted);margin-bottom:8px;
 }
 .mail-att-row{
-  display:flex;align-items:center;gap:8px;padding:6px 10px;border-radius:6px;
+  display:flex;align-items:center;gap:8px;padding:8px 10px;border-radius:6px;
   font-size:11px;color:var(--txt);background:var(--panel);margin-bottom:4px;
+  cursor:pointer;border:1px solid transparent;
+  transition:background .12s,border-color .12s;
 }
-.mail-att-row svg{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+.mail-att-row:hover{background:var(--card);border-color:var(--p)}
+.mail-att-row svg.mail-att-row-ico{width:14px;height:14px;color:var(--muted);flex-shrink:0}
+.mail-att-row-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.mail-att-row-size{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums;flex-shrink:0}
+.mail-att-row-dl{
+  width:24px;height:24px;border-radius:4px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:inline-flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:color .12s,background .12s;
+}
+.mail-att-row-dl:hover{color:var(--p);background:rgba(70,128,255,.12)}
+.mail-att-row-dl svg{width:13px;height:13px}
 
 /* Reply / reply-all / forward buttons under the message header */
 .mail-reply-row{
@@ -3254,6 +3266,19 @@ function _formatMailDate(iso) {
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })
 }
 
+window._mailDownloadAttachment = async function(uid, index, filename) {
+  const res = await SE.mail.downloadAttachment({
+    accountId: _mailState.accountId,
+    uid, index,
+    folder: _mailState.folder,
+    suggestedName: filename,
+  })
+  if (!res) { toast('Nedladdning misslyckades', '#dc2626'); return }
+  if (res.cancelled) return
+  if (!res.ok) { toast('Nedladdning misslyckades: ' + (res.error || ''), '#dc2626'); return }
+  toast('Bilaga sparad', '#2ca87f')
+}
+
 window._mailOpen = async function(uid) {
   _mailState.selectedUid = uid
   _renderInboxList()  // refresh to mark selected row
@@ -3298,12 +3323,19 @@ function _renderReader(msg) {
   const attHtml = atts.length ? `
     <div class="mail-attachments">
       <div class="mail-attachments-title">Bilagor (${atts.length})</div>
-      ${atts.map(a => `
-        <div class="mail-att-row" title="${esc(a.contentType || '')}">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
-          <span style="flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(a.filename || 'bilaga')}</span>
-          <span style="color:var(--muted);font-size:10px">${((a.size || 0) / 1024).toFixed(0)} KB</span>
-        </div>`).join('')}
+      ${atts.map((a, i) => {
+        const idx = a.index != null ? a.index : i
+        const name = esc(a.filename || 'bilaga')
+        return `
+        <div class="mail-att-row" title="${esc(a.contentType || '')}" onclick="_mailDownloadAttachment(${msg.uid}, ${idx}, '${name.replace(/'/g, "\\'")}')">
+          <svg class="mail-att-row-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          <span class="mail-att-row-name">${name}</span>
+          <span class="mail-att-row-size">${_composeFormatBytes(a.size || 0)}</span>
+          <button class="mail-att-row-dl" type="button" onclick="event.stopPropagation();_mailDownloadAttachment(${msg.uid}, ${idx}, '${name.replace(/'/g, "\\'")}')" aria-label="Ladda ner">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+          </button>
+        </div>`
+      }).join('')}
     </div>
   ` : ''
   reader.innerHTML = `

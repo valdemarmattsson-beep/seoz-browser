@@ -269,11 +269,34 @@ async function getMessage(cfg, uid, folder = 'INBOX') {
     date: (parsed.date || new Date()).toISOString(),
     text: parsed.text || '',
     html: parsed.html ? sanitizeHtml(parsed.html, SANITIZE_OPTS) : null,
-    attachments: (parsed.attachments || []).map(a => ({
+    attachments: (parsed.attachments || []).map((a, i) => ({
+      index: i,
       filename: a.filename || 'bilaga',
       contentType: a.contentType,
       size: a.size,
+      contentId: a.contentId || null,
     })),
+  }
+}
+
+// Re-fetch a message, re-parse, and return a single attachment's raw bytes.
+// We go back to the server instead of caching parsed.attachments in memory
+// because attachments can be many-MB and the read flow is infrequent —
+// worth the extra round-trip to keep getMessage responses small over IPC.
+async function getAttachment(cfg, uid, index, folder = 'INBOX') {
+  const client = await _getClient(cfg)
+  await client.mailboxOpen(folder)
+  const msg = await client.fetchOne(uid, { source: true }, { uid: true })
+  if (!msg) throw new Error('Meddelandet finns inte längre')
+  const parsed = await simpleParser(msg.source)
+  const atts = parsed.attachments || []
+  const att = atts[index]
+  if (!att) throw new Error('Bilaga finns inte')
+  return {
+    filename: att.filename || 'bilaga',
+    contentType: att.contentType || 'application/octet-stream',
+    size: att.size || (att.content ? att.content.length : 0),
+    content: att.content,   // Buffer
   }
 }
 
@@ -334,4 +357,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listFolders, listMessages, getMessage, setFlag, sendMessage, closeAccount, closeAll }
+module.exports = { testConnection, listFolders, listMessages, getMessage, getAttachment, setFlag, sendMessage, closeAccount, closeAll }

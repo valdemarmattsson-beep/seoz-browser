@@ -1068,6 +1068,28 @@ ipcMain.handle('mail:send', async (_evt, opts = {}) => {
   }
 })
 
+// Download a single attachment from a message. Opens a Save dialog and
+// writes the file to the user-chosen path. Returns { ok, path } or
+// { ok:true, cancelled:true } if the user cancelled the dialog.
+ipcMain.handle('mail:download-attachment', async (_evt, { accountId, uid, index, folder, suggestedName } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  if (uid == null || index == null) return { ok: false, error: 'uid + index required' }
+  try {
+    const att = await mail.getAttachment(cfg, uid, Number(index), folder || 'INBOX')
+    const res = await dialog.showSaveDialog(win, {
+      title: 'Spara bilaga',
+      defaultPath: suggestedName || att.filename || 'bilaga',
+    })
+    if (res.canceled || !res.filePath) return { ok: true, cancelled: true }
+    const fs = require('fs')
+    await fs.promises.writeFile(res.filePath, att.content)
+    return { ok: true, path: res.filePath }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 // File picker for compose-attach. Returns metadata only (no file contents) —
 // nodemailer reads the file from path at send-time so we avoid copying large
 // files through IPC. The MIME type is guessed from extension for the UI.

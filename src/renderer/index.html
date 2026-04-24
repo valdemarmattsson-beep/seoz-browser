@@ -562,6 +562,7 @@ input,textarea,select{user-select:text}
   background:var(--card);border-bottom:1px solid var(--border);
   display:flex;flex-direction:column;
   -webkit-app-region:drag;
+  position:relative;  /* anchors the always-available .chrome-drag-strip */
 }
 
 /* Tab bar */
@@ -629,8 +630,18 @@ input,textarea,select{user-select:text}
 /* Flex-spacer between last tab and window controls — this is the main
    drag handle for the whole window (Chrome-style). The parent .tabbar is
    no-drag (so HTML5 tab-reorder events fire on children), which causes
-   this child to inherit no-drag too — override it back to drag here. */
-.tsp{flex:1;min-width:8px;-webkit-app-region:drag}
+   this child to inherit no-drag too — override it back to drag here.
+   min-width is generous (60px) so even when many tabs are open the user
+   still has a clearly-grabbable strip. */
+.tsp{flex:1;min-width:60px;-webkit-app-region:drag}
+/* Always-available drag strip above the tab bar. Renders as a transparent
+   4 px sliver across the full chrome width — invisible but always on top
+   of any interactive element, so the user can grab-and-drag the window
+   regardless of tab density or where .tsp ended up shrinking. */
+.chrome-drag-strip{
+  position:absolute;top:0;left:0;right:0;height:4px;z-index:50;
+  -webkit-app-region:drag;pointer-events:auto;
+}
 /* Window controls — SEOZ OS chrome spec: circular, 0.5px border, Lucide icons,
    semantic hover tint (min=warn, max=live, close=danger). */
 .wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center;align-self:center;gap:10px;padding-left:16px;margin:0 16px}
@@ -1348,6 +1359,10 @@ input,textarea,select{user-select:text}
 <div id="app">
   <!-- CHROME -->
   <div class="chrome">
+    <!-- Always-grabbable drag strip above the tab bar (4 px). Guarantees
+         the window can be dragged even when every pixel of the tab bar
+         below is occupied by tabs or interactive controls. -->
+    <div class="chrome-drag-strip"></div>
     <!-- Tab bar -->
     <div class="tabbar" id="tabbar">
       <div id="newtabBtn" class="newtab" onclick="newTab()">+</div>

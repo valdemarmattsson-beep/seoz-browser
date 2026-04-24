@@ -9,6 +9,7 @@ const Store = require('electron-store')
 const { autoUpdater } = require('electron-updater')
 const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch } = require('./mcp-server')
 const mail = require('./mail')
+const mailCache = require('./mail-cache')
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
@@ -906,6 +907,7 @@ async function _mailDeleteAccount(id) {
   const remaining = _mailListAccounts().filter(a => a.id !== id)
   _mailSaveAccounts(remaining)
   try { await mail.closeAccount(id) } catch (_) {}
+  try { mailCache.clearAccount(id) } catch (_) {}
   let nextActiveId = _mailGetActiveAccountId()
   if (nextActiveId === id) {
     nextActiveId = remaining[0]?.id || null
@@ -1026,15 +1028,48 @@ ipcMain.handle('mail:folders-list', async (_evt, { accountId } = {}) => {
   }
 })
 
-ipcMain.handle('mail:list', async (_evt, { accountId, folder, limit } = {}) => {
+ipcMain.handle('mail:list', async (_evt, { accountId, folder, limit, force } = {}) => {
   const cfg = _mailResolveAccount(accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
-  try {
-    const messages = await mail.listMessages(cfg, folder || 'INBOX', Number(limit) || 50)
-    return { ok: true, messages }
-  } catch (err) {
-    return { ok: false, error: err.message || String(err) }
+  const fld = folder || 'INBOX'
+  const lim = Number(limit) || 50
+
+  // Cache-first: return the cached snapshot immediately so the user sees
+  // the list without waiting for the network, then fetch in the
+  // background and emit a 'list-updated' event when the freshly-fetched
+  // set differs. `force: true` bypasses the cache path for the common
+  // "user hit Refresh" case where they specifically want the server's
+  // current truth regardless of what we cached.
+  let cached = null
+  if (!force) cached = mailCache.getList(cfg.id, fld)
+
+  // Kick off the network fetch. We always run it (even on cache hit) so
+  // the cache stays fresh — on cache miss we await it; on cache hit we
+  // return cache and the event handler below catches up the UI later.
+  const fetchP = (async () => {
+    try {
+      const messages = await mail.listMessages(cfg, fld, lim)
+      const prev = cached ? cached.messages : null
+      mailCache.setList(cfg.id, fld, messages)
+      // Only emit an update event when the visible contents actually
+      // changed — otherwise the renderer would flicker on every fetch.
+      if (!mailCache.listsEqual(prev, messages)) {
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('mail:list-updated', { accountId: cfg.id, folder: fld, messages })
+        }
+      }
+      return { ok: true, messages, source: 'network' }
+    } catch (err) {
+      return { ok: false, error: err.message || String(err) }
+    }
+  })()
+
+  if (cached) {
+    // Don't leak unhandled rejection from the background fetch.
+    fetchP.catch(() => {})
+    return { ok: true, messages: cached.messages, source: 'cache', cachedAt: cached.cachedAt }
   }
+  return await fetchP
 })
 
 ipcMain.handle('mail:search', async (_evt, { accountId, folder, query, limit } = {}) => {
@@ -1047,12 +1082,22 @@ ipcMain.handle('mail:search', async (_evt, { accountId, folder, query, limit } =
   }
 })
 
-ipcMain.handle('mail:get', async (_evt, { accountId, uid, folder } = {}) => {
+ipcMain.handle('mail:get', async (_evt, { accountId, uid, folder, force } = {}) => {
   const cfg = _mailResolveAccount(accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  const fld = folder || 'INBOX'
+
+  // Body cache is immutable for a given (uid, UIDVALIDITY) tuple per the
+  // IMAP spec, so we can serve it without a background refetch. Only
+  // `force: true` (e.g. user hit Refresh on the reader) rebuilds it.
+  if (!force && uid != null) {
+    const hit = mailCache.getBody(cfg.id, fld, uid)
+    if (hit && hit.message) return { ok: true, message: hit.message, source: 'cache' }
+  }
   try {
-    const message = await mail.getMessage(cfg, uid, folder || 'INBOX')
-    return { ok: true, message }
+    const message = await mail.getMessage(cfg, uid, fld)
+    if (message && uid != null) mailCache.setBody(cfg.id, fld, uid, message)
+    return { ok: true, message, source: 'network' }
   } catch (err) {
     return { ok: false, error: err.message || String(err) }
   }

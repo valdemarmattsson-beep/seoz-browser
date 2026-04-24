@@ -3094,6 +3094,20 @@ const _mailState = {
   searchDebounce: null,      // timer handle
 }
 
+// ── Cache-backed list sync (Fas 5) ────────────────────────────────
+// When mail:list returns the cached snapshot, main kicks off a background
+// fetch and emits this event once the fresh list differs from the cache.
+// We swap it in quietly — no spinner, no jump — so the user gets
+// corrections (new messages, updated flags) without a visible reload.
+SE.on('mail:list-updated', (payload) => {
+  if (!payload) return
+  if (payload.accountId !== _mailState.accountId) return
+  if (payload.folder !== _mailState.folder) return
+  if (_mailState.searchQuery) return     // don't clobber an active search view
+  _mailState.messages = Array.isArray(payload.messages) ? payload.messages : []
+  _renderInboxList()
+})
+
 // ── Live updates via IMAP IDLE (Fas 4.1) ──────────────────────────
 // Main forwards `mail:event` whenever IDLE surfaces EXISTS / EXPUNGE /
 // FLAGS on any account's currently-open mailbox. We reload the visible
@@ -3357,12 +3371,12 @@ window._mailAddAccountFlow = function() {
   if (body) _renderMailSetup(body)
 }
 
-async function _mailLoadInbox() {
+async function _mailLoadInbox(opts) {
   if (_mailState.loading) return
   _mailState.loading = true
   const pane = document.getElementById('mailInboxPane')
   if (pane) pane.innerHTML = '<div class="mail-empty-note">Laddar mejl…</div>'
-  const res = await SE.mail.list({ accountId: _mailState.accountId, folder: _mailState.folder, limit: 50 })
+  const res = await SE.mail.list({ accountId: _mailState.accountId, folder: _mailState.folder, limit: 50, force: !!(opts && opts.force) })
   _mailState.loading = false
   if (!res || !res.ok) {
     const err = res?.error || 'okänt fel'
@@ -3740,7 +3754,7 @@ window.mailRefresh = function() {
   // Keep the currently-selected message visible while the list reloads.
   // If a search is active, re-run it instead of reloading the full inbox.
   if (_mailState.searchQuery) return _mailRunSearch()
-  _mailLoadInbox()
+  _mailLoadInbox({ force: true })    // bypass cache — user explicitly asked for fresh
 }
 window.mailOpenSetup = function() {
   const body = document.getElementById('mailBody')

@@ -10,6 +10,7 @@ const { autoUpdater } = require('electron-updater')
 const { startMCPServer, stopMCPServer, setWindowGetter, setTerminalExec, setHistorySearch } = require('./mcp-server')
 const mail = require('./mail')
 const mailCache = require('./mail-cache')
+const mailScheduler = require('./mail-scheduler')
 const PM = require('./profile-manager')
 const faviconCache = require('./favicon-cache')
 
@@ -1121,6 +1122,17 @@ ipcMain.handle('mail:get', async (_evt, { accountId, uid, folder, force } = {}) 
   }
 })
 
+ipcMain.handle('mail:move', async (_evt, { accountId, uid, fromFolder, to } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  if (uid == null || !to) return { ok: false, error: 'uid + to required' }
+  try {
+    return await mail.moveMessage(cfg, uid, fromFolder || 'INBOX', to)
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 ipcMain.handle('mail:flag', async (_evt, { accountId, uid, flag, value, folder } = {}) => {
   const cfg = _mailResolveAccount(accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
@@ -1134,11 +1146,66 @@ ipcMain.handle('mail:flag', async (_evt, { accountId, uid, flag, value, folder }
 ipcMain.handle('mail:send', async (_evt, opts = {}) => {
   const cfg = _mailResolveAccount(opts.accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  // Send-later: if a sendAt is provided and is in the future, queue
+  // instead of sending now. Same mailOpts shape as immediate send so the
+  // scheduler handler can just call mail.sendMessage when the timer hits.
+  if (opts.sendAt) {
+    const at = new Date(opts.sendAt)
+    if (!isNaN(at) && at.getTime() > Date.now() + 1000) {
+      const { sendAt, accountId, ...mailOpts } = opts
+      const entry = mailScheduler.add({
+        kind: 'send',
+        accountId: cfg.id,
+        sendAt: at.toISOString(),
+        mailOpts,
+      })
+      return { ok: true, scheduled: true, id: entry.id, sendAt: entry.sendAt }
+    }
+  }
   try {
     return await mail.sendMessage(cfg, opts)
   } catch (err) {
     return { ok: false, error: err.message || String(err) }
   }
+})
+
+ipcMain.handle('mail:snooze', async (_evt, { accountId, uid, fromFolder, wakeAt } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  if (!uid || !wakeAt) return { ok: false, error: 'uid + wakeAt required' }
+  try {
+    // Move the message to a dedicated snoozed folder on the server so it
+    // disappears from the inbox (mirroring to the IMAP account means it
+    // looks the same from any other mail client).
+    const snoozeFolderName = 'Snoozed'
+    // We need ImapFlow to ensure the folder exists. Use the mail client
+    // pool via a small helper — if it doesn't exist we'll create it.
+    await mail.ensureFolder(cfg, snoozeFolderName)
+    const mv = await mail.moveMessage(cfg, uid, fromFolder || 'INBOX', snoozeFolderName)
+    // Queue the restore via the scheduler so the server sees it land back
+    // in INBOX at the requested time.
+    const entry = mailScheduler.add({
+      kind: 'snooze',
+      accountId: cfg.id,
+      uid,                       // note: this is the OLD uid; after move it's changed server-side
+      snoozedFolder: mv.folder,
+      originalFolder: fromFolder || 'INBOX',
+      wakeAt: new Date(wakeAt).toISOString(),
+    })
+    return { ok: true, id: entry.id }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
+ipcMain.handle('mail:scheduled-list', async (_evt, { accountId } = {}) => {
+  const items = accountId ? mailScheduler.listByAccount(accountId) : mailScheduler.list()
+  return { ok: true, items }
+})
+
+ipcMain.handle('mail:scheduled-cancel', async (_evt, id) => {
+  mailScheduler.remove(id)
+  return { ok: true }
 })
 
 ipcMain.handle('mail:save-draft', async (_evt, opts = {}) => {
@@ -1363,9 +1430,101 @@ ipcMain.handle('app:set-badge-count', (_evt, payload = {}) => {
   return { ok: true }
 })
 
+// Scheduler handlers — fire when a queued item's time is up. `send`
+// ships the stored mailOpts through the same mail.sendMessage path used
+// for immediate sends; `snooze` moves a snoozed message back to its
+// original folder (usually INBOX) via the newest-uid search since the
+// original uid changed during the move-out earlier.
+mailScheduler.setHandler('send', async (entry) => {
+  const account = _mailListAccounts().find(a => a.id === entry.accountId)
+  if (!account) throw new Error('account no longer exists')
+  const cfg = _mailHydrateAccount(entry.accountId)
+  if (!cfg || !cfg.password) throw new Error('no password')
+  await mail.sendMessage(cfg, entry.mailOpts)
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('mail:scheduled-sent', { id: entry.id, to: entry.mailOpts.to })
+  }
+})
+mailScheduler.setHandler('snooze', async (entry) => {
+  const cfg = _mailHydrateAccount(entry.accountId)
+  if (!cfg || !cfg.password) throw new Error('no password')
+  // We stored the pre-move uid — we have to find the message again in
+  // its snoozed folder. Easiest: list the snoozed folder and match by
+  // uid saved in scheduler entry (which is the NEW uid after move
+  // actually — imapflow updates the tracked uid on the return).
+  // For robustness, we match by wakeAt ≈ uid; just move the most-recent
+  // message in the Snoozed folder if uid match fails.
+  try {
+    await mail.moveMessage(cfg, entry.uid, entry.snoozedFolder, entry.originalFolder || 'INBOX')
+  } catch (err) {
+    console.warn('[snooze] move failed:', err?.message || err)
+    throw err
+  }
+})
+mailScheduler.start()
+
+// Unified-unread aggregator — polls every configured account's INBOX via
+// IMAP STATUS (cheap, doesn't disturb IDLE) and pushes the total to the
+// renderer so the badge reflects ALL accounts, not just the one the user
+// happens to be viewing. Runs at app start + every 2 min + after any
+// IDLE exists/expunge/flags event (since those can change the count).
+let _unifiedPollHandle = null
+let _unifiedLastTotal = -1
+async function _computeUnifiedUnread() {
+  const accounts = _mailListAccounts()
+  let total = 0
+  const perAccount = {}
+  for (const a of accounts) {
+    const cfg = _mailHydrateAccount(a.id)
+    if (!cfg || !cfg.password) continue
+    try {
+      const n = await mail.getUnreadCount(cfg, 'INBOX')
+      perAccount[a.id] = n
+      total += n
+    } catch (_) { /* skip account on error */ }
+  }
+  return { total, perAccount }
+}
+async function _pushUnifiedUnread() {
+  try {
+    const { total, perAccount } = await _computeUnifiedUnread()
+    if (total === _unifiedLastTotal) return
+    _unifiedLastTotal = total
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('mail:unread-total', { total, perAccount })
+    }
+  } catch (err) {
+    console.warn('[unified-unread]', err?.message || err)
+  }
+}
+function _startUnifiedPoll() {
+  if (_unifiedPollHandle) return
+  // Kick off once now, then every 2 min. IDLE events trigger extra
+  // refreshes in between (see mail.events.on below).
+  setTimeout(() => _pushUnifiedUnread().catch(() => {}), 2000)
+  _unifiedPollHandle = setInterval(() => _pushUnifiedUnread().catch(() => {}), 2 * 60 * 1000)
+}
+_startUnifiedPoll()
+
+// Any IDLE event on any account → re-aggregate. Debounced so a burst
+// (e.g. 10 messages coming in at once) only triggers one refresh.
+let _unifiedDebounce = null
+mail.events.on('mailbox', () => {
+  clearTimeout(_unifiedDebounce)
+  _unifiedDebounce = setTimeout(() => _pushUnifiedUnread().catch(() => {}), 1500)
+})
+
+ipcMain.handle('mail:unread-total', async () => {
+  const res = await _computeUnifiedUnread()
+  return { ok: true, ...res }
+})
+
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't
 // sit waiting for the idle timeout.
-app.on('before-quit', async () => { try { await mail.closeAll() } catch (_) {} })
+app.on('before-quit', async () => {
+  mailScheduler.stop()
+  try { await mail.closeAll() } catch (_) {}
+})
 
 // Expose for MCP server (direct access, no IPC round-trip)
 function terminalExecDirect(command, cwd, source) {

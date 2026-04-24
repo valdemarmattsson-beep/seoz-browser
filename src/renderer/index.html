@@ -424,6 +424,41 @@
   flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt);
 }
 .mail-row-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+/* Star/Pin toggle on each row. Hidden until row-hover or active. */
+.mail-row-star{
+  width:18px;height:18px;border:none;background:transparent;cursor:pointer;
+  color:var(--muted);opacity:0;transition:opacity .15s,color .15s;
+  display:inline-flex;align-items:center;justify-content:center;padding:0;
+  flex-shrink:0;
+}
+.mail-row-star svg{width:13px;height:13px}
+.mail-row:hover .mail-row-star,
+.mail-row-star.starred{opacity:1}
+.mail-row-star.starred{color:#f59e0b}
+.mail-row-star:hover{color:#f59e0b}
+/* Hover-action buttons shown on the right side of each row, Gmail/Spark
+   style. Snooze / Archive / Delete — appear on row-hover, click handles
+   the action. Row click still opens the message (action buttons
+   stopPropagation). */
+.mail-row-actions{
+  position:absolute;right:8px;top:50%;transform:translateY(-50%);
+  display:none;gap:2px;align-items:center;
+  background:var(--card);padding:2px;border-radius:6px;
+  box-shadow:0 2px 6px rgba(0,0,0,.3);
+}
+.mail-row:hover .mail-row-actions{display:flex}
+.mail-row-action{
+  width:24px;height:24px;border:none;background:transparent;
+  border-radius:4px;cursor:pointer;color:var(--muted);
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;padding:0;
+}
+.mail-row-action svg{width:13px;height:13px}
+.mail-row-action:hover{background:var(--panel);color:var(--txt)}
+.mail-row-action.danger:hover{background:rgba(220,38,38,.15);color:var(--r)}
+.mail-row-action.archive:hover{background:rgba(44,168,127,.15);color:var(--g)}
+.mail-row-action.snooze:hover{background:rgba(139,92,246,.15);color:#a78bfa}
+.mail-row{position:relative}
 /* Thread size badge — only shown on rows that represent a conversation */
 .mail-row-count{
   display:inline-flex;align-items:center;justify-content:center;
@@ -1739,6 +1774,9 @@ input,textarea,select{user-select:text}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 </button>
                 <span class="mail-compose-status" id="composeStatus"></span>
+                <button class="mail-compose-attach-btn" type="button" id="composeScheduleBtn" title="Schemalägg" aria-label="Skicka senare" onclick="_composeScheduleSend()">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                </button>
                 <button class="mail-compose-send" id="composeSendBtn" onclick="_composeSend()">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   <span>Skicka</span>
@@ -3241,12 +3279,22 @@ async function _mailRenderBadgePng(count) {
   return new Uint8Array(ab)
 }
 
+// Counts come from TWO sources:
+//   • _unifiedUnreadTotal — pushed by main, sums every account's INBOX
+//     (authoritative, works even when a different folder is open)
+//   • _mailState.messages fallback — used only until the first unified
+//     total arrives, so the badge isn't empty on cold start.
+let _unifiedUnreadTotal = null
 async function _mailUpdateBadge() {
-  let count = 0
-  const current = _mailState.folders.find(f => f.path === _mailState.folder)
-  const countable = !current || current.kind === 'inbox'   // default folder is INBOX → countable
-  if (countable) {
-    for (const m of _mailState.messages) if (m.unread) count++
+  let count = _unifiedUnreadTotal
+  if (count == null) {
+    // Fallback: count from what we can see locally.
+    count = 0
+    const current = _mailState.folders.find(f => f.path === _mailState.folder)
+    const countable = !current || current.kind === 'inbox'
+    if (countable) {
+      for (const m of _mailState.messages) if (m.unread) count++
+    }
   }
   const badge = document.getElementById('di-mail-badge')
   if (badge) {
@@ -3257,14 +3305,27 @@ async function _mailUpdateBadge() {
       badge.classList.remove('show')
     }
   }
-  // Mirror to OS. We pass a pre-rasterized PNG so Windows can actually
-  // render the taskbar overlay; main falls back to app.setBadgeCount
-  // (macOS/Linux) regardless of whether the PNG is present.
   try {
     const png = await _mailRenderBadgePng(count)
     SE.setBadgeCount(count, png)
   } catch (_) {}
 }
+
+// Main pushes a cross-account unread total after polling STATUS on each
+// account's INBOX. Use it as the authoritative count for the badges so
+// background accounts contribute too.
+SE.on('mail:unread-total', (payload) => {
+  if (!payload || typeof payload.total !== 'number') return
+  _unifiedUnreadTotal = payload.total
+  _mailUpdateBadge()
+})
+
+// When a scheduled send fires, surface a tiny toast so the user knows
+// the later-queued mail actually went out.
+SE.on('mail:scheduled-sent', (payload) => {
+  if (!payload) return
+  toast('Schemalagt mejl skickat till ' + (payload.to || ''), '#2ca87f')
+})
 
 // ── Cache-backed list sync (Fas 5) ────────────────────────────────
 // When mail:list returns the cached snapshot, main kicks off a background
@@ -3663,6 +3724,10 @@ function _threadRowHtml(t) {
     else if (uniqueNames.length === 1) senderLabel = uniqueNames[0]
   }
   const countBadge = t.count > 1 ? `<span class="mail-row-count">${t.count}</span>` : ''
+  const starred = t.messages.some(mm => mm.flagged)
+  const starIcon = starred
+    ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
+    : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
   return `
     <div class="mail-row${unread ? ' unread' : ''}${selected ? ' selected' : ''}"
          onclick="_mailOpen(${m.uid})"
@@ -3671,9 +3736,26 @@ function _threadRowHtml(t) {
         <span class="mail-row-dot" style="${unread ? '' : 'visibility:hidden'}"></span>
         <span class="mail-row-from">${esc(senderLabel)}</span>
         ${countBadge}
+        <button class="mail-row-star${starred ? ' starred' : ''}" type="button"
+                onclick="event.stopPropagation();_mailToggleStar(${m.uid}, ${!starred})"
+                aria-label="${starred ? 'Ta bort stjärna' : 'Stjärnmärk'}">${starIcon}</button>
         <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
       </div>
       <div class="mail-row-subject">${esc(m.subject || '(utan ämne)')}</div>
+      <div class="mail-row-actions" onclick="event.stopPropagation()">
+        <button class="mail-row-action snooze" type="button" title="Snooze"
+                onclick="_mailSnoozeRow(${m.uid})" aria-label="Snooze">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+        </button>
+        <button class="mail-row-action archive" type="button" title="Arkivera"
+                onclick="_mailArchiveRow(${m.uid})" aria-label="Arkivera">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>
+        </button>
+        <button class="mail-row-action danger" type="button" title="Ta bort"
+                onclick="_mailTrashRow(${m.uid})" aria-label="Ta bort">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>
+        </button>
+      </div>
     </div>
   `
 }
@@ -3695,6 +3777,73 @@ function _formatMailDate(iso) {
     return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short' })
   }
   return d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })
+}
+
+// Remove a message from the local list + fire the server action. Shared
+// helper because archive / trash / snooze all do the same optimistic
+// update: drop the row immediately, call backend, rollback on failure.
+async function _mailOptimisticRemove(uid, action, errorLabel) {
+  const idx = _mailState.messages.findIndex(x => x.uid === uid)
+  if (idx === -1) return
+  const [removed] = _mailState.messages.splice(idx, 1)
+  _renderInboxList()
+  try {
+    const res = await action()
+    if (!res || !res.ok) throw new Error(res?.error || 'okänt fel')
+  } catch (err) {
+    // Re-insert at original position and surface the error.
+    _mailState.messages.splice(idx, 0, removed)
+    _renderInboxList()
+    toast(errorLabel + ': ' + (err.message || err), '#dc2626')
+  }
+}
+
+window._mailArchiveRow = async function(uid) {
+  return _mailOptimisticRemove(uid,
+    () => SE.mail.move({ accountId: _mailState.accountId, uid, fromFolder: _mailState.folder, to: 'archive' }),
+    'Kunde inte arkivera'
+  )
+}
+
+window._mailTrashRow = async function(uid) {
+  return _mailOptimisticRemove(uid,
+    () => SE.mail.move({ accountId: _mailState.accountId, uid, fromFolder: _mailState.folder, to: 'trash' }),
+    'Kunde inte flytta till papperskorgen'
+  )
+}
+
+window._mailSnoozeRow = async function(uid) {
+  // Implemented in A4 — for now surface an explanatory toast.
+  const opts = _mailState.snoozePresets || [
+    { label: '1 timme', ms: 60 * 60 * 1000 },
+    { label: 'I morgon 09:00', until: 'tomorrow-9am' },
+    { label: 'Nästa vecka', ms: 7 * 24 * 60 * 60 * 1000 },
+  ]
+  // Simple picker via prompt until A4 ships a proper menu
+  const choice = prompt('Snooza i hur länge?\n1 = 1 timme\n2 = I morgon 09:00\n3 = Nästa vecka', '1')
+  const pick = opts[Number(choice) - 1] || opts[0]
+  const wakeAt = pick.until === 'tomorrow-9am'
+    ? (() => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(9, 0, 0, 0); return d.toISOString() })()
+    : new Date(Date.now() + pick.ms).toISOString()
+  return _mailOptimisticRemove(uid,
+    () => SE.mail.snooze({ accountId: _mailState.accountId, uid, fromFolder: _mailState.folder, wakeAt }),
+    'Kunde inte snooza'
+  )
+}
+
+window._mailToggleStar = async function(uid, next) {
+  // Optimistic flip so the star feels instant — rollback on server error.
+  const m = _mailState.messages.find(x => x.uid === uid)
+  if (m) { m.flagged = next; _renderInboxList() }
+  const res = await SE.mail.flag({
+    accountId: _mailState.accountId,
+    uid, flag: '\\Flagged', value: next,
+    folder: _mailState.folder,
+  })
+  if (!res || !res.ok) {
+    if (m) { m.flagged = !next; _renderInboxList() }
+    toast('Kunde inte uppdatera stjärna', '#dc2626')
+  }
 }
 
 window._mailDownloadAttachment = async function(uid, index, filename) {
@@ -4176,6 +4325,46 @@ window._composeRemoveAttachment = function(idx) {
   _composeRenderAttachments()
 }
 
+// Schedule-send picker. Offers a handful of presets + a manual datetime
+// input; on confirm, the send goes into the scheduler queue so it fires
+// at the chosen time. Same send path as immediate send — the handler
+// just calls mail.sendMessage when the timer hits.
+window._composeScheduleSend = function() {
+  const now = new Date()
+  const pad = n => String(n).padStart(2, '0')
+  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const later = new Date(now.getTime() + 60 * 60 * 1000)
+  const inMs = (h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(h, m, 0, 0); return d }
+  const nextMonday = () => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); d.setHours(9, 0, 0, 0); return d }
+  const presets = [
+    { label: `Om 1 timme (${fmt(later)})`, date: later },
+    { label: `I morgon 08:00 (${fmt(inMs(8))})`, date: inMs(8) },
+    { label: `I morgon 17:00 (${fmt(inMs(17))})`, date: inMs(17) },
+    { label: `Nästa måndag 09:00 (${fmt(nextMonday())})`, date: nextMonday() },
+    { label: 'Anpassad tid…', date: null },
+  ]
+  const labels = presets.map((p, i) => `${i + 1}. ${p.label}`).join('\n')
+  const choice = prompt('Välj tidpunkt:\n\n' + labels + '\n\nSvara med nummer:', '2')
+  if (!choice) return
+  let when
+  const n = Number(choice)
+  if (n >= 1 && n <= presets.length && presets[n - 1].date) {
+    when = presets[n - 1].date
+  } else {
+    const raw = prompt('Ange tidpunkt (YYYY-MM-DD HH:MM):', fmt(inMs(9)))
+    if (!raw) return
+    when = new Date(raw.replace(' ', 'T'))
+    if (isNaN(when)) { toast('Ogiltig tid', '#dc2626'); return }
+  }
+  if (when.getTime() <= Date.now() + 60 * 1000) {
+    toast('Tidpunkten måste vara minst en minut i framtiden', '#dc2626')
+    return
+  }
+  // Reuse _composeSend's collection path — call it with sendAt set.
+  _composeState._scheduledAt = when.toISOString()
+  _composeSend()
+}
+
 // Collect compose fields into the shape SE.mail.send / SE.mail.saveDraft expect.
 function _composeCollect() {
   const from = document.getElementById('composeFrom')?.value || ''
@@ -4399,22 +4588,28 @@ window._composeSend = async function() {
     inReplyTo:  _composeState.inReplyTo || undefined,
     references: _composeState.references.length ? _composeState.references.join(' ') : undefined,
     attachments,
+    sendAt: _composeState._scheduledAt || undefined,
   })
+  _composeState._scheduledAt = null    // reset for next send
 
   _composeState.sending = false
   btn.disabled = false
   if (res && res.ok) {
     // If we sent from a draft, delete the draft copy on the server now that
     // the mail has left — fire and forget, we don't block the UX on it.
-    if (_composeState.draftUid) {
+    if (_composeState.draftUid && !res.scheduled) {
       const draftUid = _composeState.draftUid
       _composeState.draftUid = null
       SE.mail.deleteDraft({ accountId: _mailState.accountId, uid: draftUid }).catch(() => {})
     }
+    // Scheduled send: closed compose, toast that it's queued for later.
+    if (res.scheduled) {
+      toast('Mejl schemalagt — skickas ' + new Date(res.sendAt).toLocaleString('sv-SE'), '#2ca87f')
+    }
     // If the APPEND-to-Sent fallback failed, surface it as a muted warning
     // so the user knows to check their Sent folder. The mail itself reached
     // the recipient — this is about local copy hygiene.
-    if (res.sent && res.sent.saved === false) {
+    else if (res.sent && res.sent.saved === false) {
       toast('Mejl skickat (men ej sparat i Skickat-mappen)', '#e58a00')
     } else {
       toast('Mejl skickat', '#2ca87f')

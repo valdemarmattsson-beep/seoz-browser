@@ -71,6 +71,11 @@ contextBridge.exposeInMainWorld('seoz', {
     search:     (opts)     => ipcRenderer.invoke('mail:search', opts || {}),
     get:        (opts)     => ipcRenderer.invoke('mail:get', opts || {}),
     flag:       (opts)     => ipcRenderer.invoke('mail:flag', opts || {}),
+    move:       (opts)     => ipcRenderer.invoke('mail:move', opts || {}),
+    snooze:     (opts)     => ipcRenderer.invoke('mail:snooze', opts || {}),
+    scheduledList: (opts)  => ipcRenderer.invoke('mail:scheduled-list', opts || {}),
+    scheduledCancel: (id)  => ipcRenderer.invoke('mail:scheduled-cancel', id),
+    unreadTotal: ()        => ipcRenderer.invoke('mail:unread-total'),
     send:       (opts)     => ipcRenderer.invoke('mail:send', opts || {}),
     saveDraft:  (opts)     => ipcRenderer.invoke('mail:save-draft', opts || {}),
     deleteDraft:(opts)     => ipcRenderer.invoke('mail:delete-draft', opts || {}),
@@ -121,7 +126,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

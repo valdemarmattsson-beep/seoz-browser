@@ -424,6 +424,49 @@ async function getAttachment(cfg, uid, index, folder = 'INBOX') {
   }
 }
 
+// Fast UNSEEN count via IMAP STATUS — doesn't select the mailbox, so it
+// doesn't disturb the currently-open folder's IDLE loop. Used by the
+// unified-badge aggregator which polls every account in background.
+async function getUnreadCount(cfg, folder = 'INBOX') {
+  const client = await _getClient(cfg)
+  try {
+    const status = await client.status(folder, { unseen: true })
+    return status && typeof status.unseen === 'number' ? status.unseen : 0
+  } catch (_) { return 0 }
+}
+
+// Make sure a folder exists on the server, creating it if missing.
+// Used by the Snooze feature to ensure a "Snoozed" folder is available.
+async function ensureFolder(cfg, folderPath) {
+  const client = await _getClient(cfg)
+  try {
+    const list = await client.list()
+    const found = list.find(f => f.path === folderPath || f.name === folderPath)
+    if (found) return found.path
+    await client.mailboxCreate(folderPath)
+    return folderPath
+  } catch (err) {
+    // Create can race with another client; ignore "already exists" errors.
+    if (/already exists|TRYCREATE/i.test(err?.message || '')) return folderPath
+    throw err
+  }
+}
+
+// Move a message to another folder. Target can be a specific path or a
+// specialUse kind ('archive', 'trash', 'junk', 'drafts', 'sent') — we
+// resolve kinds at call-time so callers don't need to know server paths.
+async function moveMessage(cfg, uid, fromFolder, toFolderOrKind) {
+  const client = await _getClient(cfg)
+  let targetPath = toFolderOrKind
+  if (_FOLDER_KIND_ORDER[toFolderOrKind] != null && toFolderOrKind !== 'custom') {
+    targetPath = await _findFolderByKind(client, toFolderOrKind)
+    if (!targetPath) throw new Error(`Ingen ${toFolderOrKind}-folder hittades`)
+  }
+  await client.mailboxOpen(fromFolder)
+  await client.messageMove({ uid: Number(uid) }, targetPath, { uid: true })
+  return { ok: true, folder: targetPath }
+}
+
 async function setFlag(cfg, uid, flag, value, folder = 'INBOX') {
   const client = await _getClient(cfg)
   await client.mailboxOpen(folder)
@@ -600,4 +643,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listFolders, listMessages, searchMessages, getMessage, getAttachment, setFlag, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll, events }
+module.exports = { testConnection, listFolders, listMessages, searchMessages, getMessage, getAttachment, setFlag, moveMessage, ensureFolder, getUnreadCount, sendMessage, saveDraft, deleteDraft, closeAccount, closeAll, events }

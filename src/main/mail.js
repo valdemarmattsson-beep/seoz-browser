@@ -156,6 +156,70 @@ function _bodyStructureHasAttachment(bs) {
   return false
 }
 
+// Normalize the special-use flag into a short kind we can style/sort on.
+// Values: inbox, sent, drafts, trash, junk, archive, all, custom
+function _specialUseKind(f) {
+  const su = typeof f.specialUse === 'string' ? f.specialUse.toLowerCase() : null
+  if (su) {
+    if (su.includes('inbox'))   return 'inbox'
+    if (su.includes('sent'))    return 'sent'
+    if (su.includes('drafts'))  return 'drafts'
+    if (su.includes('trash'))   return 'trash'
+    if (su.includes('junk') || su.includes('spam')) return 'junk'
+    if (su.includes('archive')) return 'archive'
+    if (su.includes('all'))     return 'all'
+  }
+  // Fallback: guess from the folder name — many servers (incl. Zoho) don't
+  // always advertise specialUse on all well-known folders, especially with
+  // non-English clients.
+  const n = (f.name || f.path || '').toLowerCase()
+  if (n === 'inbox') return 'inbox'
+  if (n === 'sent' || n === 'skickat' || n === 'sent items' || n === 'sent mail') return 'sent'
+  if (n === 'drafts' || n === 'utkast' || n === 'draft') return 'drafts'
+  if (n === 'trash' || n === 'deleted' || n === 'deleted items' || n === 'papperskorg' || n === 'bin') return 'trash'
+  if (n === 'spam' || n === 'junk' || n === 'skräppost') return 'junk'
+  if (n === 'archive' || n === 'arkiv') return 'archive'
+  return 'custom'
+}
+
+// Order special folders in a Gmail/Zoho-style hierarchy.
+const _FOLDER_KIND_ORDER = { inbox: 0, drafts: 1, sent: 2, archive: 3, junk: 4, trash: 5, all: 6, custom: 10 }
+
+async function listFolders(cfg) {
+  const client = await _getClient(cfg)
+  const raw = await client.list()
+  // raw: Array of { path, name, delimiter, flags (Set), specialUse, listed, subscribed, parentPath, ... }
+  const folders = raw
+    .filter(f => {
+      // Drop non-selectable containers (holders without messages)
+      const flags = f.flags instanceof Set ? f.flags : new Set(Array.isArray(f.flags) ? f.flags : [])
+      return !flags.has('\\Noselect')
+    })
+    .map(f => {
+      const kind = _specialUseKind(f)
+      const depth = f.delimiter && f.path.includes(f.delimiter)
+        ? f.path.split(f.delimiter).length - 1
+        : 0
+      return {
+        path: f.path,
+        name: f.name || f.path,
+        delimiter: f.delimiter || '/',
+        specialUse: f.specialUse || null,
+        kind,
+        depth,
+        parentPath: f.parentPath || null,
+      }
+    })
+
+  folders.sort((a, b) => {
+    const ko = (_FOLDER_KIND_ORDER[a.kind] ?? 10) - (_FOLDER_KIND_ORDER[b.kind] ?? 10)
+    if (ko !== 0) return ko
+    return a.path.localeCompare(b.path, undefined, { sensitivity: 'base' })
+  })
+
+  return folders
+}
+
 async function listMessages(cfg, folder = 'INBOX', limit = 50) {
   const client = await _getClient(cfg)
   await client.mailboxOpen(folder)
@@ -253,4 +317,4 @@ async function closeAll() {
   }))
 }
 
-module.exports = { testConnection, listMessages, getMessage, setFlag, sendMessage, closeAccount, closeAll }
+module.exports = { testConnection, listFolders, listMessages, getMessage, setFlag, sendMessage, closeAccount, closeAll }

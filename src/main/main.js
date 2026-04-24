@@ -1015,6 +1015,17 @@ ipcMain.handle('mail:forget', async () => {
 
 // ── IPC: Mail operations (accountId optional — fallback till aktiv) ──
 
+ipcMain.handle('mail:folders-list', async (_evt, { accountId } = {}) => {
+  const cfg = _mailResolveAccount(accountId)
+  if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }
+  try {
+    const folders = await mail.listFolders(cfg)
+    return { ok: true, folders }
+  } catch (err) {
+    return { ok: false, error: err.message || String(err) }
+  }
+})
+
 ipcMain.handle('mail:list', async (_evt, { accountId, folder, limit } = {}) => {
   const cfg = _mailResolveAccount(accountId)
   if (!cfg || !cfg.password) return { ok: false, error: 'No active mail account' }

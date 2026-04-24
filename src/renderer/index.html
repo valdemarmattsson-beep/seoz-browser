@@ -224,6 +224,34 @@
 .mail-acct-item-check svg{width:12px;height:12px}
 .mail-acct-divider{height:1px;background:var(--border);margin:4px 2px}
 .mail-acct-add{color:var(--p);font-weight:500}
+/* Folder switcher — same skeleton as account switcher, stacks beside it. */
+.mail-folder-wrap{position:relative;display:inline-flex}
+.mail-folder-btn{
+  display:inline-flex;align-items:center;gap:5px;
+  background:none;border:1px solid var(--border);padding:3px 8px 3px 7px;border-radius:999px;
+  font:inherit;font-size:10.5px;font-weight:600;color:var(--txt);letter-spacing:.01em;
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+}
+.mail-folder-btn:hover{background:var(--card);border-color:var(--p);color:var(--p)}
+.mail-folder-btn svg.mail-folder-chev{width:10px;height:10px;opacity:.65;flex-shrink:0}
+.mail-folder-btn-icon{width:12px;height:12px;flex-shrink:0;opacity:.85}
+.mail-folder-menu{
+  position:absolute;top:calc(100% + 4px);left:0;
+  background:var(--card);border:1px solid var(--border);border-radius:6px;
+  min-width:200px;max-height:60vh;overflow-y:auto;padding:4px;z-index:100;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  display:none;
+}
+.mail-folder-menu.show{display:block}
+.mail-folder-item{
+  display:flex;align-items:center;gap:8px;padding:6px 10px;
+  border-radius:4px;cursor:pointer;font-size:12px;color:var(--txt);
+}
+.mail-folder-item:hover{background:var(--panel)}
+.mail-folder-item.active{background:rgba(70,128,255,.08);color:var(--p);font-weight:500}
+.mail-folder-item-icon{width:14px;flex-shrink:0;opacity:.85;display:inline-flex;align-items:center;justify-content:center}
+.mail-folder-item-icon svg{width:13px;height:13px}
+.mail-folder-item-name{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .mail-topbar-spacer{flex:1}
 .mail-topbar-btn{
   height:30px;padding:0 12px;border-radius:7px;border:1px solid var(--border);
@@ -1451,6 +1479,14 @@ input,textarea,select{user-select:text}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
                 </button>
                 <div class="mail-acct-menu" id="mailAcctMenu"></div>
+              </div>
+              <div class="mail-folder-wrap">
+                <button class="mail-folder-btn" id="mailFolderBtn" type="button" onclick="_mailToggleFolderMenu()" style="display:none">
+                  <span class="mail-folder-btn-icon" id="mailFolderBtnIcon"></span>
+                  <span id="mailFolderBtnLabel">Inkorgen</span>
+                  <svg class="mail-folder-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+                </button>
+                <div class="mail-folder-menu" id="mailFolderMenu"></div>
               </div>
             </div>
             <div class="mail-topbar-spacer"></div>
@@ -2911,6 +2947,7 @@ async function renderMailScreen() {
   const body = document.getElementById('mailBody')
   const addr = document.getElementById('mailAddr')
   const acctBtn = document.getElementById('mailAcctBtn')
+  const folderBtn = document.getElementById('mailFolderBtn')
   const refreshBtn = document.getElementById('mailRefreshBtn')
   const composeBtn = document.getElementById('mailComposeBtn')
   const settingsBtn = document.getElementById('mailSettingsBtn')
@@ -2926,11 +2963,17 @@ async function renderMailScreen() {
 
   if (addr) addr.textContent = cfg ? cfg.email : ''
   if (acctBtn) acctBtn.style.display = cfg ? '' : 'none'
+  if (folderBtn) folderBtn.style.display = cfg ? '' : 'none'
   if (refreshBtn) refreshBtn.style.display = cfg ? '' : 'none'
   if (composeBtn) composeBtn.style.display = cfg ? '' : 'none'
   if (settingsBtn) settingsBtn.style.display = cfg ? '' : 'none'
 
   if (!cfg) { _mailState.setupMode = 'first'; _renderMailSetup(body); return }
+
+  // Load folders in parallel with the inbox list below. Fire-and-forget so
+  // the inbox doesn't wait for the folder tree — the folder button updates
+  // itself once the list resolves.
+  _mailLoadFolders().then(() => _mailUpdateFolderBtn()).catch(() => {})
 
   // Two-pane inbox layout. Listan fylls asynkront — vi visar skeleton först.
   body.innerHTML = `
@@ -2949,6 +2992,7 @@ async function renderMailScreen() {
 // ══════════════════════════════════════════════════════
 const _mailState = {
   folder: 'INBOX',
+  folders: [],               // cached list of { path, name, kind, specialUse, depth, delimiter }
   accountId: null,           // currently-active account id
   accounts: [],              // cached list of { id, email, ... } (no passwords)
   setupMode: 'first',        // 'first' (no accounts yet) | 'add' (adding another)
@@ -2956,6 +3000,103 @@ const _mailState = {
   selectedUid: null,
   loading: false,
 }
+
+// ── Folder switcher (mail topbar dropdown) ─────────────────────────
+// Localized display names for well-known folder kinds. Falls back to the
+// server-supplied name for custom folders.
+const _FOLDER_KIND_LABEL = {
+  inbox:   'Inkorgen',
+  drafts:  'Utkast',
+  sent:    'Skickat',
+  archive: 'Arkiv',
+  junk:    'Skräppost',
+  trash:   'Papperskorg',
+  all:     'All mejl',
+}
+// Inline SVG icons per folder kind (Lucide-style, matches app look).
+const _FOLDER_KIND_ICON = {
+  inbox:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="22 12 16 12 14 15 10 15 8 12 2 12"/><path d="M5.45 5.11 2 12v6a2 2 0 0 0 2 2h16a2 2 0 0 0 2-2v-6l-3.45-6.89A2 2 0 0 0 16.76 4H7.24a2 2 0 0 0-1.79 1.11z"/></svg>',
+  drafts:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 0 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg>',
+  sent:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>',
+  archive: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="21 8 21 21 3 21 3 8"/><rect x="1" y="3" width="22" height="5"/><line x1="10" y1="12" x2="14" y2="12"/></svg>',
+  junk:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="4.93" y1="4.93" x2="19.07" y2="19.07"/></svg>',
+  trash:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg>',
+  all:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>',
+  custom:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>',
+}
+
+function _mailFolderDisplay(f) {
+  if (!f) return 'INBOX'
+  return _FOLDER_KIND_LABEL[f.kind] || f.name || f.path
+}
+
+async function _mailLoadFolders() {
+  const res = await SE.mail.foldersList({ accountId: _mailState.accountId })
+  if (!res || !res.ok) { _mailState.folders = []; return [] }
+  _mailState.folders = Array.isArray(res.folders) ? res.folders : []
+  return _mailState.folders
+}
+
+function _mailRenderFolderMenu() {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu) return
+  if (!_mailState.folders.length) {
+    menu.innerHTML = '<div class="mail-folder-item" style="color:var(--muted);cursor:default">Laddar…</div>'
+    return
+  }
+  menu.innerHTML = _mailState.folders.map(f => {
+    const active = f.path === _mailState.folder
+    const icon = _FOLDER_KIND_ICON[f.kind] || _FOLDER_KIND_ICON.custom
+    return `
+      <div class="mail-folder-item${active ? ' active' : ''}" onclick="_mailSwitchFolder('${esc(f.path).replace(/'/g, "\\'")}')">
+        <span class="mail-folder-item-icon">${icon}</span>
+        <span class="mail-folder-item-name">${esc(_mailFolderDisplay(f))}</span>
+      </div>
+    `
+  }).join('')
+}
+
+function _mailUpdateFolderBtn() {
+  const btn = document.getElementById('mailFolderBtn')
+  const label = document.getElementById('mailFolderBtnLabel')
+  const iconEl = document.getElementById('mailFolderBtnIcon')
+  if (!btn || !label || !iconEl) return
+  const current = _mailState.folders.find(f => f.path === _mailState.folder)
+  const kind = current ? current.kind : 'inbox'
+  label.textContent = current ? _mailFolderDisplay(current) : _mailState.folder
+  iconEl.innerHTML = _FOLDER_KIND_ICON[kind] || _FOLDER_KIND_ICON.custom
+}
+
+window._mailToggleFolderMenu = function() {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) _mailRenderFolderMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+window._mailSwitchFolder = async function(path) {
+  document.getElementById('mailFolderMenu')?.classList.remove('show')
+  if (!path || path === _mailState.folder) return
+  _mailState.folder = path
+  _mailState.messages = []
+  _mailState.selectedUid = null
+  // Clear reader pane — the selected message belongs to the old folder
+  const reader = document.getElementById('mailReaderPane')
+  if (reader) reader.innerHTML = '<div class="mail-empty-note">Välj ett mejl från inboxen för att läsa det här.</div>'
+  _mailUpdateFolderBtn()
+  await _mailLoadInbox()
+}
+
+// Close folder dropdown on outside click (mirrors account-switcher behavior)
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('mailFolderMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('mailFolderBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
 
 // ── Account switcher (mail topbar dropdown) ─────────────────────────
 function _mailRenderAcctMenu() {
@@ -2999,6 +3140,8 @@ window._mailSwitchAccount = async function(id) {
   const res = await SE.mail.accountSetActive(id)
   if (!res || !res.ok) { toast('Kunde inte byta konto: ' + (res?.error || ''), '#dc2626'); return }
   _mailState.accountId = id
+  _mailState.folder = 'INBOX'     // every account starts on its own inbox
+  _mailState.folders = []          // drop cached folder tree from previous account
   _mailState.messages = []
   _mailState.selectedUid = null
   await renderMailScreen()

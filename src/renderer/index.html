@@ -178,6 +178,36 @@
 .home-slash-item:hover,.home-slash-item.sel{background:var(--panel)}
 .home-slash-cmd{font-family:monospace;color:var(--p);font-weight:600;min-width:96px}
 .home-slash-desc{color:var(--muted);font-size:10px}
+/* Mail results rendered below the input when user types a free-text
+   query. Lives inline below the input-wrap, separate from the slash
+   hint so both can show at once if needed. */
+.home-mail-results{
+  margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;
+  padding:4px;display:none;max-width:720px;box-shadow:0 4px 12px rgba(0,0,0,.15);
+}
+.home-mail-results.show{display:block}
+.home-mail-results-header{
+  display:flex;align-items:center;gap:6px;
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:6px 10px 4px;
+}
+.home-mail-results-header svg{width:10px;height:10px}
+.home-mail-result{
+  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:5px;cursor:pointer;
+  text-align:left;
+}
+.home-mail-result:hover{background:var(--panel)}
+.home-mail-result-dot{
+  width:6px;height:6px;border-radius:50%;background:var(--p);
+  flex-shrink:0;
+}
+.home-mail-result-dot.read{background:transparent}
+.home-mail-result-main{min-width:0;overflow:hidden}
+.home-mail-result-from{font-size:11px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-mail-result-subject{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-mail-result-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
+.home-mail-results-empty{padding:10px 14px;color:var(--muted);font-size:11px;font-style:italic}
 
 /* ══════════════════════════════════════════════════════════
    MAIL SCREEN — full-tab Gmail-style inbox
@@ -671,6 +701,44 @@
 .mail-compose-tpl-item-del:hover{background:rgba(220,38,38,.15);color:var(--r)}
 .mail-compose-tpl-item-del svg{width:11px;height:11px}
 .mail-compose-tpl-item.mail-compose-tpl-add{color:var(--p);font-weight:600;border-top:1px solid var(--border);margin-top:2px}
+/* Schedule-send popup — anchored above the clock button. */
+.mail-schedule-wrap{position:relative;display:inline-flex}
+.mail-schedule-popup{
+  position:absolute;bottom:calc(100% + 6px);left:0;
+  min-width:280px;padding:8px;z-index:200;
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  box-shadow:0 8px 24px rgba(0,0,0,.3);
+  display:none;
+}
+.mail-schedule-popup.show{display:block}
+.mail-schedule-title{
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);padding:6px 6px 4px;
+}
+.mail-schedule-preset{
+  display:flex;justify-content:space-between;align-items:center;gap:10px;
+  padding:8px 10px;border-radius:5px;cursor:pointer;font-size:12px;color:var(--txt);
+  font-family:inherit;border:none;background:transparent;text-align:left;width:100%;
+}
+.mail-schedule-preset:hover{background:var(--panel)}
+.mail-schedule-preset-label{flex:1;font-weight:500}
+.mail-schedule-preset-time{color:var(--muted);font-size:10px;font-variant-numeric:tabular-nums}
+.mail-schedule-custom{
+  margin-top:6px;padding-top:8px;border-top:1px solid var(--border);
+  display:flex;gap:6px;align-items:center;padding:8px 6px 2px;
+}
+.mail-schedule-custom input{
+  flex:1;height:30px;background:var(--panel);border:1px solid var(--border);
+  border-radius:5px;padding:0 8px;font-size:11px;font-family:inherit;color:var(--txt);
+  outline:none;color-scheme:dark;
+}
+.mail-schedule-custom input:focus{border-color:var(--p)}
+.mail-schedule-custom button{
+  height:30px;padding:0 12px;border-radius:5px;border:none;
+  background:var(--p);color:#fff;font-size:11px;font-weight:600;cursor:pointer;
+  font-family:inherit;
+}
+.mail-schedule-custom button:hover{background:var(--p600)}
 .mail-compose-attach-btn svg{width:14px;height:14px}
 /* Chip-row above the textarea showing queued attachments */
 .mail-compose-att-row{
@@ -1731,6 +1799,7 @@ input,textarea,select{user-select:text}
               </div>
             </div>
 
+            <div class="home-mail-results" id="homeMailResults"></div>
             <div class="home-chips" id="homeChips"></div>
             <div class="home-recent-title" id="homeRecentTitle" style="display:none">SENAST ÖPPNADE</div>
             <div class="home-recent" id="homeRecent"></div>
@@ -1836,9 +1905,12 @@ input,textarea,select{user-select:text}
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17 21 17 13 7 13 7 21"/><polyline points="7 3 7 8 15 8"/></svg>
                 </button>
                 <span class="mail-compose-status" id="composeStatus"></span>
-                <button class="mail-compose-attach-btn" type="button" id="composeScheduleBtn" title="Schemalägg" aria-label="Skicka senare" onclick="_composeScheduleSend()">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                </button>
+                <div class="mail-schedule-wrap">
+                  <button class="mail-compose-attach-btn" type="button" id="composeScheduleBtn" title="Schemalägg" aria-label="Skicka senare" onclick="_composeToggleScheduleMenu()">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  </button>
+                  <div class="mail-schedule-popup" id="composeScheduleMenu"></div>
+                </div>
                 <button class="mail-compose-send" id="composeSendBtn" onclick="_composeSend()">
                   <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="22" y1="2" x2="11" y2="13"/><polygon points="22 2 15 22 11 13 2 9 22 2"/></svg>
                   <span>Skicka</span>
@@ -3068,10 +3140,103 @@ function onHomeInput(e) {
         </div>
       `).join('')
       hint.classList.add('show')
+      _homeHideMailResults()
       return
     }
   }
   hint.classList.remove('show')
+  // Free-text query → search mail in the background. Skip if it's
+  // obviously a URL (about to navigate on Enter) or too short.
+  if (v.length >= 2 && !_isProbablyUrl(v) && !v.startsWith('/')) {
+    _homeScheduleMailSearch(v.trim())
+  } else {
+    _homeHideMailResults()
+  }
+}
+
+// ── Home mail search (Intelligence wave 2.5) ─────────────────────
+// Debounced inline search against the active mail account's inbox as
+// the user types. Click a result → opens the mail tab + selects that
+// message. Designed to feel like Spotlight — cheap, live, cancellable.
+let _homeMailSearchTimer = null
+let _homeMailSearchSeq = 0          // race-guard: ignore stale responses
+
+function _homeScheduleMailSearch(query) {
+  clearTimeout(_homeMailSearchTimer)
+  _homeMailSearchTimer = setTimeout(() => _homeRunMailSearch(query), 350)
+}
+
+async function _homeRunMailSearch(query) {
+  // Skip if no mail account exists yet — home doesn't know about mail state
+  // since mail lazy-loads, so ask backend directly.
+  const accounts = await SE.mail.accountsList()
+  if (!accounts || !accounts.length) { _homeHideMailResults(); return }
+  const active = await SE.mail.accountGetActive() || accounts[0]
+  if (!active) { _homeHideMailResults(); return }
+
+  const seq = ++_homeMailSearchSeq
+  const res = await SE.mail.search({
+    accountId: active.id,
+    folder: 'INBOX',
+    query,
+    limit: 5,
+  })
+  if (seq !== _homeMailSearchSeq) return   // newer search raced past us
+  if (!res || !res.ok || !Array.isArray(res.messages) || !res.messages.length) {
+    _homeHideMailResults()
+    return
+  }
+  _homeRenderMailResults(res.messages, active)
+}
+
+function _homeRenderMailResults(messages, account) {
+  const box = document.getElementById('homeMailResults')
+  if (!box) return
+  const rows = messages.map(m => {
+    const from = (m.from?.[0]?.name || m.from?.[0]?.address || '(okänd)')
+    return `
+      <button class="home-mail-result" type="button" onclick="_homeOpenMail('${esc(account.id)}', ${m.uid})">
+        <span class="home-mail-result-dot${m.unread ? '' : ' read'}"></span>
+        <span class="home-mail-result-main">
+          <div class="home-mail-result-from">${esc(from)}</div>
+          <div class="home-mail-result-subject">${esc(m.subject || '(utan ämne)')}</div>
+        </span>
+        <span class="home-mail-result-date">${esc(_formatMailDate(m.date))}</span>
+      </button>
+    `
+  }).join('')
+  box.innerHTML = `
+    <div class="home-mail-results-header">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+      Mejl · ${esc(account.email)}
+    </div>
+    ${rows}
+  `
+  box.classList.add('show')
+}
+
+function _homeHideMailResults() {
+  const box = document.getElementById('homeMailResults')
+  if (box) box.classList.remove('show')
+}
+
+// Clicking a home-screen result opens the mail tab and jumps directly
+// to that message. We set up state BEFORE navigating so renderMailScreen
+// finds the right account + auto-opens the message.
+window._homeOpenMail = async function(accountId, uid) {
+  // Switch active account if needed, then nav to mail
+  await SE.mail.accountSetActive(accountId)
+  _mailState.accountId = accountId
+  _mailState.selectedUid = uid
+  _homeHideMailResults()
+  const inp = document.getElementById('homeInput')
+  if (inp) { inp.value = ''; inp.style.height = 'auto' }
+  doNav('seoz://mail')
+  // After the screen renders, _mailLoadInbox will see selectedUid and
+  // _mailOpen will happen via click — but the list already pre-selects
+  // the row visually. Force an open in case user wants to read straight
+  // away.
+  setTimeout(() => { try { _mailOpen(uid) } catch (_) {} }, 400)
 }
 
 function _applySlash(cmd) {
@@ -4592,45 +4757,95 @@ window._composeDeleteTpl = async function(id) {
   _composeRenderTplMenu()   // refresh list in menu (if still open)
 }
 
-// Schedule-send picker. Offers a handful of presets + a manual datetime
-// input; on confirm, the send goes into the scheduler queue so it fires
-// at the chosen time. Same send path as immediate send — the handler
-// just calls mail.sendMessage when the timer hits.
-window._composeScheduleSend = function() {
-  const now = new Date()
+// Schedule-send picker — proper inline popup (prompt() was flaky in
+// Electron's renderer context). Presets + a <input type="datetime-local">
+// for arbitrary times. Selecting any preset or the Schemalägg button
+// stashes the time in _composeState._scheduledAt and triggers send.
+function _composeSchedulePresets() {
   const pad = n => String(n).padStart(2, '0')
-  const fmt = d => `${d.getFullYear()}-${pad(d.getMonth()+1)}-${pad(d.getDate())} ${pad(d.getHours())}:${pad(d.getMinutes())}`
-  const later = new Date(now.getTime() + 60 * 60 * 1000)
-  const inMs = (h, m = 0) => { const d = new Date(); d.setDate(d.getDate() + 1); d.setHours(h, m, 0, 0); return d }
-  const nextMonday = () => { const d = new Date(); d.setDate(d.getDate() + ((8 - d.getDay()) % 7 || 7)); d.setHours(9, 0, 0, 0); return d }
-  const presets = [
-    { label: `Om 1 timme (${fmt(later)})`, date: later },
-    { label: `I morgon 08:00 (${fmt(inMs(8))})`, date: inMs(8) },
-    { label: `I morgon 17:00 (${fmt(inMs(17))})`, date: inMs(17) },
-    { label: `Nästa måndag 09:00 (${fmt(nextMonday())})`, date: nextMonday() },
-    { label: 'Anpassad tid…', date: null },
-  ]
-  const labels = presets.map((p, i) => `${i + 1}. ${p.label}`).join('\n')
-  const choice = prompt('Välj tidpunkt:\n\n' + labels + '\n\nSvara med nummer:', '2')
-  if (!choice) return
-  let when
-  const n = Number(choice)
-  if (n >= 1 && n <= presets.length && presets[n - 1].date) {
-    when = presets[n - 1].date
-  } else {
-    const raw = prompt('Ange tidpunkt (YYYY-MM-DD HH:MM):', fmt(inMs(9)))
-    if (!raw) return
-    when = new Date(raw.replace(' ', 'T'))
-    if (isNaN(when)) { toast('Ogiltig tid', '#dc2626'); return }
+  const fmt = d => `${pad(d.getDate())}/${pad(d.getMonth()+1)} ${pad(d.getHours())}:${pad(d.getMinutes())}`
+  const inHours = h => new Date(Date.now() + h * 3600 * 1000)
+  const atHour = (h, daysAhead = 1) => { const d = new Date(); d.setDate(d.getDate() + daysAhead); d.setHours(h, 0, 0, 0); return d }
+  const nextMonday = () => {
+    const d = new Date()
+    // 0=Sunday … 1=Monday.
+    const daysUntil = (1 - d.getDay() + 7) % 7 || 7
+    d.setDate(d.getDate() + daysUntil)
+    d.setHours(9, 0, 0, 0)
+    return d
   }
-  if (when.getTime() <= Date.now() + 60 * 1000) {
-    toast('Tidpunkten måste vara minst en minut i framtiden', '#dc2626')
+  return [
+    { label: 'Om 1 timme',          date: inHours(1) },
+    { label: 'Idag 17:00',          date: (() => { const d = new Date(); d.setHours(17, 0, 0, 0); return d })(), skipIfPast: true },
+    { label: 'I morgon 08:00',      date: atHour(8) },
+    { label: 'I morgon 17:00',      date: atHour(17) },
+    { label: 'Nästa måndag 09:00',  date: nextMonday() },
+  ].filter(p => !p.skipIfPast || p.date.getTime() > Date.now() + 60 * 1000)
+    .map(p => ({ ...p, timeLabel: fmt(p.date) }))
+}
+
+function _composeRenderScheduleMenu() {
+  const menu = document.getElementById('composeScheduleMenu')
+  if (!menu) return
+  const presets = _composeSchedulePresets()
+  // Default datetime-local value = 1 hour from now, rounded to 5-min step.
+  const now = new Date(Date.now() + 60 * 60 * 1000)
+  now.setSeconds(0, 0)
+  now.setMinutes(Math.floor(now.getMinutes() / 5) * 5)
+  const pad = n => String(n).padStart(2, '0')
+  const defaultVal = `${now.getFullYear()}-${pad(now.getMonth()+1)}-${pad(now.getDate())}T${pad(now.getHours())}:${pad(now.getMinutes())}`
+  menu.innerHTML = `
+    <div class="mail-schedule-title">Skicka senare</div>
+    ${presets.map((p, i) => `
+      <button class="mail-schedule-preset" type="button" onclick="_composeScheduleAt('${p.date.toISOString()}')">
+        <span class="mail-schedule-preset-label">${esc(p.label)}</span>
+        <span class="mail-schedule-preset-time">${esc(p.timeLabel)}</span>
+      </button>
+    `).join('')}
+    <div class="mail-schedule-custom">
+      <input type="datetime-local" id="composeScheduleCustom" value="${defaultVal}" min="${defaultVal}">
+      <button type="button" onclick="_composeScheduleCustom()">Schemalägg</button>
+    </div>
+  `
+}
+
+window._composeToggleScheduleMenu = function() {
+  const menu = document.getElementById('composeScheduleMenu')
+  if (!menu) return
+  const willShow = !menu.classList.contains('show')
+  if (willShow) _composeRenderScheduleMenu()
+  menu.classList.toggle('show', willShow)
+}
+
+window._composeScheduleAt = function(iso) {
+  const menu = document.getElementById('composeScheduleMenu')
+  if (menu) menu.classList.remove('show')
+  const when = new Date(iso)
+  if (isNaN(when) || when.getTime() <= Date.now() + 60 * 1000) {
+    toast('Tiden måste vara minst en minut i framtiden', '#dc2626')
     return
   }
-  // Reuse _composeSend's collection path — call it with sendAt set.
   _composeState._scheduledAt = when.toISOString()
   _composeSend()
 }
+
+window._composeScheduleCustom = function() {
+  const input = document.getElementById('composeScheduleCustom')
+  if (!input || !input.value) { toast('Välj en tidpunkt först', '#e58a00'); return }
+  // datetime-local is a local string → interpret in user's timezone.
+  const when = new Date(input.value)
+  _composeScheduleAt(when.toISOString())
+}
+
+// Close schedule popup on outside click
+document.addEventListener('click', (e) => {
+  const menu = document.getElementById('composeScheduleMenu')
+  if (!menu || !menu.classList.contains('show')) return
+  const btn = document.getElementById('composeScheduleBtn')
+  if (btn && btn.contains(e.target)) return
+  if (menu.contains(e.target)) return
+  menu.classList.remove('show')
+})
 
 // Collect compose fields into the shape SE.mail.send / SE.mail.saveDraft expect.
 function _composeCollect() {

@@ -29,6 +29,7 @@ if (typeof _diagChan.tracingChannel !== 'function') {
 const { ImapFlow } = require('imapflow')
 const { simpleParser } = require('mailparser')
 const nodemailer = require('nodemailer')
+const MailComposer = require('nodemailer/lib/mail-composer')
 const sanitizeHtml = require('sanitize-html')
 
 // sanitize-html allowlist for email bodies. Keeps presentation tags &
@@ -308,20 +309,28 @@ async function setFlag(cfg, uid, flag, value, folder = 'INBOX') {
   return { ok: true }
 }
 
+// Look up a folder by its normalized specialUse kind (inbox, sent, drafts, …)
+// by asking the server. We do this at send-time rather than caching because
+// folder trees are small and the call happens at most once per send.
+async function _findFolderByKind(client, kind) {
+  const list = await client.list()
+  for (const f of list) {
+    if (_specialUseKind(f) === kind) {
+      const flags = f.flags instanceof Set ? f.flags : new Set(Array.isArray(f.flags) ? f.flags : [])
+      if (!flags.has('\\Noselect')) return f.path
+    }
+  }
+  return null
+}
+
 async function sendMessage(cfg, opts) {
   if (!cfg) throw new Error('No mail config')
-  const transporter = nodemailer.createTransport({
-    host: cfg.smtpHost,
-    port: Number(cfg.smtpPort) || 465,
-    secure: cfg.smtpSecure !== false,
-    auth: { user: cfg.username || cfg.email, pass: cfg.password },
-  })
   const fromAddr = (opts.from && opts.from.includes('@')) ? opts.from
     : `"${cfg.displayName || cfg.email}" <${cfg.email}>`
 
-  // Attachments: renderer sends [{ path, filename?, contentType? }]. We pass
-  // `path` through to nodemailer which reads the file at send-time (streamed,
-  // so a 20 MB PDF doesn't balloon memory). Filename defaults to basename.
+  // Attachments: renderer sends [{ path, filename?, contentType? }]. Nodemailer
+  // (+ MailComposer below) reads the file at build-time, streamed, so a 20 MB
+  // PDF doesn't balloon memory. Filename defaults to basename.
   let attachments
   if (Array.isArray(opts.attachments) && opts.attachments.length) {
     const path = require('path')
@@ -334,7 +343,7 @@ async function sendMessage(cfg, opts) {
       }))
   }
 
-  const info = await transporter.sendMail({
+  const mailOpts = {
     from: fromAddr,
     to: opts.to,
     cc: opts.cc,
@@ -345,8 +354,46 @@ async function sendMessage(cfg, opts) {
     inReplyTo: opts.inReplyTo,
     references: opts.references,
     ...(attachments ? { attachments } : {}),
+  }
+
+  // Build the RFC822 source once so we can both (a) send it via SMTP and
+  // (b) APPEND the same bytes to the server's Sent folder. Zoho (unlike
+  // Gmail) does NOT auto-save messages submitted via external SMTP, so
+  // without this the user's Sent folder stays empty.
+  const raw = await new MailComposer(mailOpts).compile().build()
+
+  const transporter = nodemailer.createTransport({
+    host: cfg.smtpHost,
+    port: Number(cfg.smtpPort) || 465,
+    secure: cfg.smtpSecure !== false,
+    auth: { user: cfg.username || cfg.email, pass: cfg.password },
   })
-  return { ok: true, messageId: info.messageId }
+  const info = await transporter.sendMail({
+    envelope: {
+      from: fromAddr,
+      to: [].concat(opts.to || [], opts.cc || [], opts.bcc || []).filter(Boolean),
+    },
+    raw,
+  })
+
+  // APPEND a copy to Sent. Best-effort: if it fails (no Sent folder found,
+  // quota, network blip) we don't want to fail the whole send — the mail
+  // already reached the recipient.
+  let sentStatus = { saved: false }
+  try {
+    const client = await _getClient(cfg)
+    const sentPath = await _findFolderByKind(client, 'sent')
+    if (sentPath) {
+      await client.append(sentPath, raw, ['\\Seen'])
+      sentStatus = { saved: true, folder: sentPath }
+    } else {
+      sentStatus = { saved: false, reason: 'Ingen Sent-folder hittades' }
+    }
+  } catch (err) {
+    sentStatus = { saved: false, reason: err.message || String(err) }
+  }
+
+  return { ok: true, messageId: info.messageId, sent: sentStatus }
 }
 
 async function closeAll() {

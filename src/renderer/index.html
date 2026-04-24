@@ -3710,7 +3710,14 @@ window._composeSend = async function() {
   _composeState.sending = false
   btn.disabled = false
   if (res && res.ok) {
-    toast('Mejl skickat', '#2ca87f')
+    // If the APPEND-to-Sent fallback failed, surface it as a muted warning
+    // so the user knows to check their Sent folder. The mail itself reached
+    // the recipient — this is about local copy hygiene.
+    if (res.sent && res.sent.saved === false) {
+      toast('Mejl skickat (men ej sparat i Skickat-mappen)', '#e58a00')
+    } else {
+      toast('Mejl skickat', '#2ca87f')
+    }
     closeCompose()
     // Refresh inbox so "Skickat"-tråden kanske dyker upp nästa sync
     _mailLoadInbox()

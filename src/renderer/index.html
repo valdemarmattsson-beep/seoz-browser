@@ -6645,13 +6645,30 @@ async function doSetDefaultBrowser() {
   }
 }
 
-// Listen for sync-data from main process (auto-sync)
+// Listen for sync-data from main process (auto-sync). Earlier we
+// updated synced.clients here but never re-rendered the bookmark bar,
+// so the client picker silently kept showing whatever the initial
+// sync returned — even after the user deleted clients in SEOZ.
 SE.on('sync-data', data => {
   if (!data || !data.ok) return
   synced.user = data.user
   synced.workspace = data.workspace
   synced.clients = data.clients || []
+
+  // If the active client got deleted upstream, fall back to the first
+  // available one (or null) so the picker doesn't show a stale name.
+  if (synced.activeClientId && !synced.clients.find(c => c.id === synced.activeClientId)) {
+    synced.activeClientId = synced.clients[0]?.id || null
+    if (synced.activeClientId) {
+      SE.storeSet('activeClientId', synced.activeClientId).catch(() => {})
+    } else {
+      SE.storeSet('activeClientId', null).catch(() => {})
+    }
+  }
+
   updateSyncUI()
+  // Re-render bookmark bar so the client picker reflects the fresh list.
+  renderBmBar()
   if (currentPanel) renderPanelContent(currentPanel)
 })
 

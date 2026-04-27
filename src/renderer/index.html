@@ -6706,9 +6706,13 @@ function renderBmBar() {
   const bar = document.getElementById('bmbar')
   bar.innerHTML = ''
 
-  // If empty, show hint
+  // If empty, show hint — but DON'T early-return; we still want the
+  // client selector on the far right (it used to disappear when the
+  // bookmark bar was emptied because the early-return skipped past
+  // renderClientSelector).
   if (!bookmarks.length && !getAllFolders().length) {
     bar.innerHTML = '<div class="bm-empty">Klicka stjärnan i adressfältet eller högerklicka här</div>'
+    renderClientSelector(bar)
     updateBmStar()
     return
   }

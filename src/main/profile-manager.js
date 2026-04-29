@@ -64,7 +64,7 @@ function getProfileStore(profileId) {
     defaults: {
       apiKey: null,
       anthropicKey: null,
-      theme: 'dark',
+      theme: 'light',
       autoSync: true,
       osNotifs: true,
       bookmarks: [],
@@ -95,7 +95,7 @@ function migrateLegacyData(legacyStore) {
   const legacyApiKey = legacyStore.get('apiKey')
   const legacyBookmarks = legacyStore.get('bookmarks', [])
   const legacyHistory = legacyStore.get('history', [])
-  const legacyTheme = legacyStore.get('theme', 'dark')
+  const legacyTheme = legacyStore.get('theme', 'light')
   const legacyActiveClient = legacyStore.get('activeClientId')
   const legacyAnthropicKey = legacyStore.get('anthropicKey')
 

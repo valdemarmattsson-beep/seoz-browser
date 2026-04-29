@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<title>SEOZ Browser</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --p:#4680ff;
+  --bg:#f0f2f5; --card:#ffffff; --panel:#f8f9fa;
+  --border:#e7eaee; --head:#1d2630; --txt:#131920; --muted:rgba(33,37,41,.6);
+  --ink-2:rgba(0,0,0,.55);
+  --border-strong:rgba(0,0,0,.12);
+  --warn:#ff9f0a; --warn-bg:rgba(229,138,0,.12);
+  --live:#30d158; --live-bg:rgba(48,209,88,.12);
+  --ds-danger:#ff453a; --danger-bg:rgba(220,38,38,.12);
+  --dur-fast:120ms; --ease-out:cubic-bezier(.23,1,.32,1);
+}
+[data-theme="dark"]{
+  --bg:#131920; --card:#1b232d; --panel:#151d27;
+  --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
+  --ink-2:rgba(255,255,255,.62);
+  --border-strong:rgba(255,255,255,.1);
+}
+*,*::before,*::after{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden;user-select:none}
+body{
+  font-family:'Inter',-apple-system,BlinkMacSystemFont,sans-serif;
+  font-size:13px;background:var(--bg);color:var(--txt);
+  display:flex;flex-direction:column;
+}
+
+/* Header — single 40px bar with drag region + nav buttons + URL + window controls */
+.popup-chrome{
+  height:40px;flex-shrink:0;
+  background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 6px 0 10px;gap:6px;
+  -webkit-app-region:drag;
+}
+.nb{
+  width:26px;height:26px;border-radius:6px;border:none;
+  background:transparent;display:flex;align-items:center;justify-content:center;
+  cursor:pointer;color:var(--muted);flex-shrink:0;
+  -webkit-app-region:no-drag;transition:background .15s,color .15s;
+}
+.nb svg{width:14px;height:14px}
+.nb:hover{background:var(--border);color:var(--head)}
+.nb:disabled{opacity:.35;cursor:default}
+
+.url-display{
+  flex:1;height:26px;background:var(--panel);
+  border:1px solid var(--border);border-radius:7px;
+  display:flex;align-items:center;padding:0 10px;gap:6px;
+  font-size:11px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:'Inter',monospace;
+  -webkit-app-region:no-drag;
+}
+.url-lock{font-size:10px;color:var(--live);flex-shrink:0;display:flex;align-items:center}
+.url-text{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;color:var(--txt)}
+
+.spinner{
+  width:12px;height:12px;border:2px solid var(--border);
+  border-top-color:var(--p);border-radius:50%;
+  animation:spin .8s linear infinite;flex-shrink:0;display:none;
+}
+.spinner.show{display:block}
+@keyframes spin{to{transform:rotate(360deg)}}
+
+/* Window controls — match the main browser */
+.wc-wrap{display:flex;align-items:center;gap:10px;padding-left:10px;flex-shrink:0;-webkit-app-region:no-drag}
+.wc{
+  width:24px;height:24px;border-radius:50%;
+  background:transparent;border:0.5px solid var(--border-strong);
+  color:var(--ink-2);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;
+  transition:background var(--dur-fast) var(--ease-out),
+             color var(--dur-fast) var(--ease-out),
+             border-color var(--dur-fast) var(--ease-out);
+}
+.wc.minimize:hover{background:var(--warn-bg);color:var(--warn);border-color:transparent}
+.wc.maximize:hover{background:var(--live-bg);color:var(--live);border-color:transparent}
+.wc.x:hover{background:var(--danger-bg);color:var(--ds-danger);border-color:transparent}
+
+/* Content area */
+.popup-content{flex:1;position:relative;background:var(--bg)}
+webview{position:absolute;inset:0;width:100%;height:100%;border:none;outline:none}
+</style>
+</head>
+<body>
+  <div class="popup-chrome">
+    <button class="nb" id="backBtn" disabled aria-label="Bakåt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m15 18-6-6 6-6"/></svg></button>
+    <button class="nb" id="fwdBtn" disabled aria-label="Framåt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></button>
+    <button class="nb" id="reloadBtn" aria-label="Ladda om"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></button>
+    <div class="url-display">
+      <span class="url-lock" id="urlLock"><svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
+      <span class="url-text" id="urlText">—</span>
+      <div class="spinner" id="spinner"></div>
+    </div>
+    <div class="wc-wrap">
+      <div class="wc minimize" onclick="SE.minimize()" aria-label="Minimera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
+      <div class="wc maximize" onclick="SE.maximize()" aria-label="Maximera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
+      <div class="wc x" onclick="SE.close()" aria-label="Stäng"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
+    </div>
+  </div>
+  <div class="popup-content">
+    <webview id="wv" src="about:blank" allowpopups
+      useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"></webview>
+  </div>
+
+<script>
+'use strict'
+
+const SE = window.seoz || { minimize:()=>{}, maximize:()=>{}, close:()=>{}, getTheme:async()=>'light' }
+
+// Apply saved theme so popup matches main browser
+;(async () => {
+  try {
+    const t = await SE.getTheme()
+    if (t === 'dark') document.documentElement.dataset.theme = 'dark'
+  } catch (_) {}
+})()
+
+// Read target URL from hash: #url=<encoded>
+function getTargetUrl() {
+  const m = (location.hash || '').match(/url=([^&]+)/)
+  if (!m) return 'about:blank'
+  try { return decodeURIComponent(m[1]) } catch (_) { return 'about:blank' }
+}
+
+// Anti-detection: same Chrome-spoof shim as the main browser uses on its
+// webviews. ChatGPT / Cloudflare / Google check window.chrome,
+// navigator.webdriver, plugins, userAgentData — without these set, they
+// detect Electron and refuse to render (user just sees a grey screen).
+const CHROME_SPOOF_SCRIPT = `
+  if (!window.chrome) {
+    window.chrome = { app: {}, runtime: {}, csi: function(){}, loadTimes: function(){ return {} } };
+  }
+  try { delete Object.getPrototypeOf(navigator).webdriver; } catch(_) {}
+  Object.defineProperty(navigator, 'webdriver', { get: () => false, configurable: true });
+  Object.defineProperty(navigator, 'plugins', {
+    get: () => {
+      const arr = [
+        { name: 'Chrome PDF Plugin',  description: 'Portable Document Format',  filename: 'internal-pdf-viewer',                length: 1 },
+        { name: 'Chrome PDF Viewer',  description: '',                          filename: 'mhjfbmdgcfjbbpaeojofohoefgiehjai',  length: 1 },
+        { name: 'Native Client',      description: '',                          filename: 'internal-nacl-plugin',               length: 2 },
+      ];
+      arr.item = i => arr[i] || null;
+      arr.namedItem = n => arr.find(p => p.name === n) || null;
+      arr.refresh = () => {};
+      return arr;
+    }
+  });
+  Object.defineProperty(navigator, 'languages', { get: () => ['sv-SE', 'sv', 'en-US', 'en'] });
+  if (!navigator.userAgentData) {
+    const brands = [
+      { brand: 'Chromium',      version: '140' },
+      { brand: 'Not=A?Brand',   version: '24'  },
+      { brand: 'Google Chrome', version: '140' },
+    ];
+    const uaData = {
+      brands, mobile: false, platform: 'Windows',
+      getHighEntropyValues: () => Promise.resolve({
+        brands, mobile: false, platform: 'Windows',
+        platformVersion: '15.0.0', architecture: 'x86', bitness: '64',
+        model: '', uaFullVersion: '140.0.0.0', wow64: false,
+      }),
+      toJSON: () => ({ brands, mobile: false, platform: 'Windows' }),
+    };
+    Object.defineProperty(navigator, 'userAgentData', { get: () => uaData, configurable: true });
+  }
+`
+
+const wv = document.getElementById('wv')
+const urlText = document.getElementById('urlText')
+const urlLock = document.getElementById('urlLock')
+const backBtn = document.getElementById('backBtn')
+const fwdBtn = document.getElementById('fwdBtn')
+const reloadBtn = document.getElementById('reloadBtn')
+const spinner = document.getElementById('spinner')
+
+wv.addEventListener('dom-ready', () => {
+  wv.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+})
+
+wv.src = getTargetUrl()
+
+function setUrlDisplay(u) {
+  if (!u) { urlText.textContent = '—'; return }
+  try {
+    const parsed = new URL(u)
+    urlText.textContent = parsed.host + parsed.pathname + (parsed.search || '')
+    urlLock.style.color = parsed.protocol === 'https:' ? 'var(--live)' : 'var(--muted)'
+  } catch (_) {
+    urlText.textContent = u
+  }
+}
+
+function refreshNavState() {
+  try { backBtn.disabled = !wv.canGoBack() } catch (_) {}
+  try { fwdBtn.disabled = !wv.canGoForward() } catch (_) {}
+}
+
+wv.addEventListener('did-navigate', e => { setUrlDisplay(e.url); refreshNavState() })
+wv.addEventListener('did-navigate-in-page', e => { setUrlDisplay(e.url); refreshNavState() })
+wv.addEventListener('did-start-loading', () => { spinner.classList.add('show') })
+wv.addEventListener('did-stop-loading', () => { spinner.classList.remove('show'); refreshNavState() })
+wv.addEventListener('page-title-updated', e => { document.title = e.title || 'SEOZ Browser' })
+
+backBtn.onclick = () => { try { if (wv.canGoBack()) wv.goBack() } catch (_) {} }
+fwdBtn.onclick = () => { try { if (wv.canGoForward()) wv.goForward() } catch (_) {} }
+reloadBtn.onclick = () => { try { wv.reload() } catch (_) {} }
+
+// Close popup with Esc when chrome has focus (not when content is focused)
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape' && document.activeElement && document.activeElement.tagName !== 'WEBVIEW') {
+    SE.close()
+  }
+})
+</script>
+</body>
+</html>

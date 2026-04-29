@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu } = require('electron')
 const path = require('path')
 const https = require('https')
 const os = require('os')
@@ -43,7 +43,7 @@ const APP_ICON = nativeImage.createFromPath(
 // Legacy store — kept for migration & window bounds (shared across profiles)
 const store = new Store({
   defaults: {
-    theme: 'dark',
+    theme: 'light',
     bounds: { width: 1400, height: 860 },
     apiKey: null,
     autoSync: true,
@@ -355,11 +355,112 @@ ipcMain.on('tab-tear-off', (_evt, payload) => {
   }
 })
 
-ipcMain.on('win-min',   () => win?.minimize())
-ipcMain.on('win-max',   () => win?.isMaximized() ? win.unmaximize() : win?.maximize())
-ipcMain.on('win-close', () => win?.close())
-ipcMain.on('win-fullscreen', () => win?.setFullScreen(!win.isFullScreen()))
-ipcMain.handle('win-is-fullscreen', () => win?.isFullScreen() ?? false)
+// Window controls — resolve target window from sender so popup wrappers
+// (which share this preload) control THEIR own BrowserWindow, not the
+// main one. Falls back to the main `win` if the sender's window can't
+// be resolved (shouldn't happen but keeps the chrome controls safe).
+function _winFromEvent(e) {
+  const w = BrowserWindow.fromWebContents(e.sender)
+  return w && !w.isDestroyed() ? w : win
+}
+ipcMain.on('win-min',   (e) => _winFromEvent(e)?.minimize())
+ipcMain.on('win-max',   (e) => { const w = _winFromEvent(e); if (!w) return; w.isMaximized() ? w.unmaximize() : w.maximize() })
+ipcMain.on('win-close', (e) => _winFromEvent(e)?.close())
+ipcMain.on('win-fullscreen', (e) => { const w = _winFromEvent(e); if (!w) return; w.setFullScreen(!w.isFullScreen()) })
+ipcMain.handle('win-is-fullscreen', (e) => _winFromEvent(e)?.isFullScreen() ?? false)
+
+// ── Manual window drag (workaround for Electron 28 + frame:false + <webview>
+//    drag-region bug on Windows where -webkit-app-region:drag stops working
+//    after the first drag). Renderer captures pointer + sends deltas; we
+//    apply them via setPosition. Anchor = window position at drag start.
+//    If the window is fullscreen / maximised, exit that state first so
+//    the drag can proceed (Chrome-style: drag from a maximised window
+//    automatically restores it). ──
+let _dragAnchor = null
+ipcMain.on('win-drag-start', () => {
+  if (!win) return
+  if (win.isFullScreen()) {
+    win._wvFullscreenOwned = false  // user-initiated exit, don't trigger leave-fs sync
+    win.setFullScreen(false)
+  }
+  if (win.isMaximized()) win.unmaximize()
+  const [x, y] = win.getPosition()
+  _dragAnchor = { x, y }
+})
+ipcMain.on('win-drag-move', (_e, dx, dy) => {
+  if (!win || !_dragAnchor) return
+  win.setPosition(_dragAnchor.x + Math.round(dx), _dragAnchor.y + Math.round(dy))
+})
+ipcMain.on('win-drag-end', () => { _dragAnchor = null })
+
+// ── Password manager ──
+// Per-profile, encrypted via Electron's safeStorage (Keychain on macOS,
+// DPAPI on Windows, libsecret on Linux). The renderer never sees ciphertext;
+// it gets plaintext on read and sends plaintext on write.
+const PASSWORDS_KEY = 'savedPasswords'
+
+function _pwListEncrypted() { return PM.profileGet(PASSWORDS_KEY, []) }
+function _pwSaveEncrypted(arr) { PM.profileSet(PASSWORDS_KEY, arr) }
+
+function _pwHydrate(entry) {
+  if (!entry) return null
+  return {
+    id: entry.id,
+    site: entry.site,
+    username: entry.username,
+    password: _decryptPassword(entry.passwordEnc) || '',
+    createdAt: entry.createdAt,
+    updatedAt: entry.updatedAt,
+  }
+}
+
+ipcMain.handle('passwords-list', () => {
+  return _pwListEncrypted().map(_pwHydrate).filter(Boolean)
+})
+
+ipcMain.handle('passwords-add', (_e, entry) => {
+  if (!entry || !entry.site || !entry.username || !entry.password) {
+    throw new Error('Webbplats, användarnamn och lösenord krävs')
+  }
+  const list = _pwListEncrypted()
+  const now = Date.now()
+  const item = {
+    id: crypto.randomBytes(8).toString('hex'),
+    site: String(entry.site).trim(),
+    username: String(entry.username).trim(),
+    passwordEnc: _encryptPassword(String(entry.password)),
+    createdAt: now,
+    updatedAt: now,
+  }
+  list.push(item)
+  _pwSaveEncrypted(list)
+  return _pwHydrate(item)
+})
+
+ipcMain.handle('passwords-update', (_e, { id, updates } = {}) => {
+  if (!id || !updates) throw new Error('id och updates krävs')
+  const list = _pwListEncrypted()
+  const idx = list.findIndex(p => p.id === id)
+  if (idx === -1) return null
+  const cur = list[idx]
+  const next = {
+    ...cur,
+    site: updates.site != null ? String(updates.site).trim() : cur.site,
+    username: updates.username != null ? String(updates.username).trim() : cur.username,
+    passwordEnc: updates.password != null ? _encryptPassword(String(updates.password)) : cur.passwordEnc,
+    updatedAt: Date.now(),
+  }
+  list[idx] = next
+  _pwSaveEncrypted(list)
+  return _pwHydrate(next)
+})
+
+ipcMain.handle('passwords-delete', (_e, id) => {
+  if (!id) return false
+  const next = _pwListEncrypted().filter(p => p.id !== id)
+  _pwSaveEncrypted(next)
+  return true
+})
 
 // ── DevTools ──
 ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
@@ -371,7 +472,7 @@ ipcMain.handle('blocker-get-stats', () => blockerStats)
 ipcMain.on('blocker-reset-stats', () => { blockerStats.session = 0 })
 
 // ── Theme (profile-scoped) ──
-ipcMain.handle('get-theme', () => PM.profileGet('theme', 'dark'))
+ipcMain.handle('get-theme', () => PM.profileGet('theme', 'light'))
 ipcMain.on('set-theme', (e, t) => PM.profileSet('theme', t))
 
 // ── Store (profile-scoped get/set) ──
@@ -643,6 +744,41 @@ ipcMain.handle('trigger-sync', async (_, apiKey) => doAPISync(apiKey))
 
 ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params, method, body }) => {
   return apiFetch(endpoint, apiKey, { params, method, body })
+})
+
+// ── Agent Ready scan ──
+// Calls the SEOZ platform's /api/verktyg/agent-ready endpoint to grade
+// any URL on agent/LLM-readiness (robots.txt, MCP card, OAuth discovery,
+// content negotiation, Web Bot Auth, commerce protocols, ...). Done in
+// main so the request bypasses the renderer's CSP and so we can swap
+// host/path centrally if the platform endpoint moves.
+ipcMain.handle('fetch-agent-ready', async (_evt, url) => {
+  const target = String(url || '').trim()
+  if (!target) return { ok: false, error: 'URL krävs' }
+  if (!/^https?:\/\//i.test(target)) return { ok: false, error: 'URL måste börja med http(s)://' }
+  // Try seoz.io first, fall back to seoz.se (the platform is deployed at both).
+  const hosts = ['https://seoz.io', 'https://seoz.se']
+  let lastErr = 'Nätverksfel'
+  for (const host of hosts) {
+    try {
+      const res = await net.fetch(host + '/api/verktyg/agent-ready', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ url: target }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        return { ok: true, scorecard: data }
+      }
+      const text = await res.text().catch(() => '')
+      lastErr = text || `HTTP ${res.status} från ${host}`
+      // 404 → try next host. Other errors are real (don't loop forever).
+      if (res.status !== 404) return { ok: false, error: lastErr, status: res.status }
+    } catch (err) {
+      lastErr = err?.message || 'Nätverksfel'
+    }
+  }
+  return { ok: false, error: lastErr }
 })
 
 // ══════════════════════════════════════════════════════════════════════════════
@@ -1738,10 +1874,147 @@ ipcMain.on('update-jump-list', () => {
   jumpListTimer = setTimeout(() => updateJumpList(), 2000)
 })
 
+// ── <webview> guest setup (popups + keyboard shortcuts) ──
+// Without this, Electron creates default popup windows with the yellow
+// Electron icon, native Windows menu (File/Edit/View/...) and standard
+// chrome — visually disconnected from SEOZ. We hand-roll the popup
+// options so they pick up our icon and a SEOZ-coloured title bar overlay.
+// We ALSO intercept Ctrl+R / Ctrl+Shift+R / F5 here because keyboard
+// events that originate inside a guest webview never bubble up to the
+// host renderer's document — the host's keydown handler can't see them.
+app.on('web-contents-created', (_e, contents) => {
+  if (contents.getType() !== 'webview') return
+
+  // Ctrl+R / F5 → reload the guest. Ctrl+Shift+R → reload bypassing cache.
+  contents.on('before-input-event', (event, input) => {
+    if (input.type !== 'keyDown') return
+    const ctrl = input.control || input.meta
+    const key = (input.key || '').toLowerCase()
+    if (input.key === 'F5' || (ctrl && key === 'r')) {
+      event.preventDefault()
+      if (ctrl && input.shift && key === 'r') contents.reloadIgnoringCache()
+      else contents.reload()
+    }
+    // ESC → exit HTML5 fullscreen if guest is in it. Belt-and-braces: the
+    // guest normally handles this itself, but some pages swallow ESC.
+    if (input.key === 'Escape' && contents.isFullScreen?.()) {
+      event.preventDefault()
+      contents.executeJavaScript('document.exitFullscreen && document.exitFullscreen()').catch(() => {})
+    }
+  })
+
+  // HTML5 fullscreen requested by guest content (e.g. SEOZ platform's
+  // expand-chart button). The webview tag's events don't always propagate
+  // up to the host renderer, so we wire it on the guest's webContents
+  // here in main and forward to the renderer over IPC.
+  contents.on('enter-html-full-screen', () => {
+    if (!win) return
+    if (!win.isFullScreen()) {
+      win._wvFullscreenOwned = true
+      win.setFullScreen(true)
+    }
+    win.webContents.send('webview-fullscreen', true)
+  })
+  contents.on('leave-html-full-screen', () => {
+    if (!win) return
+    if (win._wvFullscreenOwned) {
+      win._wvFullscreenOwned = false
+      win.setFullScreen(false)
+    }
+    win.webContents.send('webview-fullscreen', false)
+  })
+
+  contents.setWindowOpenHandler(({ url, disposition, features }) => {
+    if (!url || !/^https?:\/\//i.test(url)) return { action: 'deny' }
+
+    // 'new-window' = window.open(url, name, features) — true popup (OAuth etc.)
+    if (disposition === 'new-window') {
+      // Don't let Electron build a default popup — we make our own
+      // wrapper window with a SEOZ chrome (titlebar + back/fwd/reload).
+      // The wrapper loads popup.html which embeds the target URL in a
+      // <webview>. Deferred via setImmediate so we don't block the
+      // setWindowOpenHandler return.
+      setImmediate(() => createSeozPopup(url, features))
+      return { action: 'deny' }
+    }
+
+    // target="_blank", middle-click, ctrl-click — open as a new tab in our
+    // existing browser window instead of a separate OS window.
+    if (win) win.webContents.send('open-url', url)
+    return { action: 'deny' }
+  })
+})
+
+// Tracked popup windows so we can clean up properly.
+const _seozPopups = new Set()
+
+function createSeozPopup(url, features) {
+  // Parse common features (width/height) from the features string. Falls
+  // back to a sensible OAuth-popup size when not specified.
+  const parsed = _parseWindowFeatures(features)
+  const w = parsed.width || 720
+  const h = parsed.height || 720
+
+  const isDark = PM.profileGet('theme', 'light') === 'dark'
+  const popup = new BrowserWindow({
+    width: w, height: h, minWidth: 400, minHeight: 320,
+    backgroundColor: isDark ? '#131920' : '#f8f9fa',
+    titleBarStyle: 'hidden',
+    frame: false,
+    autoHideMenuBar: true,
+    icon: APP_ICON,
+    show: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      webviewTag: true,
+      sandbox: false,
+    },
+  })
+
+  _seozPopups.add(popup)
+  popup.on('closed', () => _seozPopups.delete(popup))
+
+  // Pass the target URL to popup.html via a hash fragment (loadFile +
+  // search query is awkward; hash works without URL encoding edge cases).
+  popup.loadFile(path.join(__dirname, '../renderer/popup.html'), {
+    hash: 'url=' + encodeURIComponent(url),
+  })
+  popup.once('ready-to-show', () => popup.show())
+}
+
+function _parseWindowFeatures(features) {
+  if (!features) return {}
+  const out = {}
+  String(features).split(',').forEach(pair => {
+    const [k, v] = pair.split('=').map(s => s && s.trim())
+    if (k && v) {
+      const n = Number(v)
+      if (!Number.isNaN(n)) out[k.toLowerCase()] = n
+    }
+  })
+  return out
+}
+
+// Belt-and-braces: any window we missed (popup created via a path we didn't
+// intercept) still gets the SEOZ icon and no native menu.
+app.on('browser-window-created', (_e, bw) => {
+  try {
+    bw.setMenu(null)
+    if (APP_ICON) bw.setIcon(APP_ICON)
+  } catch (_) {}
+})
+
 // ── Lifecycle ──
 app.whenReady().then(() => {
   // Force web content to always see light mode — prevents OS dark mode from affecting websites
   nativeTheme.themeSource = 'light'
+
+  // Remove default Electron menu (File/Edit/View/Window/Help) from all windows.
+  // The main window is frameless so it never showed; popup windows (e.g. Google
+  // OAuth) inherited it before this was set.
+  Menu.setApplicationMenu(null)
 
   // Migrate legacy single-user data to first profile (runs once)
   PM.migrateLegacyData(store)

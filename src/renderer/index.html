@@ -1,5 +1,5 @@
 <!DOCTYPE html>
-<html lang="sv" data-theme="dark">
+<html lang="sv" data-theme="light">
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.io https://seoz.io; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; media-src 'self' blob: data:">
@@ -71,6 +71,61 @@
   75%  { background: var(--r); }
   100% { background: var(--p); }
 }
+
+/* ══════════════════════════════════════════════════════════
+   SPLIT VIEW — show two webviews side-by-side inside the active
+   tab. Each pane has its own 22px toolbar showing its domain +
+   close button. The focused pane has a coloured top edge and the
+   address bar / nav buttons act on its webview.
+══════════════════════════════════════════════════════════ */
+.split-pane-toolbar{
+  position:absolute;height:22px;top:0;z-index:5;
+  background:var(--card);border-bottom:1px solid var(--border);
+  display:flex;align-items:center;padding:0 8px;gap:6px;
+  font-size:10px;color:var(--muted);user-select:none;cursor:pointer;
+  transition:background .12s,color .12s,box-shadow .12s;
+}
+.split-pane-toolbar.left{left:0;width:50%;border-right:1px solid var(--border)}
+.split-pane-toolbar.right{left:50%;width:50%}
+.split-pane-toolbar.focused{
+  background:var(--panel);color:var(--head);
+  box-shadow:inset 0 -2px 0 var(--p);
+}
+.split-pane-toolbar svg{width:10px;height:10px;flex-shrink:0;opacity:.7}
+.split-pane-domain{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;font-weight:600}
+.split-pane-close{
+  width:16px;height:16px;border-radius:3px;background:transparent;border:none;
+  color:var(--muted);display:flex;align-items:center;justify-content:center;
+  cursor:pointer;flex-shrink:0;
+  transition:background .12s,color .12s;
+}
+.split-pane-close:hover{background:var(--danger-bg);color:var(--ds-danger)}
+.split-pane-close svg{width:10px;height:10px;opacity:1}
+
+/* Hide split toolbars in fullscreen so the guest fills the window. */
+body.wv-fullscreen .split-pane-toolbar{display:none !important}
+
+/* ══════════════════════════════════════════════════════════
+   FULLSCREEN — when content inside a <webview> requests HTML5
+   fullscreen (e.g. SEOZ platform's expand-chart button), we hide
+   ALL chrome surfaces so the guest can fill the whole window.
+   Toggled via the .wv-fullscreen body class from the renderer's
+   enter-html-full-screen / leave-html-full-screen webview events.
+══════════════════════════════════════════════════════════ */
+body.wv-fullscreen .chrome,
+body.wv-fullscreen .dock,
+body.wv-fullscreen .panel,
+body.wv-fullscreen .bmbar,
+body.wv-fullscreen .statusbar,
+body.wv-fullscreen .find-bar,
+body.wv-fullscreen .update-banner,
+body.wv-fullscreen #homeScreen,
+body.wv-fullscreen #mailScreen,
+body.wv-fullscreen .hover-url{
+  display:none !important;
+}
+body.wv-fullscreen #app{height:100vh}
+body.wv-fullscreen .main{flex:1;height:100vh}
 
 /* ══════════════════════════════════════════════════════════
    HOME SCREEN — shown when the active tab's URL is seoz://home.
@@ -181,33 +236,52 @@
 /* Mail results rendered below the input when user types a free-text
    query. Lives inline below the input-wrap, separate from the slash
    hint so both can show at once if needed. */
+/* Inbox preview on home — only unread, compact single-line rows,
+   collapsed to 5 by default with a "Visa fler" toggle. */
 .home-mail-results{
-  margin-top:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;
-  padding:4px;display:none;max-width:720px;box-shadow:0 4px 12px rgba(0,0,0,.15);
+  width:100%;margin-top:24px;display:none;flex-direction:column;gap:1px;
 }
-.home-mail-results.show{display:block}
+.home-mail-results.show{display:flex}
 .home-mail-results-header{
-  display:flex;align-items:center;gap:6px;
+  display:flex;align-items:center;gap:6px;align-self:flex-start;
   font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--muted);padding:6px 10px 4px;
+  color:var(--muted);margin-bottom:6px;
 }
-.home-mail-results-header svg{width:10px;height:10px}
+.home-mail-results-header svg{width:11px;height:11px}
+.home-mail-results-header .hmr-count{
+  color:var(--p);font-weight:700;
+}
+.home-mail-results-header .hmr-email{
+  color:var(--muted);font-weight:500;text-transform:none;letter-spacing:0;
+  opacity:.7;margin-left:2px;
+}
 .home-mail-result{
-  display:grid;grid-template-columns:auto 1fr auto;align-items:center;gap:10px;
-  padding:8px 10px;border-radius:5px;cursor:pointer;
-  text-align:left;
+  display:grid;grid-template-columns:auto minmax(0, 1fr) auto;align-items:center;gap:10px;
+  padding:5px 10px;border-radius:6px;cursor:pointer;
+  text-align:left;background:transparent;border:none;width:100%;
+  color:var(--txt);font-family:inherit;line-height:1.3;
+  transition:background .12s;
 }
-.home-mail-result:hover{background:var(--panel)}
+.home-mail-result:hover{background:var(--card)}
 .home-mail-result-dot{
-  width:6px;height:6px;border-radius:50%;background:var(--p);
-  flex-shrink:0;
+  width:5px;height:5px;border-radius:50%;background:var(--p);flex-shrink:0;
 }
-.home-mail-result-dot.read{background:transparent}
-.home-mail-result-main{min-width:0;overflow:hidden}
-.home-mail-result-from{font-size:11px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.home-mail-result-main{min-width:0;overflow:hidden;display:flex;align-items:baseline;gap:8px}
+.home-mail-result-from{font-size:11px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;flex-shrink:0;max-width:160px}
 .home-mail-result-subject{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .home-mail-result-date{font-size:10px;color:var(--muted);flex-shrink:0;font-variant-numeric:tabular-nums}
-.home-mail-results-empty{padding:10px 14px;color:var(--muted);font-size:11px;font-style:italic}
+.home-mail-results-empty{padding:8px 10px;color:var(--muted);font-size:11px;font-style:italic}
+.home-mail-toggle{
+  align-self:flex-start;margin-top:6px;
+  background:transparent;border:none;cursor:pointer;
+  font-family:inherit;font-size:11px;font-weight:600;color:var(--muted);
+  padding:4px 10px;border-radius:6px;
+  display:flex;align-items:center;gap:5px;
+  transition:background .12s,color .12s;
+}
+.home-mail-toggle:hover{background:var(--card);color:var(--head)}
+.home-mail-toggle svg{width:10px;height:10px;transition:transform .15s}
+.home-mail-toggle.expanded svg{transform:rotate(180deg)}
 
 /* ══════════════════════════════════════════════════════════
    MAIL SCREEN — full-tab Gmail-style inbox
@@ -833,9 +907,14 @@ input,textarea,select{user-select:text}
 .tab-ico{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain;display:block}
 .tab-ico-wrap{width:14px;height:14px;flex-shrink:0;display:flex;align-items:center;justify-content:center}
 .tab-title{flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tab-x{width:14px;height:14px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:10px;opacity:0;flex-shrink:0;transition:opacity .15s}
+.tab-x{
+  width:16px;height:16px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;opacity:0;flex-shrink:0;color:var(--ink-2);
+  transition:opacity .15s,background .15s,color .15s;
+}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
-.tab-x:hover{opacity:1!important;background:rgba(255,255,255,.15)}
+.tab-x:hover{opacity:1!important;background:var(--danger-bg);color:var(--ds-danger)}
 .tab-spin{width:12px;height:12px;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite}
 /* Tab tooltip (Chrome-style) */
 .tab-tip{
@@ -858,8 +937,15 @@ input,textarea,select{user-select:text}
 .agent-tab-label{font-weight:600;overflow:hidden;text-overflow:ellipsis;max-width:140px}
 @keyframes agentDot{0%,100%{opacity:.3}50%{opacity:1}}
 
-.newtab{width:24px;height:24px;border-radius:5px;margin-left:6px;margin-bottom:4px;display:flex;align-items:center;justify-content:center;font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;transition:background .15s;-webkit-app-region:no-drag}
-.newtab:hover{background:rgba(255,255,255,.08)}
+.newtab{
+  width:24px;height:24px;border-radius:6px;margin-left:6px;margin-bottom:4px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:15px;color:var(--muted);cursor:pointer;flex-shrink:0;
+  transition:background .15s,color .15s,transform .15s;
+  -webkit-app-region:no-drag;
+}
+.newtab:hover{background:var(--accent-soft);color:var(--accent)}
+.newtab:active{transform:scale(.92)}
 /* Flex-spacer between last tab and window controls — this is the main
    drag handle for the whole window (Chrome-style). The parent .tabbar is
    no-drag (so HTML5 tab-reorder events fire on children), which causes
@@ -1338,6 +1424,86 @@ input,textarea,select{user-select:text}
 .act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
 .act-btn:hover{background:var(--border)}
 
+/* ── Agent Ready panel ── */
+.ar-url{
+  font-size:10px;color:var(--muted);
+  background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  padding:6px 9px;margin-bottom:8px;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  font-family:'Inter',monospace;
+}
+.ar-score-card{
+  background:var(--panel);border:1px solid var(--border);border-radius:10px;
+  padding:14px;margin-bottom:12px;display:flex;align-items:center;gap:14px;
+}
+.ar-score-num{
+  font-size:34px;font-weight:800;line-height:1;letter-spacing:-.02em;
+  font-variant-numeric:tabular-nums;
+}
+.ar-score-num.excellent{color:#2ca87f}
+.ar-score-num.good{color:#4680ff}
+.ar-score-num.okay{color:#e58a00}
+.ar-score-num.poor{color:#dc2626}
+.ar-score-band{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.06em;color:var(--head);margin-bottom:4px}
+.ar-score-meta{font-size:10px;color:var(--muted)}
+.ar-counts{display:flex;gap:6px;margin-bottom:10px}
+.ar-count{
+  flex:1;padding:6px 8px;border-radius:6px;
+  display:flex;align-items:center;gap:5px;justify-content:center;
+  font-size:10px;font-weight:700;
+}
+.ar-count.pass{background:rgba(44,168,127,.12);color:#2ca87f}
+.ar-count.warn{background:rgba(229,138,0,.12);color:#e58a00}
+.ar-count.fail{background:rgba(220,38,38,.12);color:#dc2626}
+.ar-cat{
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  margin-bottom:8px;overflow:hidden;
+}
+.ar-cat-hdr{
+  display:flex;align-items:center;gap:8px;padding:10px 12px;cursor:pointer;
+  font-size:11px;font-weight:700;color:var(--head);
+  user-select:none;transition:background .12s;
+}
+.ar-cat-hdr:hover{background:var(--card)}
+.ar-cat-chev{width:12px;height:12px;flex-shrink:0;color:var(--muted);transition:transform .15s}
+.ar-cat.open .ar-cat-chev{transform:rotate(90deg)}
+.ar-cat-name{flex:1}
+.ar-cat-summary{font-size:10px;font-weight:600;color:var(--muted);font-variant-numeric:tabular-nums}
+.ar-cat-body{display:none;border-top:1px solid var(--border);padding:6px 0}
+.ar-cat.open .ar-cat-body{display:block}
+.ar-check{padding:8px 12px;display:flex;gap:9px;align-items:flex-start}
+.ar-check + .ar-check{border-top:1px solid var(--border)}
+.ar-check-dot{
+  width:14px;height:14px;border-radius:50%;flex-shrink:0;margin-top:2px;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:#fff;
+}
+.ar-check-dot.pass{background:#2ca87f}
+.ar-check-dot.warn{background:#e58a00}
+.ar-check-dot.fail{background:#dc2626}
+.ar-check-dot.na{background:var(--muted)}
+.ar-check-body{flex:1;min-width:0}
+.ar-check-name{font-size:11px;font-weight:600;color:var(--head);margin-bottom:2px}
+.ar-check-detail{font-size:10px;color:var(--muted);line-height:1.4}
+.ar-check-fix{
+  margin-top:6px;padding:7px 9px;border-radius:6px;
+  background:rgba(70,128,255,.08);border-left:2px solid var(--p);
+  font-size:10px;color:var(--txt);line-height:1.45;
+}
+.ar-check-fix-lbl{font-weight:700;color:var(--p);margin-right:5px}
+.ar-empty{
+  text-align:center;padding:32px 16px;color:var(--muted);font-size:11px;
+}
+.ar-loading{
+  text-align:center;padding:32px 16px;color:var(--muted);font-size:11px;
+}
+.ar-loading-spin{
+  display:inline-block;width:16px;height:16px;
+  border:2px solid var(--border);border-top-color:var(--p);
+  border-radius:50%;animation:orbit-spin .8s linear infinite;
+  margin-right:6px;vertical-align:-3px;
+}
+
 /* ── CHROME MENU (three-dot) ── */
 .chrome-menu-btn{
   width:28px;height:28px;border-radius:6px;border:none;background:transparent;
@@ -1346,6 +1512,96 @@ input,textarea,select{user-select:text}
 }
 .chrome-menu-btn svg{width:16px;height:16px}
 .chrome-menu-btn:hover{background:var(--border);color:var(--head)}
+
+/* ── USER PROFILE BUTTON (in header, before window controls) ──
+   Sized to match the .wc window-control buttons (24×24) so the row
+   has a single visual rhythm. */
+.user-btn{
+  width:24px;height:24px;border-radius:50%;border:none;background:transparent;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;padding:0;
+  -webkit-app-region:no-drag;flex-shrink:0;
+  transition:box-shadow .15s;
+}
+.user-btn:hover{box-shadow:0 0 0 2px var(--border)}
+.user-avatar{
+  width:24px;height:24px;border-radius:50%;
+  display:flex;align-items:center;justify-content:center;
+  font-size:9px;font-weight:800;color:#fff;
+  background:var(--p);overflow:hidden;
+}
+.user-avatar img{width:100%;height:100%;object-fit:cover;display:block}
+/* Hide legacy bottom statusbar — info moved into header user menu and URL bar. */
+.statusbar{display:none}
+
+/* ── PASSWORD MANAGER ── */
+.pw-modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;display:none;align-items:center;justify-content:center}
+.pw-modal-bg.open{display:flex}
+.pw-modal{
+  width:640px;max-width:92vw;max-height:80vh;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  box-shadow:0 18px 60px rgba(0,0,0,.5);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.pw-hdr{
+  padding:14px 18px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:10px;
+}
+.pw-hdr h3{font-size:14px;font-weight:700;color:var(--head);flex-shrink:0;margin:0}
+.pw-hdr .pw-search{
+  flex:1;height:30px;background:var(--bg);border:1px solid var(--border);
+  border-radius:7px;padding:0 11px;font-size:12px;font-family:inherit;
+  color:var(--txt);outline:none;
+}
+.pw-hdr .pw-search:focus{border-color:var(--p)}
+.pw-add-btn{
+  height:30px;padding:0 12px;border-radius:7px;border:none;
+  background:var(--p);color:#fff;font-size:11px;font-weight:700;cursor:pointer;
+  display:flex;align-items:center;gap:5px;
+}
+.pw-add-btn:hover{opacity:.9}
+.pw-close{width:26px;height:26px;border:none;background:var(--bg);border-radius:6px;cursor:pointer;display:flex;align-items:center;justify-content:center;color:var(--muted)}
+.pw-close:hover{background:var(--border)}
+.pw-body{flex:1;overflow-y:auto;padding:6px 0}
+.pw-empty{padding:48px 20px;text-align:center;color:var(--muted);font-size:12px}
+.pw-row{
+  display:flex;align-items:center;gap:12px;padding:10px 18px;
+  border-bottom:1px solid var(--border);cursor:default;
+  transition:background .12s;
+}
+.pw-row:hover{background:rgba(127,127,127,.06)}
+.pw-row:last-child{border-bottom:none}
+.pw-fav{width:18px;height:18px;border-radius:4px;flex-shrink:0;object-fit:contain;background:var(--bg)}
+.pw-info{flex:1;min-width:0}
+.pw-site{font-size:12px;font-weight:600;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pw-user{font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.pw-pwd{
+  font-family:'Inter',monospace;font-size:11px;color:var(--head);
+  flex:0 0 130px;letter-spacing:.5px;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+}
+.pw-actions{display:flex;gap:4px;flex-shrink:0}
+.pw-act{
+  width:26px;height:26px;border:none;background:transparent;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:var(--muted);transition:background .12s,color .12s;
+}
+.pw-act:hover{background:var(--border);color:var(--head)}
+.pw-act.danger:hover{color:var(--r);background:rgba(220,38,38,.1)}
+.pw-act svg{width:14px;height:14px}
+.pw-form{padding:14px 18px;border-top:1px solid var(--border);background:var(--bg);display:none;gap:8px;flex-direction:column}
+.pw-form.show{display:flex}
+.pw-form-row{display:flex;gap:8px}
+.pw-input{
+  flex:1;height:34px;background:var(--card);border:1px solid var(--border);
+  border-radius:7px;padding:0 11px;font-size:12px;font-family:inherit;
+  color:var(--txt);outline:none;
+}
+.pw-input:focus{border-color:var(--p)}
+.pw-form-actions{display:flex;justify-content:flex-end;gap:8px;margin-top:4px}
+.pw-btn-cancel{height:32px;padding:0 14px;border-radius:7px;border:1px solid var(--border);background:transparent;color:var(--txt);font-size:11px;font-weight:600;cursor:pointer}
+.pw-btn-cancel:hover{background:var(--border)}
+.pw-btn-save{height:32px;padding:0 14px;border-radius:7px;border:none;background:var(--p);color:#fff;font-size:11px;font-weight:700;cursor:pointer}
+.pw-btn-save:hover{opacity:.9}
 .chrome-dd{
   position:fixed;z-index:400;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
@@ -1407,12 +1663,14 @@ input,textarea,select{user-select:text}
 .inspector-drawer{
   position:absolute;bottom:0;left:0;right:0;z-index:100;
   height:0;overflow:hidden;
-  background:var(--card);border-top:2px solid var(--p);
+  background:var(--card);
   display:flex;flex-direction:column;
   transition:height .2s ease;
   user-select:text;-webkit-user-select:text;cursor:auto;
 }
-.inspector-drawer.open{height:320px}
+/* Top border only when the drawer is actually open — otherwise the
+   2px stripe lingers as a stray blue line at the bottom of the window. */
+.inspector-drawer.open{height:320px;border-top:2px solid var(--p)}
 .inspector-drawer.resizing{transition:none!important}
 .inspector-hdr{
   height:36px;flex-shrink:0;
@@ -1619,6 +1877,9 @@ input,textarea,select{user-select:text}
         <span class="agent-tab-label" id="agentTabLabel">Claude</span>
       </div>
       <div class="wc-wrap">
+        <button class="user-btn" id="userBtn" onclick="toggleUserMenu()" title="Profil och inställningar">
+          <div class="user-avatar" id="userAvatar">?</div>
+        </button>
         <div class="wc minimize" onclick="SE.minimize()" aria-label="Minimera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></div>
         <div class="wc maximize" onclick="SE.maximize()" aria-label="Maximera"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/></svg></div>
         <div class="wc x" onclick="requestClose()" aria-label="Stäng"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
@@ -1973,6 +2234,10 @@ input,textarea,select{user-select:text}
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
         <div class="dtt">Tracking</div>
       </div>
+      <div class="di" id="di-agentready" onclick="togglePanel('agentready')" style="color:#7c3aed">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2 12 12"/><path d="m16 6 6-4-2 6"/></svg>
+        <div class="dtt">Agent Ready</div>
+      </div>
       <div class="di" id="di-tasks" onclick="togglePanel('tasks')" style="color:#e58a00">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div class="dtt">Tasks</div>
@@ -2038,6 +2303,40 @@ input,textarea,select{user-select:text}
 <!-- CHROME DROPDOWN MENU -->
 <div class="chrome-dd" id="chromeDd"></div>
 
+<!-- USER DROPDOWN MENU (header avatar) -->
+<div class="chrome-dd" id="userDd" style="width:280px"></div>
+
+<!-- PASSWORD MANAGER MODAL -->
+<div class="pw-modal-bg" id="pwModal" onclick="if(event.target===this)closePasswords()">
+  <div class="pw-modal">
+    <div class="pw-hdr">
+      <h3>Lösenord</h3>
+      <input class="pw-search" id="pwSearch" placeholder="Sök webbplats eller användarnamn..." oninput="renderPasswords(this.value)">
+      <button class="pw-add-btn" onclick="showPasswordForm()">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 5v14M5 12h14"/></svg>
+        Lägg till
+      </button>
+      <button class="pw-close" onclick="closePasswords()" aria-label="Stäng">
+        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="pw-body" id="pwBody"></div>
+    <div class="pw-form" id="pwForm">
+      <div class="pw-form-row">
+        <input class="pw-input" id="pwSite" placeholder="Webbplats (t.ex. github.com)">
+      </div>
+      <div class="pw-form-row">
+        <input class="pw-input" id="pwUsername" placeholder="Användarnamn / e-post">
+        <input class="pw-input" id="pwPassword" placeholder="Lösenord" type="password">
+      </div>
+      <div class="pw-form-actions">
+        <button class="pw-btn-cancel" onclick="hidePasswordForm()">Avbryt</button>
+        <button class="pw-btn-save" onclick="savePassword()">Spara</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- HISTORY OVERLAY -->
 <div class="history-overlay" id="historyOverlay" onclick="if(event.target===this)closeHistory()">
   <div class="history-box">
@@ -2069,7 +2368,7 @@ const SE = window.seoz || {
   toggleDevTools:()=>{},
   blockerGetEnabled:async()=>true, blockerSetEnabled:async()=>true, blockerGetStats:async()=>({blocked:0,session:0}), blockerResetStats:()=>{},
   updaterCheck:()=>{}, updaterDownload:()=>{}, updaterInstall:()=>{}, updaterGetVersion:async()=>'1.0.0',
-  getTheme:async()=>'dark', setTheme:()=>{},
+  getTheme:async()=>'light', setTheme:()=>{},
   getApiKey:async()=>null, setApiKey:async()=>true, delApiKey:async()=>true,
   triggerSync:async()=>({ok:false}), fetchApi:async()=>({ok:false}),
   notify:()=>{}, openExternal:()=>{}, storeGet:async()=>null, storeSet:async()=>true,
@@ -2079,7 +2378,97 @@ const SE = window.seoz || {
   profileList:async()=>[], profileGetActive:async()=>({profile:null,id:null}),
   profileCreate:async()=>({}), profileUpdate:async()=>null,
   profileDelete:async()=>({ok:true}), profileSwitch:async()=>({ok:true}),
+  winDragStart:()=>{}, winDragMove:()=>{}, winDragEnd:()=>{},
+  passwordsList:async()=>[], passwordsAdd:async()=>null,
+  passwordsUpdate:async()=>null, passwordsDelete:async()=>true,
+  agentReadyScan:async()=>({ok:false,error:'Endast i Electron-builden'}),
 }
+
+// ══════════════════════════════════════════════════════
+//  WINDOW DRAG — Manual handling for Windows.
+//  Electron 28 + frame:false + <webview> has a bug where
+//  -webkit-app-region:drag stops working after the first drag.
+//  On Windows we therefore:
+//    1. Override all -webkit-app-region rules in the chrome to
+//       no-drag (kills the OS-level drag entirely, no jitter).
+//    2. Detect drag intent in JS: "click is inside .chrome AND
+//       no element in the target chain is interactive".
+//    3. Translate cursor movement into setPosition() in main.
+//  The cursor stays inside the chrome during a drag (chrome moves
+//  with the cursor), so mousemove + mouseup fire reliably.
+//  On macOS we keep the native drag regions — they work fine there.
+// ══════════════════════════════════════════════════════
+;(function setupWindowDrag(){
+  if (!SE.winDragStart || !SE.isWindows) return
+
+  // Disable native drag regions inside the chrome on Windows so
+  // the OS doesn't fight our JS handler.
+  const style = document.createElement('style')
+  style.textContent =
+    '.chrome, .chrome *, .chrome-drag-strip, .tsp {' +
+    '  -webkit-app-region: no-drag !important;' +
+    '}'
+  document.head.appendChild(style)
+
+  const INTERACTIVE_TAGS = new Set([
+    'INPUT','TEXTAREA','SELECT','BUTTON','A','WEBVIEW','IMG','SVG','LABEL'
+  ])
+
+  function isInChrome(el) {
+    while (el && el.nodeType === 1) {
+      if (el.classList && el.classList.contains('chrome')) return true
+      el = el.parentElement
+    }
+    return false
+  }
+
+  function isInteractive(target) {
+    let el = target
+    while (el && el.nodeType === 1 && !(el.classList && el.classList.contains('chrome'))) {
+      if (INTERACTIVE_TAGS.has(el.tagName)) return true
+      // onclick attribute (inline handler)
+      if (el.hasAttribute && el.hasAttribute('onclick')) return true
+      // cursor hint — pointer/text means interactive
+      const cur = getComputedStyle(el).cursor
+      if (cur === 'pointer' || cur === 'text') return true
+      el = el.parentElement
+    }
+    return false
+  }
+
+  let drag = null
+
+  document.addEventListener('mousedown', (e) => {
+    if (e.button !== 0) return
+    if (drag) return
+    const t = e.target
+    if (!t || t.nodeType !== 1) return
+    if (!isInChrome(t)) return
+    if (isInteractive(t)) return
+    drag = { sx: e.screenX, sy: e.screenY }
+    SE.winDragStart()
+  }, true)
+
+  window.addEventListener('mousemove', (e) => {
+    if (!drag) return
+    SE.winDragMove(e.screenX - drag.sx, e.screenY - drag.sy)
+  }, true)
+
+  function endDrag() {
+    if (!drag) return
+    drag = null
+    SE.winDragEnd()
+  }
+  window.addEventListener('mouseup', endDrag, true)
+  window.addEventListener('blur', endDrag)
+
+  document.addEventListener('dblclick', (e) => {
+    if (e.button !== 0) return
+    if (!isInChrome(e.target)) return
+    if (isInteractive(e.target)) return
+    SE.maximize?.()
+  })
+})()
 
 // ══════════════════════════════════════════════════════
 //  PROFILE PICKER — Chrome-like user profiles
@@ -2184,6 +2573,9 @@ async function submitNewProfile() {
 }
 
 async function updateProfileStatusBar() {
+  // Mirror to the new header avatar (and keep the legacy hidden statusbar
+  // chip in sync so it stays correct if/when re-enabled).
+  if (typeof updateUserAvatar === 'function') updateUserAvatar()
   const { profile } = await SE.profileGetActive()
   if (!profile) return
   const el = document.getElementById('sbProfileName')
@@ -2246,10 +2638,170 @@ function createWebviewForTab(tabId, url) {
 }
 
 function showWebview(tabId) {
+  // Hide every webview except the active tab's main + (optionally) its split.
   _tabWebviews.forEach((el, id) => {
     el.style.display = id === tabId ? '' : 'none'
   })
+  _splitWebviews.forEach((data, id) => {
+    data.wv.style.display = id === tabId ? '' : 'none'
+  })
+  layoutActiveTab()
 }
+
+// ══════════════════════════════════════════════════════
+//  SPLIT VIEW — 50/50 horizontal split per tab
+// ══════════════════════════════════════════════════════
+const _splitWebviews = new Map()  // tabId -> { wv: HTMLElement, url: string }
+const _splitFocused = new Map()    // tabId -> 'main' | 'split'
+
+function _splitDomain(u) {
+  try { return new URL(u).hostname.replace(/^www\./, '') } catch (_) { return u || '—' }
+}
+
+function layoutActiveTab() {
+  const tabId = activeId
+  const mainWv = _tabWebviews.get(tabId)
+  if (!mainWv) return
+  const split = _splitWebviews.get(tabId)
+  // Always wipe stale toolbars before re-rendering.
+  document.querySelectorAll('.split-pane-toolbar').forEach(t => t.remove())
+  if (split) {
+    mainWv.style.cssText = 'position:absolute;top:22px;bottom:0;left:0;width:50%;border:none;outline:none'
+    split.wv.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
+    _renderSplitToolbars(tabId)
+  } else {
+    mainWv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none'
+  }
+}
+
+function _renderSplitToolbars(tabId) {
+  const tab = tabs.find(t => t.id === tabId)
+  const split = _splitWebviews.get(tabId)
+  if (!tab || !split) return
+  const focused = _splitFocused.get(tabId) || 'main'
+  const cls = (side) => 'split-pane-toolbar ' + side + (focused === (side === 'left' ? 'main' : 'split') ? ' focused' : '')
+  const mkClose = `<button class="split-pane-close" data-split-close="1" title="Stäng split"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></button>`
+
+  const left = document.createElement('div')
+  left.className = cls('left')
+  left.dataset.splitSide = 'main'
+  left.innerHTML = `<span class="split-pane-domain">${esc(_splitDomain(tab.url))}</span>`
+
+  const right = document.createElement('div')
+  right.className = cls('right')
+  right.dataset.splitSide = 'split'
+  right.innerHTML = `<span class="split-pane-domain">${esc(_splitDomain(split.url))}</span>${mkClose}`
+
+  _wvStack.appendChild(left)
+  _wvStack.appendChild(right)
+}
+
+// Delegated handler: click pane toolbar → focus that side; click close → close split
+document.addEventListener('click', e => {
+  const close = e.target.closest('[data-split-close]')
+  if (close) {
+    e.stopPropagation()
+    closeSplitView(activeId)
+    return
+  }
+  const bar = e.target.closest('.split-pane-toolbar')
+  if (!bar) return
+  setSplitFocus(activeId, bar.dataset.splitSide || 'main')
+})
+
+function setSplitFocus(tabId, side) {
+  if (!_splitWebviews.has(tabId)) return
+  _splitFocused.set(tabId, side === 'split' ? 'split' : 'main')
+  // Repoint global wv so wvBack/Fwd/Reload + doNav act on the focused pane.
+  const split = _splitWebviews.get(tabId)
+  wv = (side === 'split' && split) ? split.wv : _tabWebviews.get(tabId)
+  // Mirror the focused pane's URL into the address bar.
+  const tab = tabs.find(t => t.id === tabId)
+  const url = side === 'split' ? split.url : tab.url
+  const inp = document.getElementById('urlInput')
+  if (inp) inp.value = isOverlayUrl(url) ? '' : url
+  layoutActiveTab()
+}
+
+function openSplitView(rawUrl) {
+  const tabId = activeId
+  if (_splitWebviews.has(tabId)) return  // already split
+  // Default to about:blank — Electron blocks window.prompt() so we can't
+  // ask for a URL up-front. The split pane is focused immediately so the
+  // user can type a URL in the address bar and have it land in the right
+  // pane. If a URL is provided programmatically (future API hook) we use it.
+  let url = (rawUrl || '').trim()
+  if (url && !/^https?:\/\//i.test(url) && !url.startsWith('about:')) {
+    url = 'https://' + url
+  }
+  if (!url) url = 'about:blank'
+
+  const el = document.createElement('webview')
+  el.setAttribute('useragent', CHROME_UA_WV)
+  el.setAttribute('allowpopups', '')
+  el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
+  el.src = url
+  _wvStack.appendChild(el)
+
+  _splitWebviews.set(tabId, { wv: el, url })
+  _splitFocused.set(tabId, 'split')
+  _attachSplitWebviewListeners(el, tabId)
+  layoutActiveTab()
+  // Repoint global wv so the next URL typed lands in the split pane,
+  // and clear + focus the URL bar so the user can start typing.
+  wv = el
+  const inp = document.getElementById('urlInput')
+  if (inp) {
+    inp.value = ''
+    inp.focus()
+    inp.select()
+  }
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+}
+
+function closeSplitView(tabId) {
+  tabId = tabId || activeId
+  const split = _splitWebviews.get(tabId)
+  if (!split) return
+  try { split.wv.remove() } catch (_) {}
+  _splitWebviews.delete(tabId)
+  _splitFocused.delete(tabId)
+  // Reset wv pointer to main webview of the active tab.
+  if (tabId === activeId) wv = _tabWebviews.get(tabId)
+  layoutActiveTab()
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+}
+
+// Lightweight listeners on the split-pane webview — keep its URL in
+// sync so the toolbar / address-bar reflect navigation, and forward
+// fullscreen events through the same body-class path the main webview
+// uses (no extra plumbing needed).
+function _attachSplitWebviewListeners(el, tabId) {
+  const updateUrl = (u) => {
+    const data = _splitWebviews.get(tabId)
+    if (!data) return
+    data.url = u
+    if (activeId === tabId) {
+      _renderSplitToolbars(tabId)
+      if ((_splitFocused.get(tabId) || 'main') === 'split') {
+        const inp = document.getElementById('urlInput')
+        if (inp) inp.value = u
+      }
+    }
+  }
+  el.addEventListener('did-navigate', e => updateUrl(e.url))
+  el.addEventListener('did-navigate-in-page', e => updateUrl(e.url))
+  el.addEventListener('enter-html-full-screen', () => {
+    if (activeId === tabId) document.body.classList.add('wv-fullscreen')
+  })
+  el.addEventListener('leave-html-full-screen', () => {
+    document.body.classList.remove('wv-fullscreen')
+  })
+}
+
+// Expose for menu / shortcut wiring.
+window.openSplitView = openSplitView
+window.closeSplitView = closeSplitView
 
 // Register initial webview (tab 1)
 _tabWebviews.set(1, _wvTemplate)
@@ -2694,6 +3246,34 @@ function _attachWebviewListeners(el, tabId) {
     el.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
   })
 
+  // HTML5 fullscreen (e.g. SEOZ platform "expand chart" button) — hide
+  // all our chrome AND put the OS window in true fullscreen (no taskbar,
+  // no title bar). ESC inside the guest fires leave-html-full-screen;
+  // the keydown handler also wires ESC at the host level for chrome
+  // focus. We remember whether we entered native fullscreen so we only
+  // exit it if it was *us* that entered (not the user pressing F11).
+  el.addEventListener('enter-html-full-screen', async () => {
+    if (!_isActive()) return
+    document.body.classList.add('wv-fullscreen')
+    try {
+      const already = await SE.isFullscreen?.()
+      if (!already) {
+        window._wvOwnedFs = true
+        SE.fullscreen()
+      }
+    } catch (_) {}
+  })
+  el.addEventListener('leave-html-full-screen', async () => {
+    document.body.classList.remove('wv-fullscreen')
+    if (window._wvOwnedFs) {
+      window._wvOwnedFs = false
+      try {
+        const on = await SE.isFullscreen?.()
+        if (on) SE.fullscreen()
+      } catch (_) {}
+    }
+  })
+
   el.addEventListener('did-navigate', e => {
     const t = _myTab(); if (t) t.url = e.url
     if (_isActive()) updateURL(e.url)
@@ -2878,7 +3458,7 @@ function updateURL(url) {
       const host = new URL(url).hostname
       if (host) tab.favicon = 'https://www.google.com/s2/favicons?domain=' + host + '&sz=32'
     } catch(_){}
-    if (!tab.title || tab.title === 'Ny flik') {
+    if (!tab.title || tab.title === 'Ny flik' || tab.title === 'SEOZ') {
       try { tab.title = new URL(url).hostname } catch(_) {}
     }
     renderTabs()
@@ -2932,7 +3512,7 @@ function wvReload() {
 // ══════════════════════════════════════════════════════
 //  TABS
 // ══════════════════════════════════════════════════════
-let tabs = [{ id:1, title:'Ny flik', url:'seoz://home', loading:false, favicon:null, _zoom:100 }]
+let tabs = [{ id:1, title:'SEOZ', url:'seoz://home', loading:false, favicon:null, _zoom:100 }]
 let activeId = 1
 let nextId = 2
 
@@ -2971,7 +3551,7 @@ function _restoreTabs() {
     if (initial && initial.parentNode) initial.parentNode.removeChild(initial)
     _tabWebviews.clear()
     tabs = data.tabs.map(t => ({
-      id: t.id, url: t.url, title: t.title || 'Ny flik',
+      id: t.id, url: t.url, title: t.title || 'SEOZ',
       favicon: t.favicon || null, loading: false, _zoom: 100,
     }))
     activeId = data.activeId && tabs.some(t => t.id === data.activeId) ? data.activeId : tabs[0].id
@@ -3092,6 +3672,9 @@ function syncOverlayVisibility() {
   if (wvEl) wvEl.style.display = (onHome || onMail) ? 'none' : ''
   if (onHome) {
     renderHomeScreen()
+    // Auto-populate the inbox preview so it's always visible on home
+    // (instead of only after the user types a search query).
+    if (typeof _homeLoadInboxPreview === 'function') _homeLoadInboxPreview()
     // Do NOT auto-focus #homeInput — on a new tab the URL bar must own
     // focus, and on tab-switches users shouldn't have the cursor stolen.
   } else if (onMail) {
@@ -3168,6 +3751,13 @@ function _homeScheduleMailSearch(query) {
   _homeMailSearchTimer = setTimeout(() => _homeRunMailSearch(query), 350)
 }
 
+// Inbox preview state: the full unread list (cached so toggle is instant)
+// + whether the user has expanded past the 5-row preview.
+let _homeMailUnread = []
+let _homeMailAccount = null
+let _homeMailExpanded = false
+const HOME_MAIL_PREVIEW = 5
+
 async function _homeRunMailSearch(query) {
   // Skip if no mail account exists yet — home doesn't know about mail state
   // since mail lazy-loads, so ask backend directly.
@@ -3177,44 +3767,84 @@ async function _homeRunMailSearch(query) {
   if (!active) { _homeHideMailResults(); return }
 
   const seq = ++_homeMailSearchSeq
-  const res = await SE.mail.search({
-    accountId: active.id,
-    folder: 'INBOX',
-    query,
-    limit: 5,
-  })
+  const q = (query || '').trim()
+  // Pull a wider window so we have enough material AFTER filtering for
+  // unread. With limit:4 we'd often filter down to zero.
+  const res = q
+    ? await SE.mail.search({ accountId: active.id, folder: 'INBOX', query: q, limit: 50 })
+    : await SE.mail.list({ accountId: active.id, folder: 'INBOX', limit: 50 })
   if (seq !== _homeMailSearchSeq) return   // newer search raced past us
-  if (!res || !res.ok || !Array.isArray(res.messages) || !res.messages.length) {
+  if (!res || !res.ok || !Array.isArray(res.messages)) {
     _homeHideMailResults()
     return
   }
-  _homeRenderMailResults(res.messages, active)
+  // Only show unread on the home preview — read mail belongs in the
+  // mail tab itself.
+  const unread = res.messages.filter(m => m.unread)
+  if (!unread.length) { _homeHideMailResults(); return }
+  _homeMailUnread = unread
+  _homeMailAccount = active
+  _homeRenderMailResults()
 }
 
-function _homeRenderMailResults(messages, account) {
+// Auto-populate inbox preview when the home overlay opens, so the
+// section is visible by default (previously only shown when the user
+// typed a search query).
+async function _homeLoadInboxPreview() {
+  try { await _homeRunMailSearch('') } catch (_) {}
+}
+
+function _homeRenderMailResults() {
   const box = document.getElementById('homeMailResults')
   if (!box) return
-  const rows = messages.map(m => {
+  const all = _homeMailUnread || []
+  const account = _homeMailAccount
+  if (!all.length || !account) { _homeHideMailResults(); return }
+
+  const visible = _homeMailExpanded ? all : all.slice(0, HOME_MAIL_PREVIEW)
+  const hidden = all.length - visible.length
+
+  const rows = visible.map(m => {
     const from = (m.from?.[0]?.name || m.from?.[0]?.address || '(okänd)')
     return `
       <button class="home-mail-result" type="button" onclick="_homeOpenMail('${esc(account.id)}', ${m.uid})">
-        <span class="home-mail-result-dot${m.unread ? '' : ' read'}"></span>
+        <span class="home-mail-result-dot"></span>
         <span class="home-mail-result-main">
-          <div class="home-mail-result-from">${esc(from)}</div>
-          <div class="home-mail-result-subject">${esc(m.subject || '(utan ämne)')}</div>
+          <span class="home-mail-result-from">${esc(from)}</span>
+          <span class="home-mail-result-subject">${esc(m.subject || '(utan ämne)')}</span>
         </span>
         <span class="home-mail-result-date">${esc(_formatMailDate(m.date))}</span>
       </button>
     `
   }).join('')
+
+  let toggle = ''
+  if (all.length > HOME_MAIL_PREVIEW) {
+    const label = _homeMailExpanded ? 'Visa färre' : `Visa ${hidden} fler`
+    toggle = `
+      <button class="home-mail-toggle${_homeMailExpanded ? ' expanded' : ''}" type="button" onclick="_homeToggleMailExpand()">
+        <span>${label}</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+    `
+  }
+
   box.innerHTML = `
     <div class="home-mail-results-header">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
-      Mejl · ${esc(account.email)}
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
+      <span>Inkorg</span>
+      <span class="hmr-count">· ${all.length} olästa</span>
+      <span class="hmr-email">${esc(account.email)}</span>
     </div>
     ${rows}
+    ${toggle}
   `
   box.classList.add('show')
+}
+
+window._homeToggleMailExpand = function() {
+  _homeMailExpanded = !_homeMailExpanded
+  _homeRenderMailResults()
 }
 
 function _homeHideMailResults() {
@@ -3223,21 +3853,21 @@ function _homeHideMailResults() {
 }
 
 // Clicking a home-screen result opens the mail tab and jumps directly
-// to that message. We set up state BEFORE navigating so renderMailScreen
+// to that message. We set up state BEFORE switching so renderMailScreen
 // finds the right account + auto-opens the message.
 window._homeOpenMail = async function(accountId, uid) {
-  // Switch active account if needed, then nav to mail
+  // Switch active account if needed
   await SE.mail.accountSetActive(accountId)
   _mailState.accountId = accountId
   _mailState.selectedUid = uid
   _homeHideMailResults()
   const inp = document.getElementById('homeInput')
   if (inp) { inp.value = ''; inp.style.height = 'auto' }
-  doNav('seoz://mail')
-  // After the screen renders, _mailLoadInbox will see selectedUid and
-  // _mailOpen will happen via click — but the list already pre-selects
-  // the row visually. Force an open in case user wants to read straight
-  // away.
+  // Use openMail() — it knows how to promote the home tab to mail or
+  // switch to an existing mail tab. Going through doNav('seoz://mail')
+  // hits the search fallback because the scheme has no dot in it.
+  if (typeof window.openMail === 'function') window.openMail()
+  // After the mail screen renders, force open the specific message.
   setTimeout(() => { try { _mailOpen(uid) } catch (_) {} }, 400)
 }
 
@@ -5168,6 +5798,14 @@ let _lastOpenedMessage = null
 const getActive = () => tabs.find(t => t.id === activeId)
 
 function renderTabs() {
+  // Normalise stale titles: tabs sitting on the SEOZ home overlay should
+  // always read "SEOZ" — covers leftover state from older sessions where
+  // a home tab inherited "Mejl" or "Ny flik" after being re-used.
+  tabs.forEach(t => {
+    if (isHomeUrl(t.url) && (t.title === 'Mejl' || t.title === 'Ny flik' || !t.title)) {
+      t.title = 'SEOZ'
+    }
+  })
   const bar = document.getElementById('tabbar')
   const ntBtn = document.getElementById('newtabBtn')
   const existing = bar.querySelectorAll('.tab[data-tab-id]')
@@ -5365,7 +6003,7 @@ function newTab(url, opts) {
   const tabUrl = url || HOME_URL
   const loadUrl = isHome ? 'about:blank' : url
   const background = !!(opts && opts.background)
-  tabs.push({ id, title: 'Ny flik', url: tabUrl, loading:false, favicon:null, _zoom:100 })
+  tabs.push({ id, title: 'SEOZ', url: tabUrl, loading:false, favicon:null, _zoom:100 })
   createWebviewForTab(id, loadUrl)
   if (background) {
     scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
@@ -5428,6 +6066,9 @@ function closeTab(e, id) {
   // Remove the webview element for this tab
   const closedWv = _tabWebviews.get(id)
   if (closedWv) { closedWv.remove(); _tabWebviews.delete(id) }
+  // If the tab had a split-view partner, dispose of that too.
+  const closedSplit = _splitWebviews.get(id)
+  if (closedSplit) { try { closedSplit.wv.remove() } catch (_) {}; _splitWebviews.delete(id); _splitFocused.delete(id) }
   if (activeId === id) switchTab(tabs[Math.min(idx, tabs.length-1)].id)
   else renderTabs()
   _persistTabs()
@@ -5924,6 +6565,18 @@ async function renderPanelContent(name) {
       <div id="seoPanelContent"><div style="text-align:center;padding:20px;color:var(--muted)">Laddar...</div></div>
     `
     renderSeoSubTab(window._seoTab)
+  } else if (name === 'agentready') {
+    icon.innerHTML = _PANEL_ICONS.zap; title.textContent = 'Agent Ready'
+    const active = tabs.find(t => t.id === activeId)
+    const url = active && !isOverlayUrl(active.url) ? active.url : ''
+    const cached = window._agentReadyCache && window._agentReadyCache.url === url ? window._agentReadyCache.scorecard : null
+    body.innerHTML = `
+      <div style="font-size:10px;color:var(--muted);margin-bottom:6px">Skannar agent/LLM-readiness — robots.txt, MCP card, OAuth discovery, content negotiation, Web Bot Auth m.m.</div>
+      <div class="ar-url" id="arUrl">${url ? esc(url) : 'Ingen URL — surfa till en sida först'}</div>
+      <button class="act-btn" onclick="runAgentReadyScan()" ${url ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'}>${_BTN.zap}Skanna sidan</button>
+      <div id="arResult" style="margin-top:12px">${cached ? '' : '<div class="ar-empty">Tryck "Skanna sidan" för att börja</div>'}</div>
+    `
+    if (cached) renderAgentReadyResult(cached)
   } else if (name === 'tracking') {
     icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Tracking'
     if (!window._trackingTab) window._trackingTab = 'keywords'
@@ -6480,6 +7133,13 @@ async function fetchClientData(clientId) {
 //  AUTH & SYNC
 // ══════════════════════════════════════════════════════
 async function init() {
+  // ── Theme: HTML defaults to light. If the user has saved 'dark'
+  //    explicitly, restore that here (otherwise stay on light). ──
+  try {
+    const savedTheme = await SE.getTheme()
+    if (savedTheme === 'dark') document.documentElement.dataset.theme = 'dark'
+  } catch (_) {}
+
   // ── Profile system: show picker if multiple profiles or no active profile ──
   const profiles = await SE.profileList()
   const { id: activeId } = await SE.profileGetActive()
@@ -6562,8 +7222,10 @@ async function doConnect(mode) {
         })
         updateProfileStatusBar()
       }
-      // Sync theme from SEOZ account
-      if (res.user?.theme) applySyncedTheme(res.user.theme)
+      // NOTE: previously called applySyncedTheme(res.user.theme) here,
+      // which forced the browser to whatever the SEOZ.io account had —
+      // overriding the user's local toggle every 30 s. Theme is now a
+      // per-device preference; cross-device sync removed.
       okEl.classList.add('show')
       setTimeout(() => {
         document.getElementById('auth').classList.add('gone')
@@ -6602,8 +7264,8 @@ async function syncNow() {
       synced.workspace = res.workspace
       synced.clients = res.clients || []
       updateSyncUI()
-      // Sync theme from SEOZ account
-      if (res.user?.theme) applySyncedTheme(res.user.theme)
+      // Theme is intentionally NOT synced from SEOZ.io — see note in
+      // doConnect(). Local toggle owns the theme on each device.
       // Restore active client
       const saved = await SE.storeGet('activeClientId')
       if (saved && synced.clients.find(c => c.id === saved)) {
@@ -6671,6 +7333,94 @@ SE.on('sync-data', data => {
   renderBmBar()
   if (currentPanel) renderPanelContent(currentPanel)
 })
+
+// ══════════════════════════════════════════════════════
+//  AGENT READY — scan any URL for agent/LLM-readiness
+// ══════════════════════════════════════════════════════
+window._agentReadyCache = null  // { url, scorecard, ts }
+
+async function runAgentReadyScan() {
+  const active = tabs.find(t => t.id === activeId)
+  const url = active && !isOverlayUrl(active.url) ? active.url : ''
+  if (!url) {
+    toast('Ingen URL — surfa till en sida först', '#e58a00')
+    return
+  }
+  const out = document.getElementById('arResult')
+  if (!out) return
+  out.innerHTML = `<div class="ar-loading"><span class="ar-loading-spin"></span>Skannar ${esc(_safeHost(url))}…</div>`
+  try {
+    const res = await SE.agentReadyScan(url)
+    if (!res || !res.ok || !res.scorecard) {
+      out.innerHTML = `<div class="ar-empty" style="color:var(--r)">Skanningen misslyckades: ${esc(res?.error || 'okänt fel')}</div>`
+      return
+    }
+    window._agentReadyCache = { url, scorecard: res.scorecard, ts: Date.now() }
+    renderAgentReadyResult(res.scorecard)
+  } catch (err) {
+    out.innerHTML = `<div class="ar-empty" style="color:var(--r)">Skanningen misslyckades: ${esc(err?.message || 'okänt fel')}</div>`
+  }
+}
+
+function _safeHost(u) {
+  try { return new URL(u).hostname } catch (_) { return u }
+}
+
+function renderAgentReadyResult(sc) {
+  const out = document.getElementById('arResult')
+  if (!out) return
+  const band = sc.scoreBand || 'poor'
+  const bandLabel = ({ excellent: 'Excellent', good: 'Good', okay: 'Okay', poor: 'Poor' })[band] || band
+
+  let cats = ''
+  for (const cat of (sc.categories || [])) {
+    const checks = cat.checks || []
+    const pass = checks.filter(c => c.status === 'pass').length
+    const warn = checks.filter(c => c.status === 'warn').length
+    const fail = checks.filter(c => c.status === 'fail').length
+    const summary = `${pass}/${checks.length} pass${warn ? ` · ${warn} warn` : ''}${fail ? ` · ${fail} fail` : ''}`
+    const isOpen = fail > 0 || warn > 0  // auto-expand categories with issues
+    const rows = checks.map(c => {
+      const dot = ({ pass: '✓', warn: '!', fail: '✕', na: '–' })[c.status] || '–'
+      return `
+        <div class="ar-check">
+          <div class="ar-check-dot ${esc(c.status)}">${dot}</div>
+          <div class="ar-check-body">
+            <div class="ar-check-name">${esc(c.name)}</div>
+            <div class="ar-check-detail">${esc(c.detail || '')}</div>
+            ${c.fix ? `<div class="ar-check-fix"><span class="ar-check-fix-lbl">Fix:</span>${esc(c.fix)}</div>` : ''}
+          </div>
+        </div>
+      `
+    }).join('')
+    cats += `
+      <div class="ar-cat${isOpen ? ' open' : ''}">
+        <div class="ar-cat-hdr" onclick="this.parentElement.classList.toggle('open')">
+          <svg class="ar-cat-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg>
+          <span class="ar-cat-name">${esc(cat.name)}</span>
+          <span class="ar-cat-summary">${esc(summary)}</span>
+        </div>
+        <div class="ar-cat-body">${rows}</div>
+      </div>
+    `
+  }
+
+  out.innerHTML = `
+    <div class="ar-score-card">
+      <div class="ar-score-num ${esc(band)}">${sc.score}</div>
+      <div style="flex:1;min-width:0">
+        <div class="ar-score-band">${esc(bandLabel)}</div>
+        <div class="ar-score-meta">${esc(_safeHost(sc.finalUrl || sc.url))} · ${(sc.durationMs/1000).toFixed(1)}s</div>
+      </div>
+    </div>
+    <div class="ar-counts">
+      <div class="ar-count pass">✓ ${sc.passCount} pass</div>
+      <div class="ar-count warn">! ${sc.warnCount} warn</div>
+      <div class="ar-count fail">✕ ${sc.failCount} fail</div>
+    </div>
+    ${cats}
+  `
+}
 
 // ══════════════════════════════════════════════════════
 //  HELPERS
@@ -6848,7 +7598,35 @@ function toggleClientDrop(wrap) {
   if (!drop) return
   const isOpen = drop.classList.contains('open')
   closeAllDrops()
-  if (!isOpen) drop.classList.add('open')
+  if (!isOpen) {
+    drop.classList.add('open')
+    // Pull fresh clients from seoz.io in the background so deletions
+    // / renames made in the platform show up immediately instead of
+    // waiting up to 30 s for the next auto-sync.
+    refreshClientsKeepDropOpen()
+  }
+}
+
+async function refreshClientsKeepDropOpen() {
+  const key = await SE.getApiKey()
+  if (!key) return
+  try {
+    const res = await SE.triggerSync(key)
+    if (!res || !res.ok) return
+    synced.user = res.user
+    synced.workspace = res.workspace
+    synced.clients = res.clients || []
+    if (synced.activeClientId && !synced.clients.find(c => c.id === synced.activeClientId)) {
+      synced.activeClientId = synced.clients[0]?.id || null
+      SE.storeSet('activeClientId', synced.activeClientId).catch(() => {})
+    }
+    updateSyncUI()
+    renderBmBar()
+    // renderBmBar replaces the picker DOM — re-open the fresh dropdown.
+    const newDrop = document.querySelector('.client-sel-drop')
+    if (newDrop) newDrop.classList.add('open')
+    if (currentPanel) renderPanelContent(currentPanel)
+  } catch (_) {}
 }
 
 function closeClientDrop() {
@@ -7180,6 +7958,13 @@ SE.on('open-url', url => {
   }
 })
 
+// Webview HTML5 fullscreen (forwarded from main where the guest's
+// webContents events fire — the webview tag's own events don't always
+// reach the renderer reliably).
+SE.on('webview-fullscreen', on => {
+  document.body.classList.toggle('wv-fullscreen', !!on)
+})
+
 // Navigate current tab (for target="_blank" / window.open that should stay in same tab)
 SE.on('navigate-current', url => {
   if (url && /^https?:\/\//i.test(url) && wv) {
@@ -7231,6 +8016,7 @@ function buildChromeMenu() {
     shield:   lc('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),
     scan:     lc('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/>'),
     fullscreen: lc('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>'),
+    split:    lc('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>'),
     moon:     lc('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
     sun:      lc('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'),
     settings: lc('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
@@ -7256,6 +8042,7 @@ function buildChromeMenu() {
     { icon: ico.shield,    label: blockerOn ? 'Shield aktiv (' + blockerCount + ' blockerade)' : 'Shield avstängd', shortcut:'', action: () => { toggleBlockerEnabled() } },
     { icon: ico.scan,      label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
     { icon: ico.fullscreen,label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
+    { icon: ico.split,     label: _splitWebviews.has(activeId) ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\', action: () => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() } },
     '---',
     { icon: isDark ? ico.sun : ico.moon, label: isDark ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
     { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => togglePanel('settings') },
@@ -7285,6 +8072,225 @@ function buildChromeMenu() {
     el.onclick = () => { closeChromeMenu(); item.action() }
     dd.appendChild(el)
   })
+}
+
+// ══════════════════════════════════════════════════════
+//  USER MENU (header avatar dropdown)
+// ══════════════════════════════════════════════════════
+async function updateUserAvatar() {
+  const av = document.getElementById('userAvatar')
+  if (!av) return
+  try {
+    const { profile } = await SE.profileGetActive()
+    if (!profile) { av.textContent = '?'; return }
+    // Mirror the dropdown's avatar — same coloured circle behind the
+    // photo / initials so both surfaces feel like the same identity.
+    av.style.background = profile.color || 'var(--p)'
+    if (profile.avatarUrl) {
+      av.innerHTML = `<img src="${esc(profile.avatarUrl)}" onerror="this.parentElement.textContent='${esc(getInitials(profile.name))}'">`
+    } else {
+      av.innerHTML = ''
+      av.textContent = getInitials(profile.name) || '?'
+    }
+  } catch (_) { av.textContent = '?' }
+}
+
+async function toggleUserMenu() {
+  const dd = document.getElementById('userDd')
+  if (dd.classList.contains('open')) { closeUserMenu(); return }
+  await buildUserMenu()
+  const btn = document.getElementById('userBtn')
+  const r = btn.getBoundingClientRect()
+  dd.style.top = (r.bottom + 6) + 'px'
+  dd.style.right = (window.innerWidth - r.right) + 'px'
+  dd.style.left = 'auto'
+  dd.classList.add('open')
+}
+function closeUserMenu() { document.getElementById('userDd').classList.remove('open') }
+
+async function buildUserMenu() {
+  const dd = document.getElementById('userDd')
+  dd.innerHTML = ''
+  const { profile } = await SE.profileGetActive()
+  const lc = (path) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`
+  const ico = {
+    user:    lc('<path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/>'),
+    key:     lc('<circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/>'),
+    star:    lc('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+    clock:   lc('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
+    settings:lc('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
+    refresh: lc('<path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/>'),
+  }
+
+  // Header — avatar + name/email
+  const hdr = document.createElement('div')
+  hdr.style.cssText = 'padding:14px 14px 12px;border-bottom:1px solid var(--border);display:flex;align-items:center;gap:11px'
+  const av = profile?.avatarUrl
+    ? `<img src="${esc(profile.avatarUrl)}" style="width:100%;height:100%;object-fit:cover" onerror="this.parentElement.textContent='${esc(getInitials(profile?.name || '?'))}'">`
+    : esc(getInitials(profile?.name || '?'))
+  hdr.innerHTML = `
+    <div style="width:38px;height:38px;border-radius:50%;background:${esc(profile?.color || 'var(--p)')};display:flex;align-items:center;justify-content:center;color:#fff;font-weight:800;font-size:14px;overflow:hidden;flex-shrink:0">${av}</div>
+    <div style="flex:1;min-width:0">
+      <div style="font-size:13px;font-weight:700;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(profile?.name || 'Profil')}</div>
+      <div style="font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(profile?.email || 'Inte inloggad')}</div>
+    </div>
+  `
+  dd.appendChild(hdr)
+
+  const items = [
+    { icon: ico.user,     label: 'Hantera profiler',  action: () => showProfilePicker() },
+    { icon: ico.refresh,  label: 'Synka konto',       action: () => syncNow() },
+    'sep',
+    { icon: ico.key,      label: 'Lösenord',          action: () => openPasswords() },
+    { icon: ico.star,     label: 'Bokmärken',         action: () => toggleBookmark() },
+    { icon: ico.clock,    label: 'Historik',          action: () => openHistory() },
+    'sep',
+    { icon: ico.settings, label: 'Inställningar',     action: () => togglePanel('settings') },
+  ]
+  items.forEach(item => {
+    if (item === 'sep') {
+      const s = document.createElement('div'); s.className = 'chrome-dd-sep'; dd.appendChild(s); return
+    }
+    const el = document.createElement('div')
+    el.className = 'chrome-dd-item'
+    el.innerHTML = `<span class="cdi-icon">${item.icon}</span><span class="cdi-label">${esc(item.label)}</span>`
+    el.onclick = () => { closeUserMenu(); try { item.action() } catch(_){} }
+    dd.appendChild(el)
+  })
+
+  // Footer — version
+  const ver = await (SE.updaterGetVersion ? SE.updaterGetVersion() : Promise.resolve(''))
+  const ftr = document.createElement('div')
+  ftr.style.cssText = 'padding:8px 14px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);display:flex;justify-content:space-between'
+  ftr.innerHTML = `<span>SEOZ Browser</span><span>v${esc(ver || '—')}</span>`
+  dd.appendChild(ftr)
+}
+
+// ══════════════════════════════════════════════════════
+//  PASSWORD MANAGER
+// ══════════════════════════════════════════════════════
+let _pwCache = []        // last fetched list
+let _pwRevealed = new Set() // ids whose password is currently visible
+let _pwEditingId = null   // id being edited; null = create-mode
+
+async function openPasswords() {
+  document.getElementById('pwModal').classList.add('open')
+  document.getElementById('pwSearch').value = ''
+  hidePasswordForm()
+  await loadPasswords()
+}
+function closePasswords() {
+  document.getElementById('pwModal').classList.remove('open')
+  _pwRevealed.clear()
+}
+
+async function loadPasswords() {
+  try {
+    _pwCache = await SE.passwordsList()
+  } catch (_) { _pwCache = [] }
+  renderPasswords()
+}
+
+function renderPasswords(query = '') {
+  const body = document.getElementById('pwBody')
+  body.innerHTML = ''
+  const q = (query || '').toLowerCase().trim()
+  const list = q
+    ? _pwCache.filter(p => (p.site||'').toLowerCase().includes(q) || (p.username||'').toLowerCase().includes(q))
+    : _pwCache
+  if (list.length === 0) {
+    body.innerHTML = `<div class="pw-empty">${q ? 'Inga matchande lösenord.' : 'Inga sparade lösenord ännu. Klicka "Lägg till" för att spara ett.'}</div>`
+    return
+  }
+  for (const p of list) {
+    const row = document.createElement('div')
+    row.className = 'pw-row'
+    const revealed = _pwRevealed.has(p.id)
+    const eyeIcon = revealed
+      ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-10-7-10-7a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 10 7 10 7a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24"/><line x1="1" y1="1" x2="23" y2="23"/></svg>'
+      : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7-10-7-10-7z"/><circle cx="12" cy="12" r="3"/></svg>'
+    const fav = `https://www.google.com/s2/favicons?domain=${encodeURIComponent(p.site || '')}&sz=32`
+    row.innerHTML = `
+      <img class="pw-fav" src="${esc(fav)}" onerror="this.style.visibility='hidden'">
+      <div class="pw-info">
+        <div class="pw-site">${esc(p.site || '')}</div>
+        <div class="pw-user">${esc(p.username || '')}</div>
+      </div>
+      <div class="pw-pwd">${revealed ? esc(p.password || '') : '••••••••••'}</div>
+      <div class="pw-actions">
+        <button class="pw-act" data-pw-action="reveal" data-pw-id="${esc(p.id)}" title="${revealed ? 'Dölj' : 'Visa'}">${eyeIcon}</button>
+        <button class="pw-act" data-pw-action="copy" data-pw-id="${esc(p.id)}" title="Kopiera lösenord"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
+        <button class="pw-act" data-pw-action="edit" data-pw-id="${esc(p.id)}" title="Redigera"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 20h9"/><path d="M16.5 3.5a2.121 2.121 0 1 1 3 3L7 19l-4 1 1-4L16.5 3.5z"/></svg></button>
+        <button class="pw-act danger" data-pw-action="delete" data-pw-id="${esc(p.id)}" title="Ta bort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/><path d="M9 6V4a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2"/></svg></button>
+      </div>
+    `
+    body.appendChild(row)
+  }
+}
+
+// Single delegated handler — keeps the per-row HTML simple and avoids
+// global function pollution (passwords use IDs, not function names).
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('[data-pw-action]')
+  if (!btn) return
+  const id = btn.getAttribute('data-pw-id')
+  const action = btn.getAttribute('data-pw-action')
+  const entry = _pwCache.find(p => p.id === id)
+  if (!entry) return
+  if (action === 'reveal') {
+    if (_pwRevealed.has(id)) _pwRevealed.delete(id); else _pwRevealed.add(id)
+    renderPasswords(document.getElementById('pwSearch').value)
+  } else if (action === 'copy') {
+    try { await navigator.clipboard.writeText(entry.password || '') } catch (_) {}
+    toast('Lösenord kopierat', '#2ca87f')
+  } else if (action === 'edit') {
+    _pwEditingId = id
+    document.getElementById('pwSite').value = entry.site || ''
+    document.getElementById('pwUsername').value = entry.username || ''
+    document.getElementById('pwPassword').value = entry.password || ''
+    document.getElementById('pwForm').classList.add('show')
+  } else if (action === 'delete') {
+    if (!confirm(`Ta bort sparat lösenord för ${entry.site}?`)) return
+    await SE.passwordsDelete(id)
+    await loadPasswords()
+    toast('Lösenord borttaget', '#dc2626')
+  }
+})
+
+function showPasswordForm() {
+  _pwEditingId = null
+  document.getElementById('pwSite').value = ''
+  document.getElementById('pwUsername').value = ''
+  document.getElementById('pwPassword').value = ''
+  document.getElementById('pwForm').classList.add('show')
+  setTimeout(() => document.getElementById('pwSite').focus(), 50)
+}
+function hidePasswordForm() {
+  document.getElementById('pwForm').classList.remove('show')
+  _pwEditingId = null
+}
+
+async function savePassword() {
+  const site = document.getElementById('pwSite').value.trim()
+  const username = document.getElementById('pwUsername').value.trim()
+  const password = document.getElementById('pwPassword').value
+  if (!site || !username || !password) {
+    toast('Fyll i webbplats, användarnamn och lösenord', '#e58a00')
+    return
+  }
+  try {
+    if (_pwEditingId) {
+      await SE.passwordsUpdate(_pwEditingId, { site, username, password })
+      toast('Lösenord uppdaterat', '#2ca87f')
+    } else {
+      await SE.passwordsAdd({ site, username, password })
+      toast('Lösenord sparat', '#2ca87f')
+    }
+    hidePasswordForm()
+    await loadPasswords()
+  } catch (err) {
+    toast('Kunde inte spara: ' + (err?.message || 'okänt fel'), '#dc2626')
+  }
 }
 
 // ══════════════════════════════════════════════════════
@@ -11293,12 +12299,33 @@ document.addEventListener('keydown', e => {
   }
   // Ctrl+F → Find in page
   else if (ctrl && key === 'f') { e.preventDefault(); openFindBar() }
-  // Escape → Close find bar
+  // Ctrl+\ → Toggle split-view on the active tab
+  else if (ctrl && (e.key === '\\' || key === '\\')) {
+    e.preventDefault()
+    if (_splitWebviews.has(activeId)) closeSplitView(activeId)
+    else openSplitView()
+  }
+  // Escape → Close find bar / overlays / exit fullscreen
   else if (e.key === 'Escape') {
     if (findActive) closeFindBar()
+    else if (document.body.classList.contains('wv-fullscreen')) {
+      // Webview HTML5 fullscreen — ask the guest to exit, which fires
+      // leave-html-full-screen and removes the body class.
+      try { wv.executeJavaScript('document.exitFullscreen && document.exitFullscreen()').catch(() => {}) } catch (_) {}
+      // Belt-and-braces: also drop the class in case the guest already
+      // exited but never told us.
+      document.body.classList.remove('wv-fullscreen')
+    }
+    else if (document.getElementById('pwModal').classList.contains('open')) closePasswords()
+    else if (document.getElementById('userDd').classList.contains('open')) closeUserMenu()
     else if (document.getElementById('chromeDd').classList.contains('open')) closeChromeMenu()
     else if (document.getElementById('historyOverlay').classList.contains('open')) closeHistory()
     else if (document.getElementById('inspectorDrawer').classList.contains('open')) closeInspector()
+    else {
+      // Final fallback: if the OS window is in F11-style fullscreen and
+      // nothing else handled the press, exit that too.
+      SE.isFullscreen?.().then(on => { if (on) SE.fullscreen() })
+    }
   }
   // Ctrl+H → History
   else if (ctrl && key === 'h') { e.preventDefault(); openHistory() }
@@ -11384,14 +12411,14 @@ async function restoreSavedTabs() {
     // Load first saved tab into tab 1
     const first = saved[0]
     tabs[0].url = first.url
-    tabs[0].title = first.title || 'Ny flik'
+    tabs[0].title = first.title || 'SEOZ'
     tabs[0].favicon = first.favicon
     wv.loadURL(first.url)
     // Create remaining tabs
     for (let i = 1; i < saved.length; i++) {
       const s = saved[i]
       const id = nextId++
-      tabs.push({ id, title: s.title || 'Ny flik', url: s.url, loading: false, favicon: s.favicon, _zoom: 100 })
+      tabs.push({ id, title: s.title || 'SEOZ', url: s.url, loading: false, favicon: s.favicon, _zoom: 100 })
       createWebviewForTab(id, s.url)
     }
     // Switch to previously active tab
@@ -11419,6 +12446,7 @@ updateURL = function(url) {
 // Close chrome menu on outside click
 document.addEventListener('click', e => {
   if (!e.target.closest('.chrome-dd') && !e.target.closest('.chrome-menu-btn')) closeChromeMenu()
+  if (!e.target.closest('#userDd') && !e.target.closest('#userBtn')) closeUserMenu()
 })
 
 // Track downloads from webview

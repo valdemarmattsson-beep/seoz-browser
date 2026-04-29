@@ -9,6 +9,17 @@ contextBridge.exposeInMainWorld('seoz', {
   fullscreen:  () => ipcRenderer.send('win-fullscreen'),
   isFullscreen:() => ipcRenderer.invoke('win-is-fullscreen'),
 
+  // Manual window drag (workaround for Electron 28 frame:false bug)
+  winDragStart: ()         => ipcRenderer.send('win-drag-start'),
+  winDragMove:  (dx, dy)   => ipcRenderer.send('win-drag-move', dx, dy),
+  winDragEnd:   ()         => ipcRenderer.send('win-drag-end'),
+
+  // Password manager (per-profile, encrypted via OS-level safeStorage)
+  passwordsList:   ()              => ipcRenderer.invoke('passwords-list'),
+  passwordsAdd:    (entry)         => ipcRenderer.invoke('passwords-add', entry),
+  passwordsUpdate: (id, updates)   => ipcRenderer.invoke('passwords-update', { id, updates }),
+  passwordsDelete: (id)            => ipcRenderer.invoke('passwords-delete', id),
+
   // DevTools
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
 
@@ -36,6 +47,9 @@ contextBridge.exposeInMainWorld('seoz', {
   // SEOZ API
   triggerSync: (apiKey) => ipcRenderer.invoke('trigger-sync', apiKey),
   fetchApi:    (opts)   => ipcRenderer.invoke('fetch-browser-api', opts),
+
+  // Agent Ready — grade any URL on agent/LLM-readiness
+  agentReadyScan: (url) => ipcRenderer.invoke('fetch-agent-ready', url),
 
   // Claude AI
   claudeChat:  (opts) => ipcRenderer.invoke('claude-chat', opts),
@@ -130,7 +144,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

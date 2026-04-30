@@ -1808,18 +1808,38 @@ async function updateJumpList() {
   const iconMap = await faviconCache.ensureMany(allHosts)
 
   // ── Helper: build a Jump List item with favicon ──
+  // Windows' AppendCategory is fussy about control chars, pipe-style
+  // shell metacharacters in titles, very long args, and missing icon
+  // files. When any of these slip through, ChromIum logs a noisy
+  // "Failed to append task" ERROR to stderr (non-fatal but spammy).
+  // We sanitise aggressively up-front so the row actually lands.
+  const fsSync = require('fs')
+  function _sanitiseTitle(t) {
+    return String(t || '')
+      // strip control chars + pipes / angle brackets / quotes (shell-link unsafe)
+      .replace(/[\x00-\x1f\x7f|<>"]/g, ' ')
+      // collapse whitespace
+      .replace(/\s+/g, ' ')
+      .trim()
+  }
   function makeItem(title, url, host) {
+    const safeTitle = _sanitiseTitle(title) || _sanitiseTitle(host) || 'Sida'
+    // Windows shell link arguments cap out somewhere around 260–512 chars;
+    // skip URLs that would push the row past it (they'd just fail anyway).
+    if (!url || url.length > 480) return null
     const item = {
       type: 'task',
-      title: title.length > 50 ? title.slice(0, 47) + '...' : title,
+      title: safeTitle.length > 50 ? safeTitle.slice(0, 47) + '...' : safeTitle,
       program: exePath,
       args: url,
-      description: url,
+      description: url.length > 250 ? url.slice(0, 247) + '...' : url,
     }
     const iconPath = iconMap.get(host)
+    // Only attach icon if the cached file is actually still on disk —
+    // a stale path triggers AppendCategory failure on the whole item.
     if (iconPath) {
-      item.iconPath = iconPath
-      item.iconIndex = 0
+      try { if (fsSync.existsSync(iconPath)) { item.iconPath = iconPath; item.iconIndex = 0 } }
+      catch (_) {}
     }
     return item
   }
@@ -1843,27 +1863,21 @@ async function updateJumpList() {
   })
 
   // "Mest besökta"
-  if (topSites.length) {
-    categories.push({
-      type: 'custom',
-      name: 'Mest besökta',
-      items: topSites.map(s => makeItem(s.title, s.url, s.host)),
-    })
-  }
+  const topItems = topSites.map(s => makeItem(s.title, s.url, s.host)).filter(Boolean)
+  if (topItems.length) categories.push({ type: 'custom', name: 'Mest besökta', items: topItems })
 
   // "Senast besökta"
-  if (recentSites.length) {
-    categories.push({
-      type: 'custom',
-      name: 'Senast besökta',
-      items: recentSites.map(s => makeItem(s.title, s.url, s.host)),
-    })
-  }
+  const recentItems = recentSites.map(s => makeItem(s.title, s.url, s.host)).filter(Boolean)
+  if (recentItems.length) categories.push({ type: 'custom', name: 'Senast besökta', items: recentItems })
 
+  // setJumpList is "all-or-nothing" for the whole call — a single bad
+  // item rejects the entire batch and spams stderr. If the full call
+  // throws, fall back to the always-present Aktiviteter category alone
+  // so at least "Nytt fönster" survives.
   try {
     app.setJumpList(categories)
-  } catch (e) {
-    // Jump List errors are non-fatal
+  } catch (_) {
+    try { app.setJumpList(categories.slice(0, 1)) } catch (_) {}
   }
 }
 

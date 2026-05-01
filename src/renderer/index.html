@@ -209,17 +209,24 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   color:var(--muted);margin-top:36px;margin-bottom:8px;align-self:flex-start;
 }
 .home-recent{
-  width:100%;display:flex;flex-direction:column;gap:4px;
+  width:100%;display:flex;flex-wrap:wrap;gap:6px;justify-content:center;
 }
 .home-recent-item{
-  display:flex;align-items:center;gap:10px;padding:8px 12px;border-radius:8px;
-  cursor:pointer;transition:background .12s;color:var(--txt);
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 12px;border-radius:100px;max-width:240px;
+  background:var(--card);border:1px solid var(--border);
+  cursor:pointer;transition:background .15s,border-color .15s;color:var(--txt);
 }
-.home-recent-item:hover{background:var(--card)}
-.home-recent-fav{width:14px;height:14px;border-radius:2px;flex-shrink:0;object-fit:contain}
-.home-recent-fav-fb{width:14px;height:14px;color:var(--muted);flex-shrink:0}
-.home-recent-title2{flex:1;font-size:12px;color:var(--head);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.home-recent-url{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:260px}
+.home-recent-item:hover{background:var(--panel);border-color:var(--p)}
+.home-recent-fav{width:13px;height:13px;border-radius:2px;flex-shrink:0;object-fit:contain}
+.home-recent-fav-fb{width:13px;height:13px;color:var(--muted);flex-shrink:0}
+.home-recent-title2{
+  font-size:11px;color:var(--head);font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;min-width:0;
+}
+/* URL no longer shown inline — exposed via the row's title attr (tooltip)
+   to keep the pill compact. Kept in CSS for legacy callers but hidden. */
+.home-recent-url{display:none}
 .home-slash-hint{
   position:absolute;bottom:calc(100% + 6px);left:0;right:0;
   background:var(--card);border:1px solid var(--border);border-radius:10px;
@@ -3643,10 +3650,13 @@ async function renderHomeScreen() {
     items.forEach(r => {
       const row = document.createElement('div')
       row.className = 'home-recent-item'
+      // Pill layout: favicon + title; URL surfaced as native tooltip so
+      // the row stays compact but the user can still see where they go.
+      row.title = r.url
       const fav = r.favicon
         ? `<img class="home-recent-fav" src="${esc(r.favicon)}" onerror="this.outerHTML='<svg class=\\'home-recent-fav-fb\\' viewBox=\\'0 0 200 200\\' fill=\\'none\\' style=\\'opacity:.85\\'><circle cx=\\'100\\' cy=\\'100\\' r=\\'10\\' fill=\\'currentColor\\'/><path d=\\'M100 40 A 60 60 0 0 1 160 100\\' stroke=\\'currentColor\\' stroke-width=\\'18\\' stroke-linecap=\\'round\\'/><path d=\\'M100 160 A 60 60 0 0 1 40 100\\' stroke=\\'currentColor\\' stroke-width=\\'18\\' stroke-linecap=\\'round\\'/></svg>'">`
         : `<svg class="home-recent-fav-fb" viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>`
-      row.innerHTML = `${fav}<span class="home-recent-title2">${esc(r.title)}</span><span class="home-recent-url">${esc(r.url)}</span>`
+      row.innerHTML = `${fav}<span class="home-recent-title2">${esc(r.title)}</span>`
       row.onclick = () => doNav(r.url)
       recentEl.appendChild(row)
     })

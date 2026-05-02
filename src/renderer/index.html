@@ -857,14 +857,14 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100vh;overflow:hidden;font-family:'Inter',sans-serif;font-size:13px;background:var(--bg);color:var(--txt);user-select:none}
 
-/* ── GLOBAL SCROLLBAR (SEOZ theme) ── */
+/* ── GLOBAL SCROLLBAR — matched to seoz.io platform globals.css ── */
 ::-webkit-scrollbar{width:6px;height:6px}
 ::-webkit-scrollbar-track{background:transparent}
-::-webkit-scrollbar-thumb{background:rgba(255,255,255,.12);border-radius:3px}
-::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.22)}
+::-webkit-scrollbar-thumb{background:rgba(255,255,255,.16);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:rgba(255,255,255,.5)}
 ::-webkit-scrollbar-corner{background:transparent}
-[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.15)}
-[data-theme="light"] ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.28)}
+[data-theme="light"] ::-webkit-scrollbar-thumb{background:rgba(0,0,0,.14)}
+[data-theme="light"] ::-webkit-scrollbar-thumb:hover{background:rgba(0,0,0,.5)}
 input,textarea,select{user-select:text}
 
 /* ── LAYOUT ── */
@@ -1001,8 +1001,6 @@ input,textarea,select{user-select:text}
 .url-wrap{position:relative}
 .url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
 .url-suggest.open{display:block}
-.url-suggest::-webkit-scrollbar{width:3px}
-.url-suggest::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .url-sg{padding:6px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background .1s}
 .url-sg:hover,.url-sg.sel{background:rgba(255,255,255,.06)}
 .url-sg img{width:14px;height:14px;border-radius:2px;flex-shrink:0}
@@ -1270,8 +1268,6 @@ input,textarea,select{user-select:text}
 .ph-cls{width:22px;height:22px;border-radius:5px;border:none;background:none;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:13px;color:var(--muted);transition:background .15s}
 .ph-cls:hover{background:var(--border)}
 .panel-body{flex:1;overflow-y:auto;padding:12px 14px}
-.panel-body::-webkit-scrollbar{width:3px}
-.panel-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 
 /* Panel content components */
 .sh{font-size:10px;font-weight:700;letter-spacing:.07em;text-transform:uppercase;color:var(--p);margin:12px 0 6px}
@@ -1655,8 +1651,6 @@ input,textarea,select{user-select:text}
 .history-search{flex:1;height:30px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 10px;font-size:12px;font-family:inherit;color:var(--txt);outline:none}
 .history-search:focus{border-color:var(--p)}
 .history-list{flex:1;overflow-y:auto;padding:4px 0}
-.history-list::-webkit-scrollbar{width:3px}
-.history-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .history-item{padding:8px 16px;display:flex;align-items:center;gap:10px;cursor:pointer;transition:background .1s}
 .history-item:hover{background:rgba(255,255,255,.04)}
 .history-item img{width:16px;height:16px;border-radius:2px;flex-shrink:0}
@@ -1697,8 +1691,6 @@ input,textarea,select{user-select:text}
 .inspector-btn{width:24px;height:24px;border-radius:5px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:background .12s}
 .inspector-btn:hover{background:rgba(255,255,255,.08)}
 .inspector-body{flex:1;overflow-y:auto;padding:10px 14px;font-size:11px;line-height:1.7}
-.inspector-body::-webkit-scrollbar{width:3px}
-.inspector-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:2px}
 .insp-section{margin-bottom:12px}
 .insp-section-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p);margin-bottom:4px}
 .insp-row{display:flex;align-items:flex-start;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}

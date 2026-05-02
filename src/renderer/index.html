@@ -4283,6 +4283,72 @@ const _MAIL_FALLBACK_ACTIONS = [
   { id: 'mark-read', label: 'Markera läst' },
   { id: 'archive',   label: 'Arkivera' },
 ]
+
+// Local heuristic classifier — runs deterministically on sender + subject
+// without needing an Anthropic key. Catches the common patterns
+// (notifications, invoices, newsletters, transactions) so the inbox
+// gets diverse pills out of the box. Claude (when wired) refines /
+// overrides on top of this for the harder lead-vs-support split.
+function _heuristicClassify(message) {
+  if (!message) return null
+  const fromAddr = (message.from?.[0]?.address || '').toLowerCase()
+  const fromName = (message.from?.[0]?.name || '').toLowerCase()
+  const subject  = (message.subject || '').toLowerCase()
+  const local    = fromAddr.split('@')[0] || ''
+  const domain   = fromAddr.split('@')[1] || ''
+
+  const has = (re, ...fields) => fields.some(f => re.test(f))
+
+  // Order matters — specific buckets before generic notifiering.
+  if (has(/\b(faktura|invoice|payment|betalning|kvitto|receipt|past[- ]due|f[öo]rfallen)\b/, subject))
+    return { c: 'faktura', conf: 78 }
+
+  if (has(/\b(offert|tender|partnership|samarbete|rfp|rfq|quotation|pricing|prisuppgift|prospekt)\b/, subject))
+    return { c: 'salj_lead', conf: 72 }
+
+  if (has(/\b(unsubscribe|nyhetsbrev|newsletter|digest|weekly|daily)\b/, subject) || /^(newsletter|news|digest)@/.test(local))
+    return { c: 'nyhetsbrev', conf: 80 }
+
+  if (has(/\b(order|leverans|shipped|tracking|delivery|frakt|orderbekr[äa]ftelse|booking|bokning)\b/, subject))
+    return { c: 'transaktion', conf: 78 }
+
+  if (has(/\b(rabatt|kampanj|sale|deal|promo|black friday|erbjudande|spara \d|% off)\b/, subject))
+    return { c: 'reklam', conf: 70 }
+
+  if (has(/\b(linkedin|twitter|facebook|instagram|reddit|slack|discord)\b/, domain))
+    return { c: 'social', conf: 85 }
+
+  // Notification senders — patterns the IMAP world has settled on
+  if (/^(noreply|no-reply|donotreply|do-not-reply|notifications?|notify|automated?|alert|alerts|system|mailer|info|hello|news)@/.test(fromAddr) ||
+      /^(no[- ]?reply|notifications?)$/i.test(fromName) ||
+      has(/notification|reminder|verification|verify|otp|kod|kode|aktivering|p[åa]minnelse/, subject))
+    return { c: 'notifiering', conf: 82 }
+
+  // Personal-domain heuristic — a sender on a free-mail provider with no
+  // newsletter / system markers tends to be an actual person.
+  if (/^(gmail|hotmail|outlook|live|yahoo|icloud|me)\./.test(domain) || /^(gmail|hotmail|outlook|live|yahoo|icloud|me)$/.test(domain.split('.')[0]))
+    return { c: 'personlig', conf: 60 }
+
+  // Domain is a known company tail (.com / .se / .io etc.) and we
+  // didn't hit any of the above — most likely a real person at a
+  // company. Default to support (low confidence) so they get
+  // research / draft pills.
+  if (/\.(com|se|io|net|org|co|ai|app|dev|nu|dk|fi|no)$/.test(domain))
+    return { c: 'support', conf: 40 }
+
+  return null
+}
+
+function _runLocalHeuristics() {
+  let changed = false
+  for (const m of (_mailState.messages || [])) {
+    if (!m.messageId) continue
+    if (_mailClassifications[m.messageId]) continue   // don't overwrite real classifier
+    const h = _heuristicClassify(m)
+    if (h) { _mailClassifications[m.messageId] = h; changed = true }
+  }
+  return changed
+}
 // messageId -> Set<actionId> — purely in-memory; resets on app restart.
 // Tracking the per-message done state lets us render ✓-pills so the
 // user knows what they've already done in this session.
@@ -4376,6 +4442,17 @@ document.addEventListener('click', e => {
 
 async function _mailRunClassifier() {
   if (!_mailState.messages.length) return
+  // 1. Pull the cache from main first — instant, no network.
+  const cacheRes = await SE.mail.classify({
+    items: _mailState.messages.map(m => ({ messageId: m.messageId, from: '', subject: '' })),
+  })
+  if (cacheRes?.cached) Object.assign(_mailClassifications, cacheRes.cached)
+  // 2. Apply local heuristics for anything still uncategorised. Runs
+  //    even without an Anthropic key so users get diverse pills
+  //    immediately (Zoho noreply → notifiering, "Invoice" → faktura...).
+  const heuristicsHit = _runLocalHeuristics()
+  if (heuristicsHit) _renderInboxList()
+  // 3. Send the rest to Claude for refinement (only the unclassified ones).
   const items = _mailState.messages
     .filter(m => m.messageId && !_mailClassifications[m.messageId])
     .map(m => ({
@@ -4384,15 +4461,11 @@ async function _mailRunClassifier() {
       subject: m.subject || '',
     }))
   if (!items.length) {
-    // Still populate from cache so previously-classified rows get chips
-    // right away without a network round-trip.
-    const res = await SE.mail.classify({ items: _mailState.messages.map(m => ({ messageId: m.messageId, from: '', subject: '' })) })
-    if (res?.cached) Object.assign(_mailClassifications, res.cached)
-    _renderInboxList()
+    if (!heuristicsHit) _renderInboxList()
     return
   }
   const res = await SE.mail.classify({ items })
-  if (!res || !res.ok) return
+  if (!res || !res.ok) { _renderInboxList(); return }
   Object.assign(_mailClassifications, res.cached || {}, res.classified || {})
   _renderInboxList()
 }

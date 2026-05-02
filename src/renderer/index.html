@@ -4274,6 +4274,15 @@ const _MAIL_SUGGESTED_ACTIONS = {
     { id: 'mark-handled', label: 'Markera hanterad', primary: true },
   ],
 }
+// Fallback set used when a mail has no classification yet (no Anthropic
+// key configured, or row hasn't been processed yet). Keeps the new
+// design visible from the first paint instead of hiding behind a Claude
+// round-trip.
+const _MAIL_FALLBACK_ACTIONS = [
+  { id: 'research',  label: 'Research bolag', primary: true },
+  { id: 'mark-read', label: 'Markera läst' },
+  { id: 'archive',   label: 'Arkivera' },
+]
 // messageId -> Set<actionId> — purely in-memory; resets on app restart.
 // Tracking the per-message done state lets us render ✓-pills so the
 // user knows what they've already done in this session.
@@ -4846,7 +4855,11 @@ function _threadRowHtml(t) {
     : ''
   // Suggested actions row — agent-recommended next steps for this
   // category. Done pills render with a green check and disabled state.
-  const suggestions = (catCode && _MAIL_SUGGESTED_ACTIONS[catCode]) || []
+  // When no classification exists yet, surface a small fallback set so
+  // the row design is visible from the first inbox load (instead of
+  // waiting on a Claude round-trip that may never happen if the user
+  // hasn't wired up an Anthropic API key).
+  const suggestions = (catCode && _MAIL_SUGGESTED_ACTIONS[catCode]) || _MAIL_FALLBACK_ACTIONS
   const doneSet = _mailRowActionsDone.get(m.messageId) || new Set()
   const actionsBarHtml = suggestions.length
     ? `<div class="mail-row-actions-bar" onclick="event.stopPropagation()">${

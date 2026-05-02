@@ -599,11 +599,51 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 }
 .mail-row-cat.personlig{background:rgba(44,168,127,.15);color:#2ca87f}
 .mail-row-cat.arbete{background:rgba(70,128,255,.15);color:var(--p)}
+.mail-row-cat.salj_lead{background:rgba(70,128,255,.15);color:var(--p)}
+.mail-row-cat.faktura{background:rgba(229,138,0,.18);color:#e58a00}
+.mail-row-cat.support{background:rgba(139,92,246,.15);color:#a78bfa}
 .mail-row-cat.notifiering{background:rgba(245,158,11,.15);color:#f59e0b}
 .mail-row-cat.nyhetsbrev{background:rgba(139,92,246,.15);color:#a78bfa}
 .mail-row-cat.reklam{background:rgba(148,163,184,.18);color:#94a3b8}
 .mail-row-cat.social{background:rgba(6,182,212,.15);color:#06b6d4}
 .mail-row-cat.transaktion{background:rgba(217,70,239,.15);color:#d946ef}
+
+/* ── Inline suggested actions on each mail row (Phase 1A) ──
+   Sits below the subject; pills are agent-suggested actions tailored
+   to the message's category. Confidence chip on the right shows the
+   classifier's certainty. Click handlers wired via [data-mail-act]. */
+.mail-row-actions-bar{
+  display:flex;align-items:center;gap:5px;flex-wrap:wrap;
+  padding-left:12px;margin-top:3px;min-height:22px;
+}
+.mail-row-pill{
+  display:inline-flex;align-items:center;gap:4px;
+  padding:2px 9px;height:20px;border-radius:100px;
+  border:1px solid var(--border);background:transparent;
+  font-size:10px;font-weight:600;color:var(--muted);
+  cursor:pointer;font-family:inherit;white-space:nowrap;
+  transition:background .15s,border-color .15s,color .15s;
+}
+.mail-row-pill:hover{border-color:var(--p);color:var(--p);background:rgba(70,128,255,.08)}
+.mail-row-pill.primary{
+  background:rgba(70,128,255,.10);border-color:rgba(70,128,255,.4);color:var(--p);
+}
+.mail-row-pill.primary:hover{background:rgba(70,128,255,.18);border-color:var(--p)}
+.mail-row-pill.done{
+  background:rgba(44,168,127,.10);border-color:rgba(44,168,127,.4);color:#2ca87f;
+  cursor:default;
+}
+.mail-row-pill.done:hover{background:rgba(44,168,127,.10);border-color:rgba(44,168,127,.4);color:#2ca87f}
+.mail-row-pill:disabled{cursor:default}
+.mail-row-confidence{
+  margin-left:auto;display:inline-flex;align-items:center;gap:4px;
+  font-size:9px;font-weight:600;color:var(--muted);padding-left:4px;
+  letter-spacing:.02em;
+}
+.mail-row-confidence-dot{
+  width:5px;height:5px;border-radius:50%;background:#2ca87f;flex-shrink:0;
+}
+.mail-row-confidence.low .mail-row-confidence-dot{background:#e58a00}
 .mail-row-subject{
   font-size:11px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
   padding-left:12px;
@@ -4178,6 +4218,153 @@ async function _mailUpdateBadge() {
 // only pay tokens for messages we've never seen before.
 const _mailClassifications = {}
 
+// Phase 1A: human-readable labels + per-category suggested-actions table.
+// Suggestions are static rules right now (no per-message AI generation
+// yet — that's Phase 1B). Each action's id is dispatched in
+// _mailHandleSuggestedAction() to either an existing helper (snooze /
+// archive / read) or a stub-with-toast for actions whose backend is
+// still TBD (CRM, unsubscribe, save-receipt).
+const _MAIL_CAT_LABELS = {
+  salj_lead: 'Säljlead',
+  faktura: 'Faktura',
+  support: 'Support',
+  personlig: 'Privat',
+  arbete: 'Jobb',          // legacy v1 cache shim
+  notifiering: 'Notis',
+  nyhetsbrev: 'Nyhetsbrev',
+  reklam: 'Reklam',
+  social: 'Social',
+  transaktion: 'Kvitto',
+}
+const _MAIL_SUGGESTED_ACTIONS = {
+  salj_lead: [
+    { id: 'crm-lead',    label: 'Skapa CRM-lead', primary: true },
+    { id: 'research',    label: 'Research bolag' },
+    { id: 'draft-reply', label: 'Generera svar' },
+  ],
+  faktura: [
+    { id: 'snooze-48',    label: 'Schemalägg uppföljning', primary: true },
+    { id: 'mark-handled', label: 'Markera hanterad' },
+  ],
+  support: [
+    { id: 'research',    label: 'Research bolag', primary: true },
+    { id: 'draft-reply', label: 'Generera svar' },
+  ],
+  personlig: [
+    { id: 'draft-reply', label: 'Generera svar', primary: true },
+  ],
+  arbete: [   // legacy bucket
+    { id: 'draft-reply', label: 'Generera svar', primary: true },
+  ],
+  notifiering: [
+    { id: 'mark-read', label: 'Markera läst', primary: true },
+    { id: 'archive',   label: 'Arkivera' },
+  ],
+  nyhetsbrev: [
+    { id: 'mark-read',    label: 'Markera läst', primary: true },
+    { id: 'unsubscribe',  label: 'Avregistrera' },
+  ],
+  reklam: [
+    { id: 'mark-spam', label: 'Markera spam', primary: true },
+  ],
+  social: [
+    { id: 'mark-read', label: 'Markera läst', primary: true },
+  ],
+  transaktion: [
+    { id: 'mark-handled', label: 'Markera hanterad', primary: true },
+  ],
+}
+// messageId -> Set<actionId> — purely in-memory; resets on app restart.
+// Tracking the per-message done state lets us render ✓-pills so the
+// user knows what they've already done in this session.
+const _mailRowActionsDone = new Map()
+
+function _mailMarkActionDone(mid, actionId) {
+  if (!mid) return
+  if (!_mailRowActionsDone.has(mid)) _mailRowActionsDone.set(mid, new Set())
+  _mailRowActionsDone.get(mid).add(actionId)
+  _renderInboxList()
+}
+
+async function _mailHandleSuggestedAction(actionId, uid, mid) {
+  const m = _mailState.messages.find(mm => mm.uid === uid)
+  if (!m) return
+  const fromName = (m.from?.[0]?.name || m.from?.[0]?.address || '').trim()
+  const fromAddr = m.from?.[0]?.address || ''
+  // Heuristic: company = part of email after @ (without TLD), capitalised.
+  const company = (fromAddr.split('@')[1] || '').split('.')[0]
+    .replace(/^./, c => c.toUpperCase()) || fromName
+  switch (actionId) {
+    case 'research': {
+      // Phase 1A: open a Google search in a new tab. Phase 1B will swap
+      // this for a real ambient-research run that fills the context
+      // sidebar in the detail view.
+      newTab(`https://www.google.com/search?q=${encodeURIComponent(company + ' bolag')}`)
+      toast(`Research startad: ${company}`, '#4680ff')
+      break
+    }
+    case 'draft-reply': {
+      // Open the existing compose window in reply-mode. The AI-drafted
+      // body will land here in Phase 1B; for now the user gets a blank
+      // canvas pre-addressed to the sender.
+      if (typeof openCompose === 'function') openCompose('reply', { uid, message: m })
+      else toast('Compose-fönstret kunde inte öppnas', '#dc2626')
+      break
+    }
+    case 'snooze-48': {
+      const wakeAt = new Date(Date.now() + 48 * 60 * 60 * 1000).toISOString()
+      try { await SE.mail.snooze({ accountId: _mailState.accountId, uid, fromFolder: _mailState.folder, wakeAt }) } catch (_) {}
+      toast(`Schemalagt: uppföljning om 48h`, '#a78bfa')
+      break
+    }
+    case 'mark-handled':
+    case 'mark-read': {
+      try { await SE.mail.flag({ accountId: _mailState.accountId, uid, flag: '\\Seen', value: true, folder: _mailState.folder }) } catch (_) {}
+      toast('Markerad som hanterad', '#2ca87f')
+      _mailLoadInbox({ force: false })
+      break
+    }
+    case 'archive': {
+      if (typeof _mailArchiveRow === 'function') _mailArchiveRow(uid)
+      else toast('Arkiverad', '#2ca87f')
+      break
+    }
+    case 'mark-spam': {
+      // No spam-folder support yet — log + toast as placeholder.
+      toast('Markerad som spam (placeholder)', '#94a3b8')
+      break
+    }
+    case 'unsubscribe': {
+      // Phase 1B: read List-Unsubscribe header from the message and
+      // open it. For now: just a hint.
+      toast('Avregistrering: kommer i nästa version', '#94a3b8')
+      break
+    }
+    case 'crm-lead': {
+      // No CRM backend yet — toast confirms intent; Phase 2 wires this
+      // to a real CRM-lead create.
+      toast(`CRM-lead skapad: ${fromName || company}`, '#4680ff')
+      break
+    }
+    default:
+      toast('Action utförd', '#2ca87f')
+  }
+  _mailMarkActionDone(m.messageId, actionId)
+}
+
+// Delegated handler — every suggested-action pill carries the data-*
+// attrs we need to dispatch. Keeps per-row HTML free of inline handlers
+// and avoids leaking N closures per inbox render.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-mail-act]')
+  if (!btn || btn.disabled) return
+  e.stopPropagation()
+  const actId = btn.getAttribute('data-mail-act')
+  const uid = Number(btn.getAttribute('data-mail-uid'))
+  const mid = btn.getAttribute('data-mail-mid')
+  _mailHandleSuggestedAction(actId, uid, mid).catch(() => {})
+})
+
 async function _mailRunClassifier() {
   if (!_mailState.messages.length) return
   const items = _mailState.messages
@@ -4648,9 +4835,35 @@ function _threadRowHtml(t) {
     else if (uniqueNames.length === 1) senderLabel = uniqueNames[0]
   }
   const countBadge = t.count > 1 ? `<span class="mail-row-count">${t.count}</span>` : ''
-  const cat = _mailClassifications[m.messageId]
-  const catLabels = { personlig: 'Privat', arbete: 'Jobb', notifiering: 'Notis', nyhetsbrev: 'Nyhetsbrev', reklam: 'Reklam', social: 'Social', transaktion: 'Kvitto' }
-  const catChip = cat ? `<span class="mail-row-cat ${esc(cat)}" title="AI-kategori: ${esc(cat)}">${esc(catLabels[cat] || cat)}</span>` : ''
+  // Classifier output: v2 is {c, conf}, v1 (cached pre-upgrade) is a
+  // plain string. Normalise so the row renders identically in both.
+  const rawCat = _mailClassifications[m.messageId]
+  const catCode = rawCat ? (typeof rawCat === 'string' ? rawCat : rawCat.c) : null
+  const catConf = rawCat && typeof rawCat === 'object' ? (rawCat.conf || 0) : 0
+  const catLabel = _MAIL_CAT_LABELS[catCode] || catCode || ''
+  const catChip = catCode
+    ? `<span class="mail-row-cat ${esc(catCode)}" title="AI-kategori: ${esc(catLabel)}${catConf ? ' (' + catConf + '%)' : ''}">${esc(catLabel)}</span>`
+    : ''
+  // Suggested actions row — agent-recommended next steps for this
+  // category. Done pills render with a green check and disabled state.
+  const suggestions = (catCode && _MAIL_SUGGESTED_ACTIONS[catCode]) || []
+  const doneSet = _mailRowActionsDone.get(m.messageId) || new Set()
+  const actionsBarHtml = suggestions.length
+    ? `<div class="mail-row-actions-bar" onclick="event.stopPropagation()">${
+        suggestions.map(a => {
+          const done = doneSet.has(a.id)
+          const cls = `mail-row-pill${a.primary && !done ? ' primary' : ''}${done ? ' done' : ''}`
+          return `<button class="${cls}" type="button"`
+            + ` data-mail-act="${esc(a.id)}" data-mail-uid="${m.uid}" data-mail-mid="${esc(m.messageId || '')}"`
+            + (done ? ' disabled' : '')
+            + `>${done ? '✓ ' : ''}${esc(a.label)}</button>`
+        }).join('')
+      }${
+        catConf > 0
+          ? `<span class="mail-row-confidence${catConf < 70 ? ' low' : ''}"><span class="mail-row-confidence-dot"></span>${esc(catLabel)} · ${catConf}%</span>`
+          : ''
+      }</div>`
+    : ''
   const starred = t.messages.some(mm => mm.flagged)
   const starIcon = starred
     ? '<svg viewBox="0 0 24 24" fill="currentColor" stroke="currentColor" stroke-width="1.5" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg>'
@@ -4669,6 +4882,7 @@ function _threadRowHtml(t) {
         <span class="mail-row-date">${esc(_formatMailDate(m.date))}</span>
       </div>
       <div class="mail-row-subject">${catChip}${esc(m.subject || '(utan ämne)')}</div>
+      ${actionsBarHtml}
       <div class="mail-row-actions" onclick="event.stopPropagation()">
         <button class="mail-row-action snooze" type="button" title="Snooze"
                 onclick="_mailSnoozeRow(${m.uid})" aria-label="Snooze">

@@ -13,23 +13,58 @@
 const Store = require('electron-store')
 const { net } = require('electron')
 
-const CATEGORIES = ['personlig', 'arbete', 'notifiering', 'nyhetsbrev', 'reklam', 'social', 'transaktion']
+// v2 categories — finer grained than v1's "arbete" bucket so the inbox
+// can surface lead-specific suggested actions (Research bolag, Skapa
+// CRM-lead) vs. invoice / support / personal flows. v1 strings still
+// honoured by getCached() so we don't re-classify everything on upgrade.
+const CATEGORIES = [
+  'salj_lead',     // sales lead / inbound interest
+  'faktura',       // invoice / payment / overdue
+  'support',       // support / customer question / pricing inquiry
+  'personlig',     // private personal conversation
+  'notifiering',   // system / activity notification
+  'nyhetsbrev',    // newsletter (subscribed)
+  'reklam',        // commercial / unsolicited
+  'social',        // social platforms / communities
+  'transaktion',   // receipts / order confirmations
+]
+
+// Legacy → v2 category map for cached entries written before the schema
+// upgrade. "arbete" is intentionally split here: there's no safe way to
+// tell lead from support without re-classifying, so we conservatively
+// land it in 'support' (the lower-stakes path) until the message is
+// re-seen and properly re-classified.
+const LEGACY_CATEGORY_MAP = {
+  arbete: 'support',
+}
 
 const store = new Store({
   name: 'mail-classifications',
   defaults: { byMessageId: {} },
 })
 
+// Returns { [messageId]: { c: <category>, conf: 0..100 } }. Older cache
+// entries that were stored as plain strings get hoisted into the v2
+// shape with conf=0 so the UI can still render them while signalling
+// "no confidence info available".
 function getCached(messageIds) {
   const all = store.get('byMessageId', {})
   const out = {}
-  for (const id of messageIds) if (id && all[id]) out[id] = all[id]
+  for (const id of messageIds) {
+    if (!id || !all[id]) continue
+    const v = all[id]
+    if (typeof v === 'string') {
+      out[id] = { c: LEGACY_CATEGORY_MAP[v] || v, conf: 0 }
+    } else if (v && typeof v === 'object' && v.c) {
+      out[id] = v
+    }
+  }
   return out
 }
 
 function setCached(map) {
   const all = store.get('byMessageId', {})
-  for (const [id, cat] of Object.entries(map)) all[id] = cat
+  for (const [id, val] of Object.entries(map)) all[id] = val
   // Prune if the cache ever grows past 20k entries (pathological); keep
   // the newest 10k by insertion order — good enough for v1.
   const keys = Object.keys(all)
@@ -60,16 +95,21 @@ async function classify(messages, apiKey) {
 
   const system = [
     'Du klassificerar e-post i en av följande kategorier (en per meddelande):',
-    '- personlig (från en person, privat konversation)',
-    '- arbete (från kollega/kund/leverantör, jobbrelaterat)',
+    '- salj_lead (offertförfrågan, intresse av att köpa, inbound prospect)',
+    '- faktura (faktura, betalningspåminnelse, kvitto med åtgärd)',
+    '- support (kundfråga, pricing-inquiry, jobbrelaterat som inte är lead)',
+    '- personlig (privat konversation från en person)',
     '- notifiering (automatiska system- eller aktivitetsnotiser)',
     '- nyhetsbrev (massutskick man prenumererar på)',
-    '- reklam (kommersiella erbjudanden)',
+    '- reklam (kommersiella erbjudanden, kallt utskick)',
     '- social (sociala medier, Slack/Discord/communities)',
-    '- transaktion (kvitton, orderbekräftelser, bokningar)',
+    '- transaktion (orderbekräftelser, bokningar, leveranser utan åtgärd)',
+    '',
+    'För varje meddelande, ange också ett confidence-värde 0-100 som',
+    'representerar hur säker du är på klassificeringen.',
     '',
     'Svara enbart med JSON i formatet:',
-    '{"classifications":[{"id":"<messageId>","c":"<kategori>"}, ...]}',
+    '{"classifications":[{"id":"<messageId>","c":"<kategori>","conf":<0-100>}, ...]}',
     'Ingen extra text, inga markdown-fences.',
   ].join('\n')
 
@@ -110,7 +150,9 @@ async function classify(messages, apiKey) {
   const out = {}
   if (parsed && Array.isArray(parsed.classifications)) {
     for (const row of parsed.classifications) {
-      if (row && row.id && CATEGORIES.includes(row.c)) out[row.id] = row.c
+      if (!row || !row.id || !CATEGORIES.includes(row.c)) continue
+      const conf = Math.max(0, Math.min(100, Math.round(Number(row.conf) || 0)))
+      out[row.id] = { c: row.c, conf }
     }
   }
   if (Object.keys(out).length) setCached(out)

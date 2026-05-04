@@ -1467,6 +1467,166 @@ input,textarea,select{user-select:text}
 .act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
 .act-btn:hover{background:var(--border)}
 
+/* ══════════════════════════════════════════════════════
+   SETTINGS V2 — section-group cards (mirrors seoz_settings_v2.html).
+   Used inside the Inställningar panel. Prefixed `set-` so it doesn't
+   collide with the existing .sh / .mr / .act-btn styles used in other
+   panels (those still apply where they're used today).
+══════════════════════════════════════════════════════ */
+.set-group{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  overflow:hidden;box-shadow:0 1px 3px rgba(0,0,0,.04);
+  margin-bottom:8px;
+  opacity:0;transform:translateY(8px);
+  animation:setFadeUp 240ms cubic-bezier(.23,1,.32,1) forwards;
+}
+.set-group:nth-of-type(1){animation-delay:0ms}
+.set-group:nth-of-type(2){animation-delay:55ms}
+.set-group:nth-of-type(3){animation-delay:110ms}
+.set-group:nth-of-type(4){animation-delay:165ms}
+@keyframes setFadeUp{to{opacity:1;transform:translateY(0)}}
+.set-label{
+  padding:7px 12px;font-size:9px;font-weight:700;
+  letter-spacing:.08em;text-transform:uppercase;
+  color:var(--p);background:rgba(70,128,255,.08);
+  border-bottom:1px solid var(--border);
+}
+.set-row{
+  display:flex;align-items:center;gap:9px;padding:9px 12px;
+  border-bottom:1px solid var(--border);transition:background .12s;
+}
+.set-row:last-child{border-bottom:none}
+.set-row:hover{background:var(--panel)}
+.set-row-icon{
+  width:26px;height:26px;border-radius:7px;
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.set-row-icon svg{width:13px;height:13px}
+.set-icon-blue{background:rgba(70,128,255,.10);color:var(--p)}
+.set-icon-green{background:rgba(44,168,127,.10);color:#2ca87f}
+.set-icon-orange{background:rgba(229,138,0,.10);color:#e58a00}
+.set-icon-purple{background:rgba(124,58,237,.10);color:#7c3aed}
+.set-icon-gray{background:rgba(116,136,146,.12);color:var(--muted)}
+.set-icon-cyan{background:rgba(6,151,167,.10);color:#0097a7}
+.set-row-content{flex:1;min-width:0}
+.set-row-title{font-size:12px;font-weight:500;color:var(--head);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.set-row-sub{font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
+.set-row-action{flex-shrink:0;display:flex;align-items:center;gap:6px}
+/* Avatar (profile row) */
+.set-avatar{
+  width:26px;height:26px;border-radius:50%;
+  background:linear-gradient(135deg,#4680ff 0%,#7c3aed 100%);
+  display:flex;align-items:center;justify-content:center;
+  font-size:10px;font-weight:700;color:#fff;flex-shrink:0;
+  box-shadow:0 1px 4px rgba(70,128,255,.35);overflow:hidden;
+}
+.set-avatar img{width:100%;height:100%;object-fit:cover}
+/* Status badges */
+.set-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:4px;letter-spacing:.02em;white-space:nowrap}
+.set-badge-blue{background:rgba(70,128,255,.10);color:var(--p)}
+.set-badge-green{background:rgba(44,168,127,.10);color:#2ca87f}
+.set-badge-gray{background:rgba(116,136,146,.12);color:var(--muted)}
+.set-version-chip{
+  font-size:10px;font-weight:600;padding:2px 8px;border-radius:99px;
+  background:rgba(44,168,127,.10);color:#2ca87f;
+  border:1px solid rgba(44,168,127,.2);white-space:nowrap;
+}
+/* Toggle switch */
+.set-toggle{position:relative;width:30px;height:17px;flex-shrink:0;cursor:pointer}
+.set-toggle input{opacity:0;width:0;height:0;position:absolute}
+.set-toggle-slider{position:absolute;inset:0;background:var(--border);border-radius:99px;transition:background .18s}
+.set-toggle-slider::before{
+  content:'';position:absolute;width:11px;height:11px;left:3px;top:3px;
+  background:#fff;border-radius:50%;transition:transform .18s cubic-bezier(.23,1,.32,1);
+  box-shadow:0 1px 3px rgba(0,0,0,.25);
+}
+.set-toggle input:checked + .set-toggle-slider{background:var(--p)}
+.set-toggle input:checked + .set-toggle-slider::before{transform:translateX(13px)}
+/* Action button rows */
+.set-actions{display:flex;gap:6px;padding:9px 12px;border-bottom:1px solid var(--border)}
+.set-actions:last-child{border-bottom:none}
+.set-btn-ghost{
+  flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:5px;
+  border:1px solid var(--border);border-radius:7px;background:var(--card);
+  color:var(--muted);font-size:11px;font-weight:500;cursor:pointer;
+  font-family:inherit;
+  transition:border-color .15s,color .15s,background .15s,transform .1s;
+}
+.set-btn-ghost:hover{border-color:var(--p);color:var(--p);background:rgba(70,128,255,.04)}
+.set-btn-ghost:active{transform:scale(.97)}
+.set-btn-ghost svg{width:13px;height:13px}
+.set-btn-danger{
+  flex:1;height:30px;display:flex;align-items:center;justify-content:center;gap:5px;
+  border:1px solid rgba(220,38,38,.18);border-radius:7px;
+  background:rgba(220,38,38,.04);color:var(--r);
+  font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;
+  transition:background .15s,border-color .15s,transform .1s;
+}
+.set-btn-danger:hover{background:rgba(220,38,38,.10);border-color:var(--r)}
+.set-btn-danger:active{transform:scale(.97)}
+.set-btn-danger svg{width:13px;height:13px}
+.set-btn-ghost:disabled,.set-btn-danger:disabled{opacity:.4;cursor:default}
+/* API key rows */
+.set-api-row{display:flex;flex-direction:column;padding:9px 12px;gap:7px;border-bottom:1px solid var(--border)}
+.set-api-row:last-child{border-bottom:none}
+.set-api-header{display:flex;align-items:center;justify-content:space-between}
+.set-api-label-group{display:flex;align-items:center;gap:6px}
+.set-api-logo{width:18px;height:18px;border-radius:5px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.set-api-logo svg{width:10px;height:10px}
+.set-api-label{font-size:11px;font-weight:600;color:var(--head)}
+.set-api-status{font-size:9px;font-weight:600;padding:2px 5px;border-radius:3px;border:1px solid transparent}
+.set-api-status.unset{color:var(--r);background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.15)}
+.set-api-status.ok{color:#2ca87f;background:rgba(44,168,127,.08);border-color:rgba(44,168,127,.2)}
+.set-api-input-row{display:flex;gap:5px;align-items:center}
+.set-api-input{
+  flex:1;height:28px;border:1px solid var(--border);border-radius:6px;padding:0 8px;
+  font-size:11px;font-family:'SF Mono','Fira Code','Consolas',monospace;
+  color:var(--txt);background:var(--bg);outline:none;letter-spacing:.02em;
+  transition:border-color .15s,box-shadow .15s,background .15s;
+}
+.set-api-input::placeholder{color:var(--muted);letter-spacing:0;font-size:10px}
+.set-api-input:focus{border-color:var(--p);box-shadow:0 0 0 2px rgba(70,128,255,.1);background:var(--card)}
+.set-btn-save{
+  height:28px;padding:0 11px;background:var(--p);color:#fff;border:none;border-radius:6px;
+  font-size:10px;font-weight:600;cursor:pointer;white-space:nowrap;font-family:inherit;
+  transition:background .15s,box-shadow .15s,transform .1s;
+}
+.set-btn-save:hover{background:var(--p600);box-shadow:0 2px 8px rgba(70,128,255,.3)}
+.set-btn-save:active{transform:scale(.96)}
+.set-btn-del{
+  width:28px;height:28px;flex-shrink:0;display:flex;align-items:center;justify-content:center;
+  border:1px solid var(--border);border-radius:6px;background:var(--card);color:var(--muted);
+  cursor:pointer;font-family:inherit;
+  transition:background .12s,border-color .12s,color .12s;
+}
+.set-btn-del:hover{background:rgba(220,38,38,.06);border-color:rgba(220,38,38,.3);color:var(--r)}
+.set-btn-del svg{width:11px;height:11px}
+.set-api-hint{font-size:10px;color:var(--muted);line-height:1.4}
+.set-api-hint a{color:var(--p);cursor:pointer;text-decoration:none}
+.set-api-hint a:hover{text-decoration:underline}
+/* MCP live dot */
+.set-mcp-dot{
+  width:7px;height:7px;border-radius:50%;background:#2ca87f;
+  animation:setMcpPulse 2s ease-in-out infinite;
+}
+@keyframes setMcpPulse{
+  0%,100%{opacity:1;transform:scale(1);box-shadow:0 0 0 0 rgba(44,168,127,.4)}
+  50%{opacity:.8;transform:scale(1.1);box-shadow:0 0 0 4px rgba(44,168,127,0)}
+}
+/* Copy URL chip */
+.set-copy-chip{
+  border:none;background:rgba(70,128,255,.18);color:var(--p);
+  border-radius:5px;padding:3px 9px;font-size:10px;font-weight:600;
+  cursor:pointer;font-family:inherit;
+  transition:background .12s,transform .1s;
+}
+.set-copy-chip:hover{background:rgba(70,128,255,.28)}
+.set-copy-chip:active{transform:scale(.95)}
+/* MCP highlight row */
+.set-row.set-row-highlight{background:rgba(70,128,255,.06)}
+.set-row.set-row-highlight:hover{background:rgba(70,128,255,.10)}
+.set-row-mono{font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:10px;letter-spacing:.02em}
+
 /* ── Agent Ready panel ── */
 .ar-url{
   font-size:10px;color:var(--muted);
@@ -7264,114 +7424,223 @@ async function renderPanelContent(name) {
     }
   } else if (name === 'settings') {
     icon.innerHTML = _PANEL_ICONS.settings; title.textContent = 'Inställningar'
-    const key = await SE.getApiKey()
-    const masked = key ? key.slice(0,10) + '••••••••' : 'Ej ansluten'
     const { profile: activeProfile } = await SE.profileGetActive()
     const profileName = activeProfile ? esc(activeProfile.name) : '—'
     const profileEmail = activeProfile?.email ? esc(activeProfile.email) : ''
+    const profileInitials = activeProfile?.name
+      ? esc(getInitials(activeProfile.name))
+      : '?'
+    const avatarHtml = activeProfile?.avatarUrl
+      ? `<img src="${esc(activeProfile.avatarUrl)}" onerror="this.outerHTML='${profileInitials}'">`
+      : profileInitials
+    const wsName = synced.workspace ? esc(synced.workspace.name || '—') : '—'
+    const autoSync = await SE.storeGet('autoSync', true)
 
-    // Uniform compact row for each 3rd-party API key (Anthropic / OpenAI /
-    // ElevenLabs). Replaces three repetitive 4-line blocks with a single
-    // template so the settings panel has less visual noise.
-    const apiRow = (label, statusId, inputId, placeholder, saveFn, removeFn, hintURL, hintText) => `
-      <div style="display:flex;align-items:baseline;justify-content:space-between;margin-top:10px;gap:8px">
-        <span style="font-size:11px;font-weight:600;color:var(--head)">${label}</span>
-        <span id="${statusId}" style="font-size:9px;font-family:monospace;color:var(--muted)">Laddar...</span>
+    // Lucide-style icons used in row badges. Local consts so the
+    // template literal stays readable.
+    const _SI = {
+      building:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01M12 11h.01M16 11h.01M8 11h.01M12 16h.01M16 16h.01M8 16h.01"/></svg>',
+      refresh:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>',
+      package:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.55" y2="4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+      globe:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>',
+      zap:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z"/></svg>',
+      link:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+      bot:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
+      sparkles:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m12 3-1.9 5.8a2 2 0 0 1-1.3 1.3L3 12l5.8 1.9a2 2 0 0 1 1.3 1.3L12 21l1.9-5.8a2 2 0 0 1 1.3-1.3L21 12l-5.8-1.9a2 2 0 0 1-1.3-1.3L12 3Z"/></svg>',
+      volume:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="11 5 6 9 2 9 2 15 6 15 11 19 11 5"/><path d="M19.07 4.93a10 10 0 0 1 0 14.14M15.54 8.46a5 5 0 0 1 0 7.07"/></svg>',
+      search:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>',
+      logout:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M9 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h4"/><polyline points="16 17 21 12 16 7"/><line x1="21" y1="12" x2="9" y2="12"/></svg>',
+      user:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+      key:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>',
+      trash:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>',
+    }
+
+    // Compact API-key row used for Anthropic / OpenAI / ElevenLabs.
+    // The status span keeps the same id that saveXKey()/removeXKey()
+    // already write to, so the existing handlers Just Work.
+    const apiRow = (label, statusId, inputId, placeholder, saveFn, removeFn, hintURL, hintText, logoSvg, logoCls) => `
+      <div class="set-api-row">
+        <div class="set-api-header">
+          <div class="set-api-label-group">
+            <div class="set-api-logo ${logoCls}">${logoSvg}</div>
+            <span class="set-api-label">${label}</span>
+          </div>
+          <span id="${statusId}" class="set-api-status unset">Ej konfigurerad</span>
+        </div>
+        <div class="set-api-input-row">
+          <input class="set-api-input" id="${inputId}" type="password" placeholder="${placeholder}">
+          <button class="set-btn-save" onclick="${saveFn}">Spara</button>
+          <button class="set-btn-del" onclick="${removeFn}" title="Ta bort nyckel" aria-label="Ta bort nyckel">${_SI.trash}</button>
+        </div>
+        <div class="set-api-hint">${hintText} · <a onclick="SE.openExternal('${hintURL}')">${new URL(hintURL).hostname}</a></div>
       </div>
-      <div style="display:flex;gap:4px;margin-top:4px">
-        <input class="ac-inp" id="${inputId}" type="password" placeholder="${placeholder}" style="flex:1;height:28px;font-size:10px;font-family:monospace;min-width:0">
-        <button class="act-btn" style="width:50px;height:28px;font-size:10px;flex-shrink:0" onclick="${saveFn}">Spara</button>
-        <button class="act-btn" style="width:28px;height:28px;padding:0;color:var(--r);flex-shrink:0;display:inline-flex;align-items:center;justify-content:center" onclick="${removeFn}" title="Ta bort nyckel" aria-label="Ta bort nyckel">${_BTN.trash}</button>
-      </div>
-      <p style="font-size:9px;color:var(--muted);margin-top:4px;line-height:1.4">${hintText} <span style="color:var(--p);cursor:pointer" onclick="SE.openExternal('${hintURL}')">${new URL(hintURL).hostname}</span></p>
     `
 
     body.innerHTML = `
-      <div class="sh">KONTO</div>
-      <div class="mr"><span class="mrl">Profil</span><span class="mrv">${profileName}${profileEmail ? ` · <span style="font-size:10px;color:var(--muted)">${profileEmail}</span>` : ''}</span></div>
-      <div class="mr"><span class="mrl">SEOZ API-nyckel</span><span class="mrv" style="font-size:10px;font-family:monospace">${esc(masked)}</span></div>
-      <div class="mr"><span class="mrl">Workspace</span><span class="mrv">${synced.workspace ? esc(synced.workspace.name || '—') : '—'}</span></div>
-      <div class="mr"><span class="mrl">Auto-synk</span><span class="mrv">Var 30:e sekund</span></div>
-      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button class="act-btn" style="flex:1;min-width:120px" onclick="syncNow()">${_BTN.refresh}Synka nu</button>
-        <button class="act-btn" style="flex:1;min-width:120px" onclick="showProfilePicker()">${_BTN.users}Byt profil</button>
-        <button class="act-btn" style="flex:1;min-width:120px" onclick="openApiKeyPage()">${_BTN.key}Nycklar</button>
-        <button class="act-btn" style="flex:1;min-width:120px;color:var(--r)" onclick="doDisconnect()">Koppla från</button>
-      </div>
-
-      <div class="sh" style="margin-top:20px">AI-NYCKLAR</div>
-      ${apiRow('Anthropic (Claude)', 'settingsAnthropicKey', 'anthropicKeyInput', 'sk-ant-...', 'saveAnthropicKey()', 'removeAnthropicKey()', 'https://console.anthropic.com/account/keys', 'För Claude-chatt i panelen och MCP-flöden. Lagras lokalt.')}
-      ${apiRow('OpenAI', 'settingsOpenaiKey', 'openaiKeyInput', 'sk-...', 'saveOpenaiKey()', 'removeOpenaiKey()', 'https://platform.openai.com/api-keys', 'Röstchatt med GPT-4o + Whisper taligenkänning.')}
-      ${apiRow('ElevenLabs', 'settingsElevenlabsKey', 'elevenlabsKeyInput', 'xi-...', 'saveElevenlabsKey()', 'removeElevenlabsKey()', 'https://elevenlabs.io/app/settings/api-keys', 'Valfritt — högkvalitativ TTS i röstchatt. Utan nyckel används browser-TTS.')}
-
-      <div class="sh" style="margin-top:20px">SYSTEM</div>
-      <div class="mr"><span class="mrl">Version</span><span class="mrv" id="settingsVersion">—</span></div>
-      <div class="mr"><span class="mrl">Standardwebbläsare</span><span class="mrv" id="settingsDefaultBrowser">Kontrollerar...</span></div>
-      <div class="mr"><span class="mrl">MCP-server</span><span class="mrv" style="color:var(--g);font-family:monospace;font-size:10px">127.0.0.1:19532</span></div>
-      <div style="display:flex;gap:6px;margin-top:10px;flex-wrap:wrap">
-        <button class="act-btn" style="flex:1;min-width:160px" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">${_BTN.refresh}Sök uppdateringar</button>
-        <button class="act-btn" style="flex:1;min-width:160px" id="setDefaultBrowserBtn" onclick="doSetDefaultBrowser()">${_BTN.globe}Standardwebbläsare</button>
-      </div>
-      <p style="font-size:9px;color:var(--muted);margin-top:6px;line-height:1.4">Claude Code kan ansluta till browsern via MCP: <code style="font-size:9px;background:var(--panel);padding:1px 4px;border-radius:3px">http://127.0.0.1:19532/sse</code></p>
-
-      <div class="sh" style="margin-top:20px;cursor:pointer;user-select:none;display:flex;align-items:center;justify-content:space-between" onclick="toggleTerminalSection()">
-        <span>TERMINAL</span>
-        <span id="termToggleIcon" style="font-size:10px;color:var(--muted)">▸</span>
-      </div>
-      <div id="terminalSection" style="display:none">
-        <p style="font-size:9px;color:var(--muted);margin-bottom:6px;line-height:1.4">Kör kommandon direkt i browsern. Exponeras även via MCP så Claude kan köra kommandon åt dig.</p>
-        <div id="termOutput" style="background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:11px;color:#c9d1d9;height:240px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;margin-bottom:6px"></div>
-        <div style="display:flex;gap:4px">
-          <span style="font-family:monospace;font-size:12px;color:#58a6ff;line-height:28px;padding:0 4px">$</span>
-          <input id="termInput" type="text" placeholder="Skriv kommando..." style="flex:1;height:28px;font-size:11px;font-family:monospace;background:#0d1117;border:1px solid var(--border);border-radius:4px;color:#c9d1d9;padding:0 8px;outline:none" onkeydown="if(event.key==='Enter')termRunCmd()">
-          <button class="act-btn" style="width:50px;height:28px;font-size:10px" onclick="termRunCmd()">Kör</button>
+      <!-- KONTO -->
+      <div class="set-group">
+        <div class="set-label">Konto</div>
+        <div class="set-row">
+          <div class="set-avatar">${avatarHtml}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">${profileName}</div>
+            <div class="set-row-sub">${profileEmail || 'Ingen e-postadress'}</div>
+          </div>
+          <div class="set-row-action">
+            <span class="set-badge set-badge-blue">${synced.workspace?.plan ? esc(synced.workspace.plan) : 'SEOZ'}</span>
+          </div>
         </div>
-        <div style="display:flex;gap:4px;margin-top:6px">
-          <input id="termSearchInput" type="text" placeholder="Sök historik..." style="flex:1;height:24px;font-size:10px;font-family:monospace;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 6px;outline:none" onkeydown="if(event.key==='Enter')termSearchHistory()">
-          <button class="act-btn" style="height:24px;font-size:9px;padding:0 8px" onclick="termSearchHistory()">Sök</button>
-          <button class="act-btn" style="height:24px;font-size:9px;padding:0 8px;color:var(--r)" onclick="termClearHistory()">Rensa</button>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-purple">${_SI.building}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">Workspace</div>
+            <div class="set-row-sub">${wsName}</div>
+          </div>
         </div>
-        <div class="mr" style="margin-top:6px"><span class="mrl">Historik</span><span class="mrv" id="termHistoryCount">—</span></div>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-green">${_SI.refresh}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">Auto-synk</div>
+            <div class="set-row-sub">Var 30:e sekund</div>
+          </div>
+          <div class="set-row-action">
+            <label class="set-toggle">
+              <input type="checkbox" id="settingsAutoSyncToggle" ${autoSync ? 'checked' : ''} onchange="SE.storeSet('autoSync', this.checked).then(()=>toast(this.checked?'Auto-synk på (gäller från nästa start)':'Auto-synk av (gäller från nästa start)','#4680ff'))">
+              <div class="set-toggle-slider"></div>
+            </label>
+          </div>
+        </div>
+        <div class="set-actions">
+          <button class="set-btn-ghost" onclick="syncNow()">${_SI.refresh}Synka nu</button>
+          <button class="set-btn-ghost" onclick="showProfilePicker()">${_SI.user}Byt profil</button>
+        </div>
+        <div class="set-actions">
+          <button class="set-btn-ghost" onclick="openApiKeyPage()">${_SI.key}SEOZ-nyckel</button>
+          <button class="set-btn-danger" onclick="doDisconnect()">${_SI.logout}Koppla från</button>
+        </div>
+      </div>
+
+      <!-- AI-NYCKLAR -->
+      <div class="set-group">
+        <div class="set-label">AI-nycklar</div>
+        ${apiRow('Anthropic (Claude)', 'settingsAnthropicKey', 'anthropicKeyInput', 'sk-ant-...', 'saveAnthropicKey()', 'removeAnthropicKey()', 'https://console.anthropic.com/account/keys', 'Claude-chatt + smart inbox', _SI.bot, 'set-icon-blue')}
+        ${apiRow('OpenAI', 'settingsOpenaiKey', 'openaiKeyInput', 'sk-...', 'saveOpenaiKey()', 'removeOpenaiKey()', 'https://platform.openai.com/api-keys', 'GPT-4o + Whisper röstchatt', _SI.sparkles, 'set-icon-green')}
+        ${apiRow('ElevenLabs', 'settingsElevenlabsKey', 'elevenlabsKeyInput', 'xi-...', 'saveElevenlabsKey()', 'removeElevenlabsKey()', 'https://elevenlabs.io/app/settings/api-keys', 'Valfri TTS-röst (annars browser-TTS)', _SI.volume, 'set-icon-orange')}
+      </div>
+
+      <!-- SYSTEM -->
+      <div class="set-group">
+        <div class="set-label">System</div>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-gray">${_SI.package}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">Version</div>
+            <div class="set-row-sub">SEOZ Browser</div>
+          </div>
+          <div class="set-row-action">
+            <span class="set-version-chip" id="settingsVersion">v—</span>
+          </div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-blue">${_SI.globe}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">Standardwebbläsare</div>
+            <div class="set-row-sub" id="settingsDefaultBrowser">Kontrollerar...</div>
+          </div>
+          <div class="set-row-action" id="settingsDefaultBrowserAction"></div>
+        </div>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-purple">${_SI.zap}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">MCP-server</div>
+            <div class="set-row-sub set-row-mono">127.0.0.1:19532</div>
+          </div>
+          <div class="set-row-action"><div class="set-mcp-dot"></div></div>
+        </div>
+        <div class="set-actions">
+          <button class="set-btn-ghost" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">${_SI.search}Sök uppdateringar</button>
+        </div>
+      </div>
+
+      <!-- MCP -->
+      <div class="set-group">
+        <div class="set-row set-row-highlight">
+          <div class="set-row-icon set-icon-blue">${_SI.link}</div>
+          <div class="set-row-content">
+            <div class="set-row-title">Claude Code → MCP</div>
+            <div class="set-row-sub set-row-mono">http://127.0.0.1:19532/sse</div>
+          </div>
+          <div class="set-row-action">
+            <button class="set-copy-chip" onclick="_settingsCopyMcp(this)">Kopiera</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- TERMINAL (collapsed by default — kept for power users) -->
+      <div class="set-group">
+        <div class="set-label" style="cursor:pointer;display:flex;align-items:center;justify-content:space-between" onclick="toggleTerminalSection()">
+          <span>Terminal</span>
+          <span id="termToggleIcon" style="font-size:10px">▸</span>
+        </div>
+        <div id="terminalSection" style="display:none;padding:9px 12px">
+          <p style="font-size:10px;color:var(--muted);margin-bottom:6px;line-height:1.4">Kör kommandon direkt i browsern. Exponeras även via MCP så Claude kan köra kommandon åt dig.</p>
+          <div id="termOutput" style="background:#0d1117;border:1px solid var(--border);border-radius:6px;padding:8px;font-family:'Cascadia Code','Fira Code','Consolas',monospace;font-size:11px;color:#c9d1d9;height:240px;overflow-y:auto;white-space:pre-wrap;word-break:break-all;line-height:1.5;margin-bottom:6px"></div>
+          <div style="display:flex;gap:4px">
+            <span style="font-family:monospace;font-size:12px;color:#58a6ff;line-height:28px;padding:0 4px">$</span>
+            <input id="termInput" type="text" placeholder="Skriv kommando..." style="flex:1;height:28px;font-size:11px;font-family:monospace;background:#0d1117;border:1px solid var(--border);border-radius:4px;color:#c9d1d9;padding:0 8px;outline:none" onkeydown="if(event.key==='Enter')termRunCmd()">
+            <button class="set-btn-ghost" style="flex:0 0 auto;width:50px" onclick="termRunCmd()">Kör</button>
+          </div>
+          <div style="display:flex;gap:4px;margin-top:6px">
+            <input id="termSearchInput" type="text" placeholder="Sök historik..." style="flex:1;height:24px;font-size:10px;font-family:monospace;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 6px;outline:none" onkeydown="if(event.key==='Enter')termSearchHistory()">
+            <button class="set-btn-ghost" style="flex:0 0 auto;width:48px;height:24px;font-size:9px" onclick="termSearchHistory()">Sök</button>
+            <button class="set-btn-danger" style="flex:0 0 auto;width:54px;height:24px;font-size:9px" onclick="termClearHistory()">Rensa</button>
+          </div>
+        </div>
       </div>
     `
+
+    // ── Async post-render: fill in version, key statuses, default-browser ──
     SE.updaterGetVersion().then(v => {
       const el = document.getElementById('settingsVersion')
       if (el) el.textContent = 'v' + v
     })
-    SE.storeGet('anthropicApiKey', '').then(k => {
-      const el = document.getElementById('settingsAnthropicKey')
-      if (el) el.textContent = k ? k.slice(0, 12) + '••••••••' : 'Ej konfigurerad'
-    })
-    SE.storeGet('openaiApiKey', '').then(k => {
-      const el = document.getElementById('settingsOpenaiKey')
-      if (el) el.textContent = k ? k.slice(0, 10) + '••••••••' : 'Ej konfigurerad'
-    })
-    SE.storeGet('elevenlabsApiKey', '').then(k => {
-      const el = document.getElementById('settingsElevenlabsKey')
-      if (el) el.textContent = k ? k.slice(0, 10) + '••••••••' : 'Ej konfigurerad'
-    })
-    // Check default browser status
+    const _setKeyStatus = (id, present) => {
+      const el = document.getElementById(id)
+      if (!el) return
+      el.textContent = present ? 'Konfigurerad' : 'Ej konfigurerad'
+      el.classList.toggle('ok', !!present)
+      el.classList.toggle('unset', !present)
+    }
+    SE.storeGet('anthropicApiKey', '').then(k => _setKeyStatus('settingsAnthropicKey', !!k))
+    SE.storeGet('openaiApiKey',    '').then(k => _setKeyStatus('settingsOpenaiKey',    !!k))
+    SE.storeGet('elevenlabsApiKey','').then(k => _setKeyStatus('settingsElevenlabsKey',!!k))
     if (SE.isWindows && SE.isDefaultBrowser) {
       SE.isDefaultBrowser().then(isDefault => {
-        const el = document.getElementById('settingsDefaultBrowser')
-        const btn = document.getElementById('setDefaultBrowserBtn')
-        if (el) {
-          el.textContent = isDefault ? 'SEOZ Browser är standard' : 'Ej standardwebbläsare'
-          el.style.color = isDefault ? 'var(--g)' : 'var(--muted)'
-        }
-        if (btn && isDefault) {
-          btn.textContent = '✓ Redan standardwebbläsare'
-          btn.disabled = true
-          btn.style.opacity = '0.5'
+        const sub = document.getElementById('settingsDefaultBrowser')
+        const act = document.getElementById('settingsDefaultBrowserAction')
+        if (sub) sub.textContent = isDefault ? 'SEOZ Browser är standard' : 'Ej standardwebbläsare'
+        if (act) {
+          act.innerHTML = isDefault
+            ? '<span class="set-badge set-badge-green">✓ Standard</span>'
+            : `<button class="set-btn-ghost" style="flex:0 0 auto;height:26px;padding:0 10px" onclick="doSetDefaultBrowser()">Sätt</button>`
         }
       })
     } else {
-      const el = document.getElementById('settingsDefaultBrowser')
-      if (el) { el.textContent = 'Endast Windows'; el.style.color = 'var(--muted)' }
-      const btn = document.getElementById('setDefaultBrowserBtn')
-      if (btn) { btn.disabled = true; btn.style.opacity = '0.5' }
+      const sub = document.getElementById('settingsDefaultBrowser')
+      if (sub) sub.textContent = 'Endast Windows'
     }
   }
+}
+
+// Used by the v2 settings panel's "Kopiera" chip on the MCP URL row.
+window._settingsCopyMcp = function(btn) {
+  navigator.clipboard?.writeText('http://127.0.0.1:19532/sse').then(() => {
+    const orig = btn.textContent
+    btn.textContent = '✓ Kopierat'
+    btn.style.background = 'rgba(44,168,127,.18)'
+    btn.style.color = '#2ca87f'
+    setTimeout(() => { btn.textContent = orig; btn.style.background = ''; btn.style.color = '' }, 1800)
+  }).catch(() => toast('Kunde inte kopiera', '#dc2626'))
 }
 
 // ══════════════════════════════════════════════════════
@@ -9539,6 +9808,18 @@ async function claudeQuickAction(type) {
   sendClaudeMessage()
 }
 
+// Update the v2 settings status pill in-place. Falls back gracefully
+// for any leftover legacy panel that's still on screen.
+function _settingsUpdateKeyStatus(id, present) {
+  const el = document.getElementById(id)
+  if (!el) return
+  el.textContent = present ? 'Konfigurerad' : 'Ej konfigurerad'
+  if (el.classList.contains('set-api-status')) {
+    el.classList.toggle('ok', !!present)
+    el.classList.toggle('unset', !present)
+  }
+}
+
 async function saveAnthropicKey() {
   const input = document.getElementById('anthropicKeyInput')
   if (!input) return
@@ -9547,15 +9828,13 @@ async function saveAnthropicKey() {
   await SE.storeSet('anthropicApiKey', key)
   input.value = ''
   toast('Anthropic API-nyckel sparad!', '#2ca87f')
-  const el = document.getElementById('settingsAnthropicKey')
-  if (el) el.textContent = key.slice(0, 12) + '••••••••'
+  _settingsUpdateKeyStatus('settingsAnthropicKey', true)
 }
 
 async function removeAnthropicKey() {
   await SE.storeSet('anthropicApiKey', '')
   toast('API-nyckel borttagen', '#e58a00')
-  const el = document.getElementById('settingsAnthropicKey')
-  if (el) el.textContent = 'Ej konfigurerad'
+  _settingsUpdateKeyStatus('settingsAnthropicKey', false)
 }
 
 // ══════════════════════════════════════════════════════
@@ -10910,15 +11189,13 @@ async function saveOpenaiKey() {
   await SE.storeSet('openaiApiKey', key)
   input.value = ''
   toast('OpenAI API-nyckel sparad!', '#2ca87f')
-  const el = document.getElementById('settingsOpenaiKey')
-  if (el) el.textContent = key.slice(0, 10) + '••••••••'
+  _settingsUpdateKeyStatus('settingsOpenaiKey', true)
 }
 
 async function removeOpenaiKey() {
   await SE.storeSet('openaiApiKey', '')
   toast('OpenAI-nyckel borttagen', '#e58a00')
-  const el = document.getElementById('settingsOpenaiKey')
-  if (el) el.textContent = 'Ej konfigurerad'
+  _settingsUpdateKeyStatus('settingsOpenaiKey', false)
 }
 
 async function saveElevenlabsKey() {
@@ -10929,15 +11206,13 @@ async function saveElevenlabsKey() {
   await SE.storeSet('elevenlabsApiKey', key)
   input.value = ''
   toast('ElevenLabs API-nyckel sparad!', '#2ca87f')
-  const el = document.getElementById('settingsElevenlabsKey')
-  if (el) el.textContent = key.slice(0, 10) + '••••••••'
+  _settingsUpdateKeyStatus('settingsElevenlabsKey', true)
 }
 
 async function removeElevenlabsKey() {
   await SE.storeSet('elevenlabsApiKey', '')
   toast('ElevenLabs-nyckel borttagen', '#e58a00')
-  const el = document.getElementById('settingsElevenlabsKey')
-  if (el) el.textContent = 'Ej konfigurerad'
+  _settingsUpdateKeyStatus('settingsElevenlabsKey', false)
 }
 
 // ══════════════════════════════════════════════════════

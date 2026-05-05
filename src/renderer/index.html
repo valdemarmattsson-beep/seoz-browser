@@ -1108,12 +1108,13 @@ input,textarea,select{user-select:text}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
 .tab-x:hover{opacity:1!important;background:var(--danger-bg);color:var(--ds-danger)}
 .tab-spin{width:12px;height:12px;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite}
-/* Tab tooltip — richer hover preview with favicon header, URL,
-   domain, optional saved-passwords section, and action shortcuts.
-   The 8px padding-top above .tab-tip-card acts as a hover bridge so
-   the cursor can move between the tab and the tooltip without
-   triggering mouseleave; pointer-events:auto on the tooltip keeps it
-   open while the user is interacting with it. */
+/* Tab tooltip — richer hover preview with optional thumbnail of the
+   page, favicon + title header, URL, domain, optional saved-passwords
+   section, and action shortcuts. The 8px padding-top above
+   .tab-tip-card acts as a hover bridge so the cursor can move between
+   the tab and the tooltip without triggering mouseleave;
+   pointer-events:auto on the tooltip keeps it open while the user is
+   interacting with it. */
 .tab-tip{
   position:absolute;left:50%;top:100%;transform:translateX(-50%);z-index:150;
   padding-top:6px;min-width:240px;max-width:320px;
@@ -1124,8 +1125,14 @@ input,textarea,select{user-select:text}
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
-  padding:10px 12px;
+  padding:10px 12px;overflow:hidden;
 }
+.tab-tip-preview{
+  display:none;width:calc(100% + 24px);margin:-10px -12px 10px;
+  height:140px;object-fit:cover;object-position:top center;
+  background:var(--panel);border-bottom:1px solid var(--border);
+}
+.tab-tip-preview.show{display:block}
 .tab-tip-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
 .tab-tip-fav{
   width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:contain;
@@ -3831,6 +3838,11 @@ function _attachWebviewListeners(el, tabId) {
       document.getElementById('spinner').classList.remove('on')
       document.getElementById('relBtn').innerHTML = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
     }
+    // Capture a thumbnail for the hover tooltip — Chrome-style page
+    // preview. Skip overlay sentinels (home / mail) and only run for
+    // the active webview (capturePage on a hidden webview returns
+    // a black/empty image).
+    if (_isActive()) _scheduleTabPreviewCapture(tabId)
   })
   el.addEventListener('page-title-updated', e => {
     const t = _myTab(); if (t) { t.title = e.title; scheduleRenderTabs() }
@@ -6858,6 +6870,7 @@ function renderTabs() {
         <div class="tab-x" aria-label="Stäng flik"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
         <div class="tab-tip">
           <div class="tab-tip-card">
+            <img class="tab-tip-preview" alt="">
             <div class="tab-tip-head">
               <img class="tab-tip-fav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
               <div class="tab-tip-title"></div>
@@ -7006,6 +7019,18 @@ function renderTabs() {
         pwList.innerHTML = ''
       }
     }
+    // Tooltip page-preview thumbnail — populate from the cache (set
+    // on did-stop-loading) so re-renders don't lose the image.
+    const previewImg = el.querySelector('.tab-tip-preview')
+    if (previewImg) {
+      const cached = _tabPreviews.get(tab.id)
+      if (cached && previewImg.src !== cached) {
+        previewImg.src = cached
+        previewImg.classList.add('show')
+      } else if (!cached) {
+        previewImg.classList.remove('show')
+      }
+    }
   })
 }
 
@@ -7013,6 +7038,44 @@ function renderTabs() {
 // after any add/update/delete via the password manager so tooltips
 // stay in sync without an IPC hit on every tab render.
 let _pwCacheForTabs = []
+
+// Per-tab thumbnail cache (data URLs). Captured by capturePage() on
+// did-stop-loading and shown in the hover tooltip. We cap each thumb
+// at 320 px wide to keep memory + DOM payload reasonable; the
+// resulting data URL is ~30-80 KB. Cache lives in memory only —
+// tab close drops the entry, app restart starts fresh.
+const _tabPreviews = new Map()  // tabId -> dataURL
+const _tabPreviewTimers = new Map()  // tabId -> timeout handle (debounce)
+
+function _scheduleTabPreviewCapture(tabId) {
+  // capturePage returns a black frame if called too early after
+  // did-stop-loading, so debounce ~400ms to give the page a chance
+  // to paint above-the-fold content.
+  const existing = _tabPreviewTimers.get(tabId)
+  if (existing) clearTimeout(existing)
+  _tabPreviewTimers.set(tabId, setTimeout(async () => {
+    _tabPreviewTimers.delete(tabId)
+    const wvEl = _tabWebviews.get(tabId)
+    if (!wvEl) return
+    const tab = tabs.find(t => t.id === tabId)
+    if (!tab || isOverlayUrl(tab.url)) return
+    if (tabId !== activeId) return  // only the visible webview can capture
+    try {
+      const img = await wvEl.capturePage()
+      if (!img || img.isEmpty?.()) return
+      const small = img.resize({ width: 320, quality: 'good' })
+      const dataUrl = small.toDataURL()
+      _tabPreviews.set(tabId, dataUrl)
+      // Push the new preview to any open tooltip for this tab.
+      const tabEl = document.querySelector(`.tab[data-tab-id="${tabId}"]`)
+      const previewImg = tabEl?.querySelector('.tab-tip-preview')
+      if (previewImg) {
+        previewImg.src = dataUrl
+        previewImg.classList.add('show')
+      }
+    } catch (_) {}
+  }, 400))
+}
 async function _refreshPwCacheForTabs() {
   try { _pwCacheForTabs = (await SE.passwordsList()) || [] } catch (_) { _pwCacheForTabs = [] }
   // Re-render the tab strip so newly-added password chips appear in
@@ -7204,6 +7267,9 @@ function switchTab(id) {
   syncHomeVisibility()
   renderTabs()
   _persistTabs()
+  // Refresh the preview thumbnail when the user comes back to a
+  // tab — the page may have updated since it was last captured.
+  if (tab && !isOverlayUrl(tab.url)) _scheduleTabPreviewCapture(id)
 }
 
 function closeTab(e, id) {
@@ -7219,6 +7285,10 @@ function closeTab(e, id) {
   // If the tab had a split-view partner, dispose of that too.
   const closedSplit = _splitWebviews.get(id)
   if (closedSplit) { try { closedSplit.wv.remove() } catch (_) {}; _splitWebviews.delete(id); _splitFocused.delete(id) }
+  // Drop the tab's preview thumbnail from the cache.
+  _tabPreviews.delete(id)
+  const _t = _tabPreviewTimers.get(id)
+  if (_t) { clearTimeout(_t); _tabPreviewTimers.delete(id) }
   if (activeId === id) switchTab(tabs[Math.min(idx, tabs.length-1)].id)
   else renderTabs()
   _persistTabs()

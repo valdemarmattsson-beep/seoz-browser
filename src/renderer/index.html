@@ -1677,6 +1677,104 @@ input,textarea,select{user-select:text}
 .act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
 .act-btn:hover{background:var(--border)}
 
+/* ── Tasks panel ── */
+.task-search-wrap{
+  display:flex;align-items:center;gap:6px;padding:0 0 8px;
+}
+.task-search-wrap svg{width:11px;height:11px;color:var(--muted);flex-shrink:0;margin-left:6px}
+.task-search{
+  flex:1;height:28px;background:var(--panel);border:1px solid var(--border);
+  border-radius:6px;padding:0 9px 0 24px;font-size:11px;font-family:inherit;color:var(--txt);
+  outline:none;transition:border-color .15s;
+  background-image:none;
+}
+.task-search:focus{border-color:var(--p)}
+.task-search::placeholder{color:var(--muted);font-size:11px}
+.task-search-wrap{position:relative}
+.task-search-wrap svg{position:absolute;left:8px;top:50%;transform:translateY(-50%);margin:0;pointer-events:none}
+.task-search-clear{
+  position:absolute;right:6px;top:50%;transform:translateY(-50%);
+  width:16px;height:16px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:none;align-items:center;justify-content:center;
+  border-radius:3px;
+}
+.task-search-clear svg{position:static;transform:none;width:9px;height:9px}
+.task-search-clear.show{display:flex}
+.task-search-clear:hover{background:var(--border);color:var(--head)}
+
+.task-row{
+  display:flex;align-items:flex-start;gap:7px;
+  padding:8px 8px 8px 4px;
+  border-radius:7px;border:1px solid transparent;
+  cursor:pointer;transition:background .12s,border-color .12s;
+  margin:0 -2px;
+  position:relative;
+}
+.task-row + .task-row{margin-top:2px}
+.task-row:hover{background:var(--panel)}
+.task-row.dragging{opacity:.4}
+.task-row.drag-over::before{
+  content:'';position:absolute;left:0;right:0;top:-1px;
+  height:2px;background:var(--p);border-radius:2px;pointer-events:none;
+}
+.task-row.expanded{background:var(--panel);border-color:var(--border)}
+.task-grip{
+  width:10px;flex-shrink:0;color:var(--muted);opacity:0;
+  cursor:grab;transition:opacity .12s,color .12s;
+  display:flex;align-items:center;justify-content:center;
+  padding-top:3px;
+  font-size:11px;line-height:1;letter-spacing:0;
+  user-select:none;
+}
+.task-row:hover .task-grip{opacity:.5}
+.task-grip:hover{opacity:1!important;color:var(--head)}
+.task-grip:active{cursor:grabbing}
+.task-check{
+  margin-top:2px;cursor:pointer;accent-color:var(--p);flex-shrink:0;
+}
+.task-body{flex:1;min-width:0}
+.task-title{
+  font-size:11.5px;color:var(--head);font-weight:500;
+  overflow:hidden;text-overflow:ellipsis;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;
+  line-height:1.35;
+}
+.task-row.done .task-title{text-decoration:line-through;opacity:.55;font-weight:400}
+.task-meta{
+  margin-top:4px;font-size:9px;color:var(--muted);
+  display:flex;align-items:center;gap:6px;flex-wrap:wrap;
+}
+.task-sev{
+  font-weight:700;text-transform:uppercase;letter-spacing:.04em;font-size:8.5px;
+  padding:1px 6px;border-radius:3px;
+}
+.task-sev.critical{background:rgba(239,68,68,.15);color:#ef4444}
+.task-sev.high{background:rgba(220,38,38,.15);color:var(--r)}
+.task-sev.medium{background:rgba(229,138,0,.15);color:var(--w)}
+.task-sev.low{background:rgba(116,136,146,.15);color:var(--muted)}
+.task-skill{
+  font-size:8.5px;background:var(--panel);color:var(--muted);
+  padding:1px 5px;border-radius:3px;border:1px solid var(--border);
+}
+.task-row.expanded .task-skill{background:var(--card)}
+.task-status-pill{
+  font-size:8.5px;background:rgba(59,130,246,.15);color:#3b82f6;
+  padding:1px 5px;border-radius:3px;
+}
+.task-pscore{font-variant-numeric:tabular-nums}
+.task-effort{display:inline-flex;align-items:center;gap:2px}
+.task-chev{
+  width:11px;flex-shrink:0;color:var(--muted);opacity:.55;
+  display:flex;align-items:center;justify-content:center;padding-top:5px;
+  transition:transform .15s;
+}
+.task-row.expanded .task-chev{transform:rotate(180deg)}
+
+.task-empty{
+  padding:24px 12px;text-align:center;font-size:10px;color:var(--muted);
+  font-style:italic;
+}
+
 /* ══════════════════════════════════════════════════════
    SETTINGS V2 — section-group cards (mirrors seoz_settings_v2.html).
    Used inside the Inställningar panel. Prefixed `set-` so it doesn't
@@ -7919,18 +8017,34 @@ async function renderPanelContent(name) {
     if (!window._tasksFilter) window._tasksFilter = 'open'
     if (!window._expandedTaskId) window._expandedTaskId = null
     if (!window._showNewTaskForm) window._showNewTaskForm = false
+    if (typeof window._taskSearch !== 'string') window._taskSearch = ''
 
     let html = ''
     if (!synced.activeClientId) {
       html = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient först för att hantera tasks.</p>'
     } else {
-      const tasks = synced.tasks || []
-      const filtered = window._tasksFilter === 'all' ? tasks
-        : window._tasksFilter === 'done' ? tasks.filter(t => t.status === 'done')
-        : tasks.filter(t => t.status === 'new' || t.status === 'in_progress')
+      const allTasks = _sortTasksByCustomOrder(synced.tasks || [])
+      const q = window._taskSearch.toLowerCase().trim()
+      const matchSearch = (t) => !q ||
+        (t.title || '').toLowerCase().includes(q) ||
+        (t.description || '').toLowerCase().includes(q) ||
+        (t.url || '').toLowerCase().includes(q) ||
+        (t.skill_type || '').toLowerCase().includes(q)
+      const statusFiltered = window._tasksFilter === 'all' ? allTasks
+        : window._tasksFilter === 'done' ? allTasks.filter(t => t.status === 'done')
+        : allTasks.filter(t => t.status === 'new' || t.status === 'in_progress')
+      const filtered = statusFiltered.filter(matchSearch)
       html += `<div class="sh" style="display:flex;justify-content:space-between;align-items:center">
         <span>TASKS — ${esc(cName || '')}</span>
         <button class="act-btn" style="font-size:11px;padding:1px 8px;height:auto" onclick="window._showNewTaskForm=!window._showNewTaskForm;renderPanelContent('tasks')" title="Ny task">+ Ny</button>
+      </div>`
+      // Search field — filters by title / description / URL / skill
+      html += `<div class="task-search-wrap">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        <input type="text" class="task-search" id="taskSearchInput" placeholder="Sök tasks..." value="${esc(window._taskSearch)}" oninput="_onTaskSearch(this.value)">
+        <button class="task-search-clear${q ? ' show' : ''}" onclick="_clearTaskSearch()" title="Rensa sökning">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/></svg>
+        </button>
       </div>`
       html += `<div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:0 -14px 10px;padding:0 14px">
         <div class="seo-sub-tab ${window._tasksFilter==='open'?'active':''}" onclick="window._tasksFilter='open';renderPanelContent('tasks')">Öppna</div>
@@ -7959,35 +8073,47 @@ async function renderPanelContent(name) {
           </div>
         </div>`
       }
-      html += '<div id="tasksList" style="max-height:calc(100vh - 320px);overflow-y:auto">'
+      html += '<div id="tasksList" style="max-height:calc(100vh - 360px);overflow-y:auto">'
       if (filtered.length === 0) {
-        html += `<p style="font-size:10px;color:var(--muted);text-align:center;padding:12px 0">${window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks.'}</p>`
+        html += `<div class="task-empty">${q ? 'Inga tasks matchar sökningen.' : window._tasksFilter === 'open' ? 'Inga öppna tasks.' : window._tasksFilter === 'done' ? 'Inga klara tasks.' : 'Inga tasks.'}</div>`
       } else {
         filtered.forEach(t => {
           const isExpanded = window._expandedTaskId === t.id
           const done = t.status === 'done' ? 'checked' : ''
-          const strike = t.status === 'done' ? 'text-decoration:line-through;opacity:.5' : ''
-          const sevCol = t.severity === 'critical' ? '#ef4444' : t.severity === 'high' ? 'var(--r)' : t.severity === 'medium' ? 'var(--w)' : 'var(--muted)'
-          const sevLabel = t.severity === 'critical' ? 'Kritisk' : t.severity === 'high' ? 'Hög' : t.severity === 'medium' ? 'Medium' : 'Låg'
-          const skillBadge = t.skill_type ? `<span style="font-size:8px;background:var(--panel);color:var(--muted);padding:1px 5px;border-radius:3px;margin-left:4px">${esc(t.skill_type)}</span>` : ''
-          const statusBadge = t.status === 'in_progress' ? `<span style="font-size:8px;background:#3b82f620;color:#3b82f6;padding:1px 5px;border-radius:3px;margin-left:4px">pågår</span>` : ''
-          const effortStr = t.effort_h ? `${t.effort_h}h` : ''
+          const sevKey = (t.severity || 'low').toLowerCase()
+          const sevLabel = sevKey === 'critical' ? 'Kritisk' : sevKey === 'high' ? 'Hög' : sevKey === 'medium' ? 'Medium' : 'Låg'
+          const skillBadge = t.skill_type ? `<span class="task-skill">${esc(t.skill_type)}</span>` : ''
+          const statusBadge = t.status === 'in_progress' ? `<span class="task-status-pill">pågår</span>` : ''
+          const effortStr = t.effort_h ? `<span class="task-effort" title="Uppskattad tid">⏱${t.effort_h}h</span>` : ''
           const dateStr = t.created_at ? new Date(t.created_at).toLocaleDateString('sv-SE') : ''
-          const scoreStr = t.priority_score ? `P${Math.round(t.priority_score)}` : ''
-          // ── Collapsed row ──
-          html += `<div style="border-bottom:1px solid var(--border)">
-            <div style="display:flex;align-items:flex-start;gap:6px;padding:6px 0;cursor:pointer" onclick="window._expandedTaskId=window._expandedTaskId==='${esc(t.id)}'?null:'${esc(t.id)}';renderPanelContent('tasks')">
-              <input type="checkbox" ${done} onchange="event.stopPropagation();toggleTask('${esc(t.id)}')" style="margin-top:2px;cursor:pointer;accent-color:var(--p)">
-              <div style="flex:1;min-width:0">
-                <div style="font-size:11px;color:var(--head);${strike}">${esc(t.title)}</div>
-                <div style="font-size:9px;color:var(--muted);margin-top:2px;display:flex;align-items:center;gap:4px;flex-wrap:wrap">
-                  <span style="color:${sevCol};font-weight:600">${sevLabel}</span>${skillBadge}${statusBadge}
-                  ${scoreStr ? `<span title="Prioritetspoäng">${scoreStr}</span>` : ''}
-                  ${effortStr ? `<span title="Uppskattad tid">⏱${effortStr}</span>` : ''}
+          const scoreStr = t.priority_score ? `<span class="task-pscore" title="Prioritetspoäng">P${Math.round(t.priority_score)}</span>` : ''
+          const taskClasses = `task-row${t.status === 'done' ? ' done' : ''}${isExpanded ? ' expanded' : ''}`
+          // ── Collapsed row — draggable for reorder ──
+          // Outer .task-card wraps the row + (optional) expanded
+          // detail. The row itself is a flex container; placing the
+          // detail as its sibling keeps the flex layout clean.
+          html += `<div class="task-card" data-task-card="${esc(t.id)}">
+            <div class="${taskClasses}" draggable="true" data-task-id="${esc(t.id)}"
+              ondragstart="_onTaskDragStart(event, '${esc(t.id)}')"
+              ondragover="_onTaskDragOver(event, '${esc(t.id)}')"
+              ondragleave="_onTaskDragLeave(event, '${esc(t.id)}')"
+              ondrop="_onTaskDrop(event, '${esc(t.id)}')"
+              ondragend="_onTaskDragEnd(event)"
+              onclick="window._expandedTaskId=window._expandedTaskId==='${esc(t.id)}'?null:'${esc(t.id)}';renderPanelContent('tasks')">
+              <span class="task-grip" title="Dra för att ändra ordning" onmousedown="event.stopPropagation()">⋮⋮</span>
+              <input type="checkbox" class="task-check" ${done} onclick="event.stopPropagation()" onchange="event.stopPropagation();toggleTask('${esc(t.id)}')">
+              <div class="task-body">
+                <div class="task-title">${esc(t.title)}</div>
+                <div class="task-meta">
+                  <span class="task-sev ${sevKey}">${sevLabel}</span>
+                  ${skillBadge}
+                  ${statusBadge}
+                  ${scoreStr}
+                  ${effortStr}
                   <span>${dateStr}</span>
                 </div>
               </div>
-              <span style="font-size:10px;color:var(--muted);padding:2px">${isExpanded ? '▲' : '▼'}</span>
+              <span class="task-chev">▾</span>
             </div>`
           // ── Expanded detail/edit view ──
           if (isExpanded) {
@@ -10941,6 +11067,104 @@ async function toggleTask(taskId) {
     task.status = newStatus
   }
   renderPanelContent('tasks')
+}
+
+// ── Task search ──
+let _taskSearchDebounce = null
+function _onTaskSearch(value) {
+  window._taskSearch = value || ''
+  // Debounce re-render so typing isn't laggy on long lists.
+  if (_taskSearchDebounce) clearTimeout(_taskSearchDebounce)
+  _taskSearchDebounce = setTimeout(() => {
+    renderPanelContent('tasks')
+    // Restore focus + caret since we re-rendered the input.
+    const inp = document.getElementById('taskSearchInput')
+    if (inp) {
+      inp.focus()
+      inp.setSelectionRange(inp.value.length, inp.value.length)
+    }
+  }, 120)
+}
+function _clearTaskSearch() {
+  window._taskSearch = ''
+  renderPanelContent('tasks')
+}
+
+// ── Task drag-and-drop reorder ──
+// Custom client-side sort order persisted in localStorage as
+// { [taskId]: index }. Tasks without an explicit order fall back to
+// priority_score (server's default sort) so freshly-fetched tasks
+// land at sensible positions before the user manually reorders.
+function _getTaskOrder() {
+  try { return JSON.parse(localStorage.getItem('seoz_task_order') || '{}') }
+  catch (_) { return {} }
+}
+function _setTaskOrder(order) {
+  try { localStorage.setItem('seoz_task_order', JSON.stringify(order)) }
+  catch (_) {}
+}
+function _sortTasksByCustomOrder(tasks) {
+  const order = _getTaskOrder()
+  return [...tasks].sort((a, b) => {
+    const ai = order[a.id]
+    const bi = order[b.id]
+    const hasA = typeof ai === 'number'
+    const hasB = typeof bi === 'number'
+    if (hasA && hasB) return ai - bi
+    if (hasA) return -1
+    if (hasB) return 1
+    // Both unsorted — fall back to priority_score (high → low) then
+    // created_at (newer → older).
+    const ps = (b.priority_score || 0) - (a.priority_score || 0)
+    if (ps !== 0) return ps
+    return new Date(b.created_at || 0) - new Date(a.created_at || 0)
+  })
+}
+
+let _taskDragId = null
+function _onTaskDragStart(e, id) {
+  _taskDragId = id
+  e.dataTransfer.effectAllowed = 'move'
+  try { e.dataTransfer.setData('text/plain', id) } catch (_) {}
+  // Visual: dim the source row.
+  e.currentTarget.classList.add('dragging')
+}
+function _onTaskDragOver(e, id) {
+  if (!_taskDragId || _taskDragId === id) return
+  e.preventDefault()
+  e.dataTransfer.dropEffect = 'move'
+  e.currentTarget.classList.add('drag-over')
+}
+function _onTaskDragLeave(e, id) {
+  e.currentTarget.classList.remove('drag-over')
+}
+function _onTaskDrop(e, targetId) {
+  e.preventDefault()
+  e.currentTarget.classList.remove('drag-over')
+  if (!_taskDragId || _taskDragId === targetId) return
+  // Re-compute the order: take the current sorted list, find both
+  // indices, splice the dragged id in front of the target.
+  const sorted = _sortTasksByCustomOrder(synced.tasks || [])
+  const ids = sorted.map(t => t.id)
+  const fromIdx = ids.indexOf(_taskDragId)
+  const toIdx = ids.indexOf(targetId)
+  if (fromIdx === -1 || toIdx === -1) return
+  ids.splice(fromIdx, 1)
+  // If we removed an item before the target, the target index shifts
+  // down by one. Otherwise it stays.
+  const adjustedTo = fromIdx < toIdx ? toIdx - 1 : toIdx
+  ids.splice(adjustedTo, 0, _taskDragId)
+  // Materialise as a dense {id → index} map.
+  const order = {}
+  ids.forEach((id, i) => { order[id] = i })
+  _setTaskOrder(order)
+  _taskDragId = null
+  renderPanelContent('tasks')
+}
+function _onTaskDragEnd(e) {
+  _taskDragId = null
+  document.querySelectorAll('.task-row.dragging, .task-row.drag-over')
+    .forEach(el => el.classList.remove('dragging', 'drag-over'))
 }
 
 async function refreshTasks() {

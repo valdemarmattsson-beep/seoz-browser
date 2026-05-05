@@ -65,6 +65,24 @@ let syncInterval = null
 let launchUrl = null // URL passed via command line or protocol activation
 let terminalProc = null   // Persistent interactive terminal process
 
+// Tidig diagnostik — fånga main-process-fel som annars skulle få
+// appen att terminera tyst utan att fönster visas. Skriver till
+// crash-reports/ + console.error så användaren kan rapportera.
+process.on('uncaughtException', (err) => {
+  try {
+    const fp = path.join(app.getPath('userData'), 'startup.log')
+    fs.appendFileSync(fp, new Date().toISOString() + ' UNCAUGHT: ' + (err?.stack || err?.message || err) + '\n')
+  } catch (_) {}
+  console.error('[seoz] uncaughtException:', err)
+})
+process.on('unhandledRejection', (reason) => {
+  try {
+    const fp = path.join(app.getPath('userData'), 'startup.log')
+    fs.appendFileSync(fp, new Date().toISOString() + ' UNHANDLED-REJECTION: ' + (reason?.stack || reason?.message || reason) + '\n')
+  } catch (_) {}
+  console.error('[seoz] unhandledRejection:', reason)
+})
+
 // ══════════════════════════════════════════════════════════════════════════════
 //  PERMISSION POLICY — three-tier model
 // ══════════════════════════════════════════════════════════════════════════════
@@ -654,11 +672,51 @@ function setupContentBlocker() {
   })
 }
 
+// Diagnostic startup log — skriver varje kritisk steg till
+// <userData>/startup.log så vi kan se exakt var appen dör om det
+// händer. När användare rapporterar "öppnas inte" kan vi be dem
+// skicka denna fil.
+function _startupLog(msg) {
+  try {
+    const fp = path.join(app.getPath('userData'), 'startup.log')
+    fs.appendFileSync(fp, new Date().toISOString() + ' ' + msg + '\n')
+  } catch (_) {}
+}
+
+// Validera sparade fönster-bounds mot synliga skärmar. Om sparade
+// bounds är off-screen (t.ex. från en tidigare extern monitor som
+// inte längre är ansluten) kan fönstret öppnas där men aldrig synas.
+// Returnerar säker bounds — rensar x/y om de är osynliga.
+function _safeBounds() {
+  const saved = store.get('bounds') || { width: 1400, height: 860 }
+  const width  = Math.max(800, Math.min(saved.width  || 1400, 4000))
+  const height = Math.max(500, Math.min(saved.height || 860,  3000))
+  // Om vi har x/y, kolla att fönstret är synligt på någon skärm.
+  if (typeof saved.x === 'number' && typeof saved.y === 'number') {
+    try {
+      const displays = screen.getAllDisplays()
+      const visible = displays.some(d => {
+        const wa = d.workArea
+        // Räcker att 100×100 av fönstret är inom en skärm
+        return saved.x + 100 < wa.x + wa.width &&
+               saved.x + width - 100 > wa.x &&
+               saved.y + 100 < wa.y + wa.height &&
+               saved.y + height - 100 > wa.y
+      })
+      if (visible) return { width, height, x: saved.x, y: saved.y }
+    } catch (_) {}
+  }
+  // Fallback: bara storlek, ingen position → Electron centrerar
+  return { width, height }
+}
+
 function createWindow() {
-  const { width, height } = store.get('bounds')
+  _startupLog('createWindow: start')
+  const bounds = _safeBounds()
+  _startupLog('createWindow: bounds=' + JSON.stringify(bounds))
 
   win = new BrowserWindow({
-    width, height,
+    ...bounds,
     minWidth: 800, minHeight: 500,
     backgroundColor: '#131920',
     titleBarStyle: 'hidden',
@@ -678,6 +736,30 @@ function createWindow() {
     },
     show: false,
     icon: APP_ICON,
+  })
+  _startupLog('createWindow: BrowserWindow created')
+
+  // Fallback: om ready-to-show inte fires inom 5 sekunder, visa
+  // fönstret ändå. Tidigare har vi haft fall där renderern crashar
+  // efter partial paint men innan ready-to-show — då stannade
+  // processen igång utan synligt fönster. Bättre att visa ett
+  // (möjligen brutet) fönster än ett osynligt.
+  const fallbackShowTimer = setTimeout(() => {
+    if (win && !win.isDestroyed() && !win.isVisible()) {
+      _startupLog('createWindow: FALLBACK forcing show after 5s timeout')
+      try { win.show() } catch (e) { _startupLog('show failed: ' + e.message) }
+    }
+  }, 5000)
+
+  // Logga renderer-crashes så vi vet om sidan dör innan första paint.
+  win.webContents.on('render-process-gone', (_e, details) => {
+    _startupLog('render-process-gone reason=' + details.reason + ' exitCode=' + details.exitCode)
+  })
+  win.webContents.on('did-fail-load', (_e, errorCode, errorDescription, validatedURL) => {
+    _startupLog('did-fail-load code=' + errorCode + ' desc=' + errorDescription + ' url=' + validatedURL)
+  })
+  win.webContents.on('preload-error', (_e, preloadPath, error) => {
+    _startupLog('preload-error path=' + preloadPath + ' err=' + (error?.message || error))
   })
 
   // Permission system is set up at module scope (further down). Wire
@@ -733,9 +815,16 @@ function createWindow() {
     return { action: 'deny' }
   })
 
-  win.loadFile(path.join(__dirname, '../renderer/index.html'))
+  const indexPath = path.join(__dirname, '../renderer/index.html')
+  _startupLog('createWindow: loadFile ' + indexPath)
+  win.loadFile(indexPath).catch(err => {
+    _startupLog('loadFile FAILED: ' + (err?.message || err))
+  })
+
   win.once('ready-to-show', () => {
-    win.show()
+    _startupLog('ready-to-show fired, showing window')
+    clearTimeout(fallbackShowTimer)
+    try { win.show() } catch (e) { _startupLog('show in ready-to-show failed: ' + e.message) }
     // If the app was launched with a URL, send it to the renderer
     if (launchUrl) {
       win.webContents.send('open-url', launchUrl)
@@ -746,7 +835,11 @@ function createWindow() {
   win.on('resize', () => {
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
   })
-  win.on('closed', () => { win = null; stopSync() })
+  win.on('move', () => {
+    // Spara position också så vi kan validera vid nästa start
+    if (!win.isMaximized()) store.set('bounds', win.getBounds())
+  })
+  win.on('closed', () => { win = null; stopSync(); clearTimeout(fallbackShowTimer) })
 }
 
 // ── Window controls ──

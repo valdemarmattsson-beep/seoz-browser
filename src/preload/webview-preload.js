@@ -180,13 +180,172 @@ ipcRenderer.on('seoz-autofill-fill', (_e, payload) => {
   }
 })
 
+// ════════════════════════════════════════════════════════════════════
+//  Cookie-banner auto-handler (SEOZ Shield)
+//
+//  When the user has set Shield → Cookies to "Acceptera alla" or
+//  "Neka alla", this code finds the consent banner on every page and
+//  clicks the matching button so they don't have to.
+//
+//  Strategy:
+//    1. Match well-known CMP IDs/classes first (OneTrust, Cookiebot,
+//       Didomi, Quantcast, TrustArc, Osano, Klaro, …). These cover
+//       roughly 70% of real-world cookie banners and are zero-risk
+//       (the IDs are stable and unique to consent UI).
+//    2. Fall back to text matching against visible buttons inside
+//       elements that look like a banner (id/class contains "cookie",
+//       "consent", "gdpr", "privacy"). Multilingual: SE + EN.
+//    3. Stop after one successful click per page so we don't fight
+//       a re-rendering banner.
+//
+//  Mode is fetched once at startup and cached. We re-check on every
+//  DOM mutation since banners often mount async.
+// ════════════════════════════════════════════════════════════════════
+
+let _cookieMode = 'off'
+let _cookieClicked = false
+
+// Known accept buttons keyed by stable selector. Order matters — most
+// specific first. Each entry is { sel, kind } where kind is 'accept'
+// or 'reject'.
+const COOKIE_SELECTORS = [
+  // OneTrust
+  { sel: '#onetrust-accept-btn-handler', kind: 'accept' },
+  { sel: '#onetrust-reject-all-handler', kind: 'reject' },
+  { sel: 'button.ot-pc-refuse-all-handler', kind: 'reject' },
+  // Cookiebot (Cybot)
+  { sel: '#CybotCookiebotDialogBodyLevelButtonAccept', kind: 'accept' },
+  { sel: '#CybotCookiebotDialogBodyButtonAccept', kind: 'accept' },
+  { sel: '#CybotCookiebotDialogBodyLevelButtonAcceptAll', kind: 'accept' },
+  { sel: '#CybotCookiebotDialogBodyButtonDecline', kind: 'reject' },
+  // Didomi
+  { sel: '#didomi-notice-agree-button', kind: 'accept' },
+  { sel: '#didomi-notice-disagree-button', kind: 'reject' },
+  { sel: 'button[aria-label*="Agree" i]', kind: 'accept' },
+  // Quantcast
+  { sel: '.qc-cmp2-summary-buttons button[mode="primary"]', kind: 'accept' },
+  { sel: '.qc-cmp2-summary-buttons button[mode="secondary"]', kind: 'reject' },
+  // TrustArc
+  { sel: '#truste-consent-button', kind: 'accept' },
+  { sel: '#truste-consent-required', kind: 'reject' },
+  // Klaro
+  { sel: '.klaro .cm-btn-success', kind: 'accept' },
+  { sel: '.klaro .cm-btn-danger', kind: 'reject' },
+  // Cookie Consent (insites)
+  { sel: '.cc-btn.cc-allow', kind: 'accept' },
+  { sel: '.cc-btn.cc-dismiss', kind: 'accept' },
+  { sel: '.cc-btn.cc-deny', kind: 'reject' },
+  // Osano
+  { sel: '.osano-cm-accept-all', kind: 'accept' },
+  { sel: '.osano-cm-deny-all', kind: 'reject' },
+  // Usercentrics
+  { sel: 'button[data-testid="uc-accept-all-button"]', kind: 'accept' },
+  { sel: 'button[data-testid="uc-deny-all-button"]', kind: 'reject' },
+  // Termly
+  { sel: '#truste-consent-button', kind: 'accept' },
+  // Borlabs
+  { sel: 'a._brlbs-btn-accept-all, button._brlbs-btn-accept-all', kind: 'accept' },
+  { sel: 'a._brlbs-btn-refuse, button._brlbs-btn-refuse', kind: 'reject' },
+]
+
+// Multilingual text patterns — used for banners without stable IDs.
+// Tested against trimmed lowercase button text.
+const ACCEPT_TEXTS = [
+  'accept all', 'accept all cookies', 'accept cookies', 'allow all',
+  'allow cookies', 'i accept', 'i agree', 'agree', 'got it', 'ok',
+  'acceptera alla', 'acceptera', 'godkänn alla', 'godkänn', 'tillåt alla',
+  'tillåt', 'jag godkänner', 'jag accepterar',
+]
+const REJECT_TEXTS = [
+  'reject all', 'reject cookies', 'decline all', 'decline', 'deny',
+  'refuse all', 'only necessary', 'necessary only',
+  'neka alla', 'neka', 'avvisa alla', 'avvisa', 'endast nödvändiga',
+  'endast nödvändigt', 'bara nödvändiga',
+]
+
+function _isVisible(el) {
+  if (!el) return false
+  const r = el.getBoundingClientRect()
+  if (r.width < 4 || r.height < 4) return false
+  const cs = getComputedStyle(el)
+  if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false
+  return true
+}
+
+function _looksLikeCookieBanner(el) {
+  let cur = el
+  for (let i = 0; i < 6 && cur; i++) {
+    const sig = ((cur.id || '') + ' ' + (cur.className || '')).toLowerCase()
+    if (/cookie|consent|gdpr|privacy|cmp|onetrust|didomi|cookiebot/.test(sig)) return true
+    cur = cur.parentElement
+  }
+  return false
+}
+
+function _clickByText(kind) {
+  const wanted = kind === 'accept' ? ACCEPT_TEXTS : REJECT_TEXTS
+  // Scan buttons + role=button + anchor links — banners use all three.
+  const nodes = document.querySelectorAll(
+    'button, [role="button"], input[type="button"], input[type="submit"], a'
+  )
+  for (const el of nodes) {
+    if (!_isVisible(el)) continue
+    const txt = (el.textContent || el.value || '').trim().toLowerCase()
+    if (!txt || txt.length > 60) continue
+    if (!wanted.includes(txt)) continue
+    if (!_looksLikeCookieBanner(el)) continue
+    try { el.click(); return true } catch (_) { /* keep trying */ }
+  }
+  return false
+}
+
+function _handleCookieBanner() {
+  if (_cookieClicked) return
+  if (_cookieMode !== 'accept' && _cookieMode !== 'reject') return
+
+  // 1. Try known CMP selectors first (high precision, near-zero risk).
+  for (const { sel, kind } of COOKIE_SELECTORS) {
+    if (kind !== _cookieMode) continue
+    let el = null
+    try { el = document.querySelector(sel) } catch (_) { continue }
+    if (!el || !_isVisible(el)) continue
+    try {
+      el.click()
+      _cookieClicked = true
+      return
+    } catch (_) { /* fall through */ }
+  }
+
+  // 2. Fall back to text matching inside cookie-banner-like containers.
+  if (_clickByText(_cookieMode)) {
+    _cookieClicked = true
+  }
+}
+
+async function _initCookieMode() {
+  try {
+    // Both webview and popup contexts can call invoke('cookies-get-mode')
+    // directly — main exposes the same handler regardless.
+    const mode = await ipcRenderer.invoke('cookies-get-mode')
+    if (typeof mode === 'string') _cookieMode = mode
+  } catch (_) {
+    // No IPC available (rare) — leave mode 'off' and skip.
+  }
+}
+
 function _bootstrap() {
+  _initCookieMode().then(() => {
+    _handleCookieBanner()
+  })
   _scanAndRequest()
-  // Re-scan on DOM mutations — covers SPA login modals and lazy mounts.
-  // Debounced so we don't run the scan on every keystroke.
+  // Re-scan on DOM mutations — covers SPA login modals AND lazy-mounted
+  // cookie banners. Debounced so we don't run the scan on every keystroke.
   const observer = new MutationObserver(() => {
     clearTimeout(_scanTimer)
-    _scanTimer = setTimeout(_scanAndRequest, 250)
+    _scanTimer = setTimeout(() => {
+      _scanAndRequest()
+      _handleCookieBanner()
+    }, 250)
   })
   observer.observe(document.documentElement, { childList: true, subtree: true })
 }

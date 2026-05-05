@@ -1324,6 +1324,28 @@ input,textarea,select{user-select:text}
 .toggle-sw::after{content:'';position:absolute;top:2px;left:2px;width:16px;height:16px;border-radius:50%;background:#fff;transition:transform .2s;box-shadow:0 1px 3px rgba(0,0,0,.2)}
 .toggle-sw.on::after{transform:translateX(16px)}
 
+/* Cookie auto-handler: 3-way segmented control inside the Shield popup */
+.cookie-section{
+  border-top:1px solid var(--border);margin-top:10px;padding-top:10px;
+}
+.cookie-section-title{
+  font-size:11px;font-weight:600;color:var(--head);margin-bottom:2px;
+  display:flex;align-items:center;gap:6px;
+}
+.cookie-section-sub{font-size:10px;color:var(--muted);margin-bottom:8px;line-height:1.35}
+.cookie-seg{
+  display:flex;background:var(--border);border-radius:7px;padding:2px;gap:2px;
+}
+.cookie-seg-btn{
+  flex:1;border:none;background:transparent;cursor:pointer;
+  padding:5px 4px;border-radius:5px;font-size:10px;font-weight:600;
+  color:var(--muted);transition:all .15s;
+}
+.cookie-seg-btn:hover{color:var(--txt)}
+.cookie-seg-btn.active{background:var(--card);color:var(--head);box-shadow:0 1px 2px rgba(0,0,0,.15)}
+.cookie-seg-btn.active.accept{color:var(--g)}
+.cookie-seg-btn.active.reject{color:var(--r)}
+
 /* Star bookmark button in URL bar */
 .bm-star{width:24px;height:24px;border-radius:5px;border:none;background:none;display:flex;align-items:center;justify-content:center;cursor:pointer;font-size:14px;color:var(--muted);flex-shrink:0;transition:all .15s;-webkit-app-region:no-drag;padding:0}
 .bm-star:hover{background:rgba(255,255,255,.08)}
@@ -2499,6 +2521,18 @@ input,textarea,select{user-select:text}
           <div class="blocker-toggle">
             <label>Aktiverad</label>
             <div class="toggle-sw on" id="blockerToggle" onclick="toggleBlockerEnabled()"></div>
+          </div>
+          <div class="cookie-section">
+            <div class="cookie-section-title">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="0.5" fill="currentColor"/><circle cx="15" cy="11" r="0.5" fill="currentColor"/><circle cx="11" cy="14" r="0.5" fill="currentColor"/><circle cx="15" cy="16" r="0.5" fill="currentColor"/></svg>
+              Cookie-banners
+            </div>
+            <div class="cookie-section-sub">Hantera cookies automatiskt på alla sajter.</div>
+            <div class="cookie-seg" id="cookieSeg" role="tablist">
+              <button class="cookie-seg-btn" data-mode="off" onclick="setCookieMode('off')">Av</button>
+              <button class="cookie-seg-btn" data-mode="accept" onclick="setCookieMode('accept')">Acceptera</button>
+              <button class="cookie-seg-btn" data-mode="reject" onclick="setCookieMode('reject')">Neka</button>
+            </div>
           </div>
         </div>
       </div>
@@ -9716,6 +9750,45 @@ async function toggleBlockerEnabled() {
   toast(blockerOn ? 'Shield aktiverad' : 'Shield avstängd', blockerOn ? '#2ca87f' : '#e58a00')
 }
 
+// ── Cookie-banner auto-handler (Shield → Cookies) ──
+// Mode is persisted per profile in main; webview-preload reads it and
+// auto-clicks Accept/Reject on every page load. Default 'off'.
+let _cookieMode = 'off'
+
+async function initCookieMode() {
+  try {
+    _cookieMode = (await SE.cookieGetMode()) || 'off'
+  } catch (_) { _cookieMode = 'off' }
+  updateCookieSegUI()
+}
+
+function updateCookieSegUI() {
+  const seg = document.getElementById('cookieSeg')
+  if (!seg) return
+  for (const btn of seg.querySelectorAll('.cookie-seg-btn')) {
+    const m = btn.dataset.mode
+    const active = m === _cookieMode
+    btn.classList.toggle('active', active)
+    btn.classList.toggle('accept', active && m === 'accept')
+    btn.classList.toggle('reject', active && m === 'reject')
+  }
+}
+
+async function setCookieMode(mode) {
+  if (!['off','accept','reject'].includes(mode)) return
+  if (_cookieMode === mode) return
+  _cookieMode = mode
+  updateCookieSegUI()
+  try {
+    await SE.cookieSetMode(mode)
+    const labels = { off: 'Cookie-hantering av', accept: 'Accepterar cookies automatiskt', reject: 'Nekar cookies automatiskt' }
+    const colors = { off: '#e58a00', accept: '#2ca87f', reject: '#dc3545' }
+    toast(labels[mode], colors[mode])
+  } catch (err) {
+    toast('Kunde inte spara cookie-läge', '#dc3545')
+  }
+}
+
 // Listen for block count updates from main process
 SE.on('blocker-count', count => {
   blockerCount = count
@@ -14745,6 +14818,7 @@ loadBookmarks()
 loadHistory()
 loadDownloads()
 initBlocker()
+initCookieMode()
 // Restore the previous tab session if one was persisted (e.g. after a
 // renderer reload). Falls back to the default single HOME tab otherwise.
 const _restored = _restoreTabs()

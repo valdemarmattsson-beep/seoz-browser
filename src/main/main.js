@@ -562,6 +562,18 @@ ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
 ipcMain.handle('blocker-get-enabled', () => blockerEnabled)
 ipcMain.handle('blocker-set-enabled', (_, v) => { blockerEnabled = !!v; return blockerEnabled })
 ipcMain.handle('blocker-get-stats', () => blockerStats)
+
+// Cookie-banner auto-handler preference (off / accept / reject) —
+// per profile so multiple users / clients each control their own
+// consent posture. Default 'off' so we don't change behaviour for
+// existing users; they opt in via the SEOZ Shield popup.
+const COOKIE_MODES = ['off', 'accept', 'reject']
+ipcMain.handle('cookies-get-mode', () => PM.profileGet('cookieMode', 'off'))
+ipcMain.handle('cookies-set-mode', (_e, mode) => {
+  if (!COOKIE_MODES.includes(mode)) return { ok: false, error: 'Ogiltig mode' }
+  PM.profileSet('cookieMode', mode)
+  return { ok: true, mode }
+})
 ipcMain.on('blocker-reset-stats', () => { blockerStats.session = 0 })
 
 // ── Theme (profile-scoped) ──

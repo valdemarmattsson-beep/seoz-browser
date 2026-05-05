@@ -140,6 +140,11 @@ contextBridge.exposeInMainWorld('seoz', {
   blockerGetStats:   () => ipcRenderer.invoke('blocker-get-stats'),
   blockerResetStats: () => ipcRenderer.send('blocker-reset-stats'),
 
+  // Cookie-banner auto-handler — saves the user from clicking "Accept"/"Reject"
+  // on every site. Mode is 'off' | 'accept' | 'reject', stored per profile.
+  cookieGetMode: ()     => ipcRenderer.invoke('cookies-get-mode'),
+  cookieSetMode: (mode) => ipcRenderer.invoke('cookies-set-mode', mode),
+
   // Screenshot save dialog
   saveScreenshot: (buffer) => ipcRenderer.invoke('save-screenshot', buffer),
 

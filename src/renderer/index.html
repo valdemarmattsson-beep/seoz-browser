@@ -7,24 +7,42 @@
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
-  /* ── Legacy aliases (short-form) — kept for back-compat across this file. */
-  --p:#4680ff; --p50:#eef3ff; --p100:#dce6ff; --p600:#2563eb;
-  --g:#2ca87f; --g50:#eafaf5;
-  --w:#e58a00; --r:#dc2626;
-  --bg:#131920; --card:#1b232d; --panel:#151d27;
-  --border:#303f50; --head:rgba(255,255,255,.85); --txt:#bfbfbf; --muted:#748892;
-  --tab-h:38px; --addr-h:46px; --bm-h:28px; --chrome-h:112px;
-  --dock-w:48px; --panel-w:280px; --status-h:22px;
+  /* ═══════════════════════════════════════════════════════════════
+     SEOZ OS Design System v2.0 — dark mode is the default. Token
+     values here are 1:1 with the platform's authoritative source at
+     C:\Users\valde\Dev\seoz\src\app\tokens.css so the browser and
+     the app render with the same surfaces, accent, ink levels and
+     borders. Legacy short-form aliases (--p / --bg / --card / --g
+     / --w / --r / --head / --txt / --muted) point at the v2 tokens
+     so existing CSS keeps working without a mass-rename.
+     ═══════════════════════════════════════════════════════════════ */
 
-  /* ── SEOZ OS Design System v2.0 tokens — available project-wide.
-     Use these for any NEW surfaces. Old --p / --bg / --card still work. */
+  /* Ink (text hierarchy) */
   --ink-0: rgba(255,255,255,.98);
   --ink-1: rgba(255,255,255,.88);
   --ink-2: rgba(255,255,255,.62);
   --ink-3: rgba(255,255,255,.42);
   --ink-4: rgba(255,255,255,.22);
+
+  /* Surface */
+  --bg: #0f1115;
+  --bg-2: #1a1d24;
   --surface: #1a1d24;
   --surface-2: #20242c;
+  --surface-raised: rgba(32,36,44,.9);
+
+  /* Border / divider */
+  --border: rgba(255,255,255,.06);
+  --border-strong: rgba(255,255,255,.1);
+  --divider: rgba(255,255,255,.04);
+  --ds-border: var(--border);
+
+  /* Interaction */
+  --hover: rgba(255,255,255,.06);
+  --selected: rgba(91,141,255,.18);
+  --focus-ring: rgba(91,141,255,.4);
+
+  /* Semantic */
   --accent: #5b8dff;
   --accent-soft: rgba(91,141,255,.15);
   --live: #30d158;
@@ -33,31 +51,79 @@
   --warn-bg: rgba(255,159,10,.15);
   --ds-danger: #ff453a;
   --danger-bg: rgba(255,69,58,.15);
-  --ds-border: rgba(255,255,255,.06);
-  --border-strong: rgba(255,255,255,.1);
-  --hover: rgba(255,255,255,.06);
+
+  /* Radius / motion */
   --r-sm: 6px; --r-md: 8px; --r-lg: 10px; --r-xl: 12px; --r-pill: 100px;
   --ease-out: cubic-bezier(0.23, 1, 0.32, 1);
   --ease-drawer: cubic-bezier(0.32, 0.72, 0, 1);
   --dur-fast: 120ms; --dur-base: 180ms; --dur-med: 240ms;
 
+  /* Legacy aliases — point at the v2 tokens above so light/dark
+     theme switching only has to update the v2 source values. */
+  --p:    var(--accent);
+  --p50:  rgba(91,141,255,.08);
+  --p100: rgba(91,141,255,.22);
+  --p600: #6e9dff;
+  --g:    var(--live);
+  --g50:  var(--live-bg);
+  --w:    var(--warn);
+  --r:    var(--ds-danger);
+
+  --card:  var(--surface);
+  --panel: var(--surface-2);
+  --head:  var(--ink-0);
+  --txt:   var(--ink-1);
+  --muted: var(--ink-2);
+
+  /* Layout */
+  --tab-h:38px; --addr-h:46px; --bm-h:28px; --chrome-h:112px;
+  --dock-w:48px; --panel-w:280px; --status-h:22px;
+
   /* Orbit S logomark as CSS mask — for spinners and chips */
   --orbit-loader-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><circle cx='100' cy='100' r='10' fill='black'/><path d='M100 40 A 60 60 0 0 1 160 100' fill='none' stroke='black' stroke-width='16' stroke-linecap='round'/></svg>");
 }
 [data-theme="light"] {
-  --bg:#f0f2f5; --card:#ffffff; --panel:#f8f9fa;
-  --border:#e7eaee; --head:#1d2630; --txt:#131920; --muted:rgba(33,37,41,.6);
+  /* Light mode — also 1:1 with platform tokens. The legacy aliases
+     re-resolve automatically because they point at the v2 tokens. */
 
-  /* v2.0 overrides for light theme */
-  --ink-0: #0a0a0a; --ink-1: #1a1a1a; --ink-2: #585854;
-  --ink-3: #8a8a85; --ink-4: #b8b8b2;
-  --surface: #ffffff; --surface-2: #fafaf8;
-  --accent: #3b6fe0; --accent-soft: rgba(91,141,255,.1);
-  --live: #0f9d44; --live-bg: rgba(15,157,68,.1);
-  --warn: #b45309; --warn-bg: rgba(180,83,9,.1);
-  --ds-danger: #dc2626; --danger-bg: rgba(220,38,38,.1);
-  --ds-border: rgba(0,0,0,.07); --border-strong: rgba(0,0,0,.12);
+  /* Ink */
+  --ink-0: #0a0a0a;
+  --ink-1: #1a1a1a;
+  --ink-2: #585854;
+  --ink-3: #8a8a85;
+  --ink-4: #b8b8b2;
+
+  /* Surface */
+  --bg: #f0f2f5;
+  --bg-2: #e6e8eb;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+  --surface-raised: rgba(255,255,255,.85);
+
+  /* Border / divider */
+  --border: rgba(0,0,0,.07);
+  --border-strong: rgba(0,0,0,.12);
+  --divider: rgba(0,0,0,.04);
+
+  /* Interaction */
   --hover: rgba(0,0,0,.04);
+  --selected: rgba(59,111,224,.12);
+  --focus-ring: rgba(59,111,224,.4);
+
+  /* Semantic */
+  --accent: #3b6fe0;
+  --accent-soft: rgba(59,111,224,.1);
+  --live: #0f9d44;
+  --live-bg: rgba(15,157,68,.1);
+  --warn: #b45309;
+  --warn-bg: rgba(180,83,9,.1);
+  --ds-danger: #dc2626;
+  --danger-bg: rgba(220,38,38,.1);
+
+  /* Legacy aliases — light variants of the same name. */
+  --p50:  rgba(59,111,224,.08);
+  --p100: rgba(59,111,224,.18);
+  --p600: #2a5fcf;
 }
 
 @keyframes orbit-spin { to { transform: rotate(360deg); } }

@@ -63,6 +63,226 @@ let launchUrl = null // URL passed via command line or protocol activation
 let terminalProc = null   // Persistent interactive terminal process
 
 // ══════════════════════════════════════════════════════════════════════════════
+//  PERMISSION POLICY — three-tier model
+// ══════════════════════════════════════════════════════════════════════════════
+//
+//   ALLOW_GLOBAL         Granted on every origin without prompt. Low-risk
+//                        capabilities Chrome also lets sites use freely.
+//
+//   PROMPTABLE           Sensitive capabilities (cam/mic/screen/clipboard-read).
+//                        Three-step decision:
+//                          1. If in TRUSTED_HOSTS → grant silently
+//                          2. If user has stored a decision for this origin
+//                             → use stored value
+//                          3. Otherwise → ask the user via a Chrome-style
+//                             banner; remember the answer if "Kom ihåg" is
+//                             checked.
+//
+//   (everything else)    Denied. geolocation, midi, USB, hid, serial,
+//                        bluetooth, webauthn, … Sites can still try, but
+//                        the API throws.
+//
+// Older releases (≤ v1.10.29) granted PROMPTABLE everywhere without
+// asking. v1.10.30 hard-denied outside TRUSTED_HOSTS, which broke
+// cam/mic on third-party meeting tools the user actually wanted to
+// use. v1.10.32 (this) ships the proper Chrome-style prompt.
+const ALLOW_GLOBAL = new Set([
+  'clipboard-write',
+  'clipboard-sanitized-write',
+  'notifications',
+  'fullscreen',          // element.requestFullscreen() — used by SEOZ portal
+  'pointerLock',         // canvas/game pointer capture
+])
+const PROMPTABLE = new Set([
+  'media',               // camera + mic combined (Chrome's getUserMedia)
+  'microphone',
+  'audioCapture',
+  'display-capture',     // getDisplayMedia (screen share)
+  'clipboard-read',      // privacy-sensitive: can read OTHER apps' clipboard
+])
+// Common voice/video conferencing that auto-grants without prompting,
+// purely for UX. Keeps cam/mic working "out of the box" on tools users
+// trust by virtue of having logged in. Subdomains match.
+const TRUSTED_HOSTS = [
+  'seoz.io', 'seoz.se',
+  'meet.google.com', 'meet.jit.si',
+  'zoom.us', 'zoom.com',
+  'teams.microsoft.com', 'teams.live.com',
+  'whereby.com', 'daily.co',
+  'webex.com', 'gotomeeting.com',
+  'discord.com', 'discordapp.com',
+  'slack.com',
+  'localhost',
+]
+function _hostIsTrusted(url) {
+  try {
+    const u = new URL(url || '')
+    const h = (u.hostname || '').toLowerCase()
+    if (!h) return false
+    return TRUSTED_HOSTS.some(d => h === d || h.endsWith('.' + d))
+  } catch (_) { return false }
+}
+
+// User-friendly label shown in the prompt banner per permission key.
+const PERM_LABELS = {
+  media:             'använda din kamera och mikrofon',
+  microphone:        'använda din mikrofon',
+  audioCapture:      'använda din mikrofon',
+  'display-capture': 'spela in eller dela din skärm',
+  'clipboard-read':  'läsa innehållet i ditt urklipp',
+}
+
+// Per-profile store of saved decisions:
+//   { [origin]: { [permission]: 'granted' | 'denied' } }
+const PERM_STORE_KEY = 'sitePermissions'
+function _permStoreRead() { return PM.profileGet(PERM_STORE_KEY, {}) || {} }
+function _permStoreWrite(s) { PM.profileSet(PERM_STORE_KEY, s) }
+function _permStoredDecision(origin, permission) {
+  if (!origin) return null
+  const cur = _permStoreRead()
+  return cur?.[origin]?.[permission] || null
+}
+function _permStoreSet(origin, permission, decision) {
+  if (!origin) return
+  const cur = _permStoreRead()
+  cur[origin] = { ...(cur[origin] || {}), [permission]: decision }
+  _permStoreWrite(cur)
+}
+
+// In-flight prompts. promptId → { callback, timeout }. The callback is
+// the Electron permission callback; we call it exactly once. If the
+// renderer never responds (e.g. user closes the prompt-bearing window
+// before clicking) we auto-deny after PROMPT_TIMEOUT_MS.
+const PROMPT_TIMEOUT_MS = 30_000
+const _pendingPerms = new Map()
+
+// Coalesce duplicate requests so two concurrent getUserMedia calls
+// from the same origin/permission share one prompt.
+//   key = `${origin}|${permission}`
+const _pendingPermKeys = new Map()  // key → Set<callback>
+
+function _originFromUrl(url) {
+  try { return new URL(url).origin } catch (_) { return null }
+}
+
+function _checkPermissionSync(permission, requestingOriginRaw) {
+  if (ALLOW_GLOBAL.has(permission)) return true
+  if (!PROMPTABLE.has(permission)) return false
+  // setPermissionCheckHandler can pass requestingOrigin separately
+  // (newer Electron). Use it directly when available — otherwise fall
+  // back to false (no async prompt available in the sync check path).
+  const origin = (() => {
+    try { return new URL(requestingOriginRaw || '').origin } catch (_) { return null }
+  })()
+  if (!origin) return false
+  if (_hostIsTrusted(requestingOriginRaw)) return true
+  return _permStoredDecision(origin, permission) === 'granted'
+}
+
+function _resolvePermPrompt(promptId, decision, remember) {
+  const entry = _pendingPerms.get(promptId)
+  if (!entry) return
+  clearTimeout(entry.timeout)
+  _pendingPerms.delete(promptId)
+  // Resolve every coalesced caller for the same key with the same answer.
+  const waiters = _pendingPermKeys.get(entry.coalesceKey) || new Set()
+  for (const cb of waiters) {
+    try { cb(decision) } catch (_) {}
+  }
+  _pendingPermKeys.delete(entry.coalesceKey)
+  if (remember) {
+    _permStoreSet(entry.origin, entry.permission, decision ? 'granted' : 'denied')
+  }
+}
+
+function _handlePermissionRequest(webContents, permission, callback) {
+  // 1. Always-on permissions
+  if (ALLOW_GLOBAL.has(permission)) { callback(true); return }
+  // 2. Outside the promptable set → deny outright
+  if (!PROMPTABLE.has(permission)) { callback(false); return }
+
+  // 3. Resolve the requesting origin
+  const url = (() => {
+    try { return webContents?.getURL?.() || '' } catch (_) { return '' }
+  })()
+  const origin = _originFromUrl(url)
+  if (!origin) { callback(false); return }
+
+  // 4. Hardcoded allow-list (Zoom, Meet, seoz.io, …) → grant silently
+  if (_hostIsTrusted(url)) { callback(true); return }
+
+  // 5. User-saved decision → honour it
+  const stored = _permStoredDecision(origin, permission)
+  if (stored === 'granted') { callback(true); return }
+  if (stored === 'denied')  { callback(false); return }
+
+  // 6. Prompt the user. Coalesce parallel requests for the same
+  //    origin+permission so we only ever show one banner.
+  const coalesceKey = `${origin}|${permission}`
+  if (_pendingPermKeys.has(coalesceKey)) {
+    _pendingPermKeys.get(coalesceKey).add(callback)
+    return
+  }
+  const waiters = new Set([callback])
+  _pendingPermKeys.set(coalesceKey, waiters)
+
+  const promptId = crypto.randomBytes(8).toString('hex')
+  const timeout = setTimeout(() => {
+    // Auto-deny on timeout. Do NOT remember the choice — user just
+    // didn't see the banner. They'll be asked again next time.
+    _resolvePermPrompt(promptId, false, false)
+  }, PROMPT_TIMEOUT_MS)
+  _pendingPerms.set(promptId, { callback, timeout, origin, permission, coalesceKey })
+
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('permission-prompt', {
+      promptId,
+      origin,
+      permission,
+      label: PERM_LABELS[permission] || permission,
+    })
+  } else {
+    // No window to host the prompt — auto-deny.
+    _resolvePermPrompt(promptId, false, false)
+  }
+}
+
+// IPC: renderer responds to the prompt
+ipcMain.on('permission-prompt-response', (_e, { promptId, decision, remember } = {}) => {
+  if (!promptId) return
+  _resolvePermPrompt(promptId, !!decision, !!remember)
+})
+
+// IPC: settings UI — list stored decisions and revoke individual ones
+ipcMain.handle('permissions-list', () => {
+  const store = _permStoreRead()
+  const rows = []
+  for (const [origin, perms] of Object.entries(store)) {
+    for (const [permission, decision] of Object.entries(perms || {})) {
+      rows.push({ origin, permission, decision })
+    }
+  }
+  return rows
+})
+ipcMain.handle('permissions-revoke', (_e, { origin, permission } = {}) => {
+  if (!origin) return { ok: false, error: 'origin krävs' }
+  const cur = _permStoreRead()
+  if (!cur[origin]) return { ok: true }
+  if (permission) {
+    delete cur[origin][permission]
+    if (!Object.keys(cur[origin]).length) delete cur[origin]
+  } else {
+    delete cur[origin]
+  }
+  _permStoreWrite(cur)
+  return { ok: true }
+})
+ipcMain.handle('permissions-clear', () => {
+  _permStoreWrite({})
+  return { ok: true }
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
 //  DEFAULT BROWSER — register as handler for http/https
 // ══════════════════════════════════════════════════════════════════════════════
 if (process.platform === 'win32') {
@@ -260,83 +480,13 @@ function createWindow() {
     icon: APP_ICON,
   })
 
-  // ── Permission policy ──────────────────────────────────────────
-  // Three buckets:
-  //
-  //   ALLOW_GLOBAL         Granted on every origin without prompt. These
-  //                        are low-risk capabilities Chromium also lets
-  //                        sites use freely (clipboard-write,
-  //                        notifications, fullscreen, pointer lock).
-  //
-  //   ALLOW_TRUSTED_ONLY   Granted only on origins in TRUSTED_HOSTS.
-  //                        Camera / mic / screen-capture / clipboard-read
-  //                        live here. Other origins get DENIED — until
-  //                        we ship a per-origin user prompt UI we'd
-  //                        rather block than silently let any site
-  //                        access mic, screen, or read clipboard.
-  //
-  //   (everything else)    Denied. geolocation, midi, USB, hid, serial,
-  //                        bluetooth, etc.
-  //
-  // Older releases (≤ v1.10.29) granted ALLOW_TRUSTED_ONLY to every
-  // origin without prompting. Most users never noticed because they
-  // only ever use cam/mic on seoz.io, but on a public release a
-  // malicious page could enumerate getUserMedia / read clipboard
-  // without consent. This is the closest we can ship before building
-  // a real per-origin prompt UI.
-  const ALLOW_GLOBAL = new Set([
-    'clipboard-write',
-    'clipboard-sanitized-write',
-    'notifications',
-    'fullscreen',          // element.requestFullscreen() — used by SEOZ portal
-    'pointerLock',         // canvas/game pointer capture
-  ])
-  const ALLOW_TRUSTED_ONLY = new Set([
-    'media',               // camera + mic combined (Chrome's getUserMedia)
-    'microphone',
-    'audioCapture',
-    'display-capture',     // getDisplayMedia (screen share)
-    'clipboard-read',      // privacy-sensitive: can read OTHER apps' clipboard
-  ])
-  // Hosts where we trust the page enough to grant ALLOW_TRUSTED_ONLY
-  // without a prompt. Subdomains match (foo.seoz.io counts as seoz.io).
-  // Add common voice/video conferencing services so users don't get
-  // mysteriously-broken cam/mic on Meet/Zoom/Teams. Anything outside
-  // this list gets denied.
-  const TRUSTED_HOSTS = [
-    'seoz.io', 'seoz.se',
-    'meet.google.com', 'meet.jit.si',
-    'zoom.us', 'zoom.com',
-    'teams.microsoft.com', 'teams.live.com',
-    'whereby.com', 'daily.co',
-    'webex.com', 'gotomeeting.com',
-    'discord.com', 'discordapp.com',
-    'slack.com',
-    'localhost',
-  ]
-  function _hostIsTrusted(url) {
-    try {
-      const u = new URL(url || '')
-      const h = (u.hostname || '').toLowerCase()
-      if (!h) return false
-      return TRUSTED_HOSTS.some(d => h === d || h.endsWith('.' + d))
-    } catch (_) { return false }
-  }
-  function _decidePermission(webContents, permission) {
-    if (ALLOW_GLOBAL.has(permission)) return true
-    if (ALLOW_TRUSTED_ONLY.has(permission)) {
-      const url = (() => {
-        try { return webContents?.getURL?.() || '' } catch (_) { return '' }
-      })()
-      return _hostIsTrusted(url)
-    }
-    return false
-  }
+  // Permission system is set up at module scope (further down). Wire
+  // the session handlers to it here.
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(_decidePermission(webContents, permission))
+    _handlePermissionRequest(webContents, permission, callback)
   })
-  win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    return _decidePermission(webContents, permission)
+  win.webContents.session.setPermissionCheckHandler((webContents, permission, requestingOrigin) => {
+    return _checkPermissionSync(permission, requestingOrigin || '')
   })
 
   // Meeting transcription — grant getDisplayMedia() with system-loopback

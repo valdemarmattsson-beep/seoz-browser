@@ -145,6 +145,16 @@ contextBridge.exposeInMainWorld('seoz', {
   cookieGetMode: ()     => ipcRenderer.invoke('cookies-get-mode'),
   cookieSetMode: (mode) => ipcRenderer.invoke('cookies-set-mode', mode),
 
+  // Per-origin media/clipboard permission prompts.
+  // Renderer receives 'permission-prompt' events from main, shows the
+  // banner, and responds with the user's choice. Settings panel can
+  // also list/revoke stored decisions.
+  permissionRespond: (promptId, decision, remember) =>
+    ipcRenderer.send('permission-prompt-response', { promptId, decision, remember }),
+  permissionsList:   ()                       => ipcRenderer.invoke('permissions-list'),
+  permissionsRevoke: (origin, permission)     => ipcRenderer.invoke('permissions-revoke', { origin, permission }),
+  permissionsClear:  ()                       => ipcRenderer.invoke('permissions-clear'),
+
   // Screenshot save dialog
   saveScreenshot: (buffer) => ipcRenderer.invoke('save-screenshot', buffer),
 
@@ -168,7 +178,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save', 'permission-prompt']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

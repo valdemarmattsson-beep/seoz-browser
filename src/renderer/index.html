@@ -2170,6 +2170,38 @@ input,textarea,select{user-select:text}
 .set-btn-danger:active{transform:scale(.97)}
 .set-btn-danger svg{width:13px;height:13px}
 .set-btn-ghost:disabled,.set-btn-danger:disabled{opacity:.4;cursor:default}
+
+/* Site permissions list (Settings → Webbplatsbehörigheter) */
+.set-perm-row{
+  display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);font-size:11px;
+}
+.set-perm-row:last-child{border-bottom:none}
+.set-perm-origin{
+  flex:1;min-width:0;color:var(--head);font-weight:500;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis;
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10.5px;
+}
+.set-perm-perm{
+  font-size:10px;color:var(--muted);padding:1px 6px;
+  border:1px solid var(--border);border-radius:4px;
+  letter-spacing:0;
+}
+.set-perm-state{
+  font-size:10px;font-weight:600;font-family:'JetBrains Mono', ui-monospace, monospace;
+}
+.set-perm-state.granted{color:var(--live)}
+.set-perm-state.denied{color:var(--ds-danger)}
+.set-perm-revoke{
+  border:none;background:transparent;cursor:pointer;
+  width:22px;height:22px;border-radius:5px;
+  display:flex;align-items:center;justify-content:center;
+  color:var(--ink-3);transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
+}
+.set-perm-revoke:hover{background:var(--hover);color:var(--ds-danger)}
+.set-perm-revoke svg{width:11px;height:11px}
+.set-perm-empty{font-size:11px;color:var(--muted);padding:10px 0;line-height:1.5}
 /* API key rows */
 .set-api-row{display:flex;flex-direction:column;padding:9px 12px;gap:7px;border-bottom:1px solid var(--border)}
 .set-api-row:last-child{border-bottom:none}
@@ -2274,6 +2306,55 @@ input,textarea,select{user-select:text}
 .pw-auth-btn:hover{background:var(--panel)}
 .pw-auth-btn.primary{background:var(--p);color:#fff;border-color:var(--p)}
 .pw-auth-btn.primary:hover{opacity:.9;background:var(--p)}
+
+/* ── Per-origin permission prompt banner ──
+   Shown when a non-trusted origin asks for camera/mic/screen/clipboard.
+   Top-centered (Chrome-style) instead of corner so the user can't
+   miss it; clicking outside doesn't dismiss — they have to choose. */
+.perm-prompt{
+  position:fixed;top:calc(var(--chrome-h) + 6px);left:50%;transform:translate(-50%, -8px);
+  z-index:650;
+  width:420px;max-width:calc(100% - 24px);
+  background:var(--card);border:1px solid var(--border-strong);border-radius:12px;
+  box-shadow:0 14px 40px rgba(0,0,0,.45);
+  padding:14px 16px;display:none;opacity:0;
+  transition:transform .22s var(--ease-out), opacity .22s var(--ease-out);
+}
+.perm-prompt.show{display:block;transform:translate(-50%, 0);opacity:1}
+.perm-prompt-hdr{display:flex;align-items:center;gap:10px;margin-bottom:8px}
+.perm-prompt-icon{
+  width:28px;height:28px;border-radius:50%;
+  background:var(--accent-soft);color:var(--accent);
+  display:flex;align-items:center;justify-content:center;flex-shrink:0;
+}
+.perm-prompt-icon svg{width:15px;height:15px}
+.perm-prompt-title{
+  font-size:12.5px;font-weight:600;color:var(--head);letter-spacing:-0.005em;
+}
+.perm-prompt-body{
+  font-size:11.5px;color:var(--ink-2);line-height:1.5;margin-bottom:11px;
+}
+.perm-prompt-body strong{
+  color:var(--head);font-weight:600;
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+}
+.perm-prompt-remember{
+  display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--ink-2);margin-bottom:11px;cursor:pointer;
+  user-select:none;
+}
+.perm-prompt-remember input{
+  accent-color:var(--accent);width:13px;height:13px;cursor:pointer;
+}
+.perm-prompt-actions{display:flex;gap:6px}
+.perm-prompt-btn{
+  flex:1;height:32px;border-radius:7px;font-size:11.5px;font-weight:600;cursor:pointer;
+  font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--txt);
+  transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
+}
+.perm-prompt-btn:hover{background:var(--hover)}
+.perm-prompt-btn.allow{background:var(--head);color:var(--bg);border-color:var(--head)}
+.perm-prompt-btn.allow:hover{opacity:.9;background:var(--head)}
 
 /* ── Password autofill save-prompt banner ──
    Shown when the user submits credentials on a page we haven't seen
@@ -3233,6 +3314,26 @@ input,textarea,select{user-select:text}
   </div>
 </div>
 
+<!-- Permission prompt banner — shown when a non-trusted origin asks
+     for camera / mic / screen / clipboard-read. -->
+<div class="perm-prompt" id="permPrompt" role="dialog" aria-modal="true">
+  <div class="perm-prompt-hdr">
+    <div class="perm-prompt-icon" id="permPromptIcon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+    </div>
+    <div class="perm-prompt-title" id="permPromptTitle">Tillåt åtkomst?</div>
+  </div>
+  <div class="perm-prompt-body" id="permPromptBody"></div>
+  <label class="perm-prompt-remember">
+    <input type="checkbox" id="permPromptRemember">
+    Kom ihåg valet för den här sidan
+  </label>
+  <div class="perm-prompt-actions">
+    <button class="perm-prompt-btn" onclick="respondPermissionPrompt(false)">Neka</button>
+    <button class="perm-prompt-btn allow" onclick="respondPermissionPrompt(true)">Tillåt</button>
+  </div>
+</div>
+
 <div class="pw-modal-bg" id="pwModal" onclick="if(event.target===this)closePasswords()">
   <div class="pw-modal">
     <div class="pw-hdr">
@@ -3311,6 +3412,8 @@ const SE = window.seoz || {
   passwordsPinVerify:async()=>({ok:true}), passwordsPinClear:async()=>({ok:true}),
   sendToPopup:()=>{},
   agentReadyScan:async()=>({ok:false,error:'Endast i Electron-builden'}),
+  // Per-origin permission stubs for the dev/preview path
+  permissionRespond:()=>{}, permissionsList:async()=>[], permissionsRevoke:async()=>({ok:true}), permissionsClear:async()=>({ok:true}),
   webviewPreloadUrl: '',
 }
 
@@ -8756,6 +8859,20 @@ async function renderPanelContent(name) {
         ${apiRow('ElevenLabs', 'settingsElevenlabsKey', 'elevenlabsKeyInput', 'xi-...', 'saveElevenlabsKey()', 'removeElevenlabsKey()', 'https://elevenlabs.io/app/settings/api-keys', 'Valfri TTS-röst (annars browser-TTS)', _SI.volume, 'set-icon-orange')}
       </div>
 
+      <!-- WEBBPLATSBEHÖRIGHETER -->
+      <div class="set-group">
+        <div class="set-label" style="display:flex;justify-content:space-between;align-items:center">
+          <span>Webbplatsbehörigheter</span>
+          <button class="set-btn-ghost" style="font-size:10px;padding:3px 8px;height:auto" onclick="renderSitePermissions()" title="Uppdatera listan">${_SI.refresh}</button>
+        </div>
+        <div id="settingsPermsList" style="padding:0 12px 9px">
+          <div style="font-size:11px;color:var(--muted);padding:10px 0">Laddar...</div>
+        </div>
+        <div class="set-actions">
+          <button class="set-btn-ghost" onclick="clearAllSitePermissions()">${_SI.trash}Rensa alla val</button>
+        </div>
+      </div>
+
       <!-- SYSTEM -->
       <div class="set-group">
         <div class="set-label">System</div>
@@ -8842,6 +8959,9 @@ async function renderPanelContent(name) {
     SE.storeGet('anthropicApiKey', '').then(k => _setKeyStatus('settingsAnthropicKey', !!k))
     SE.storeGet('openaiApiKey',    '').then(k => _setKeyStatus('settingsOpenaiKey',    !!k))
     SE.storeGet('elevenlabsApiKey','').then(k => _setKeyStatus('settingsElevenlabsKey',!!k))
+    // Populate the Site permissions list lazily — IPC is fast, no need
+    // to block the panel render. Awaited inside the helper.
+    renderSitePermissions()
     if (SE.isWindows && SE.isDefaultBrowser) {
       SE.isDefaultBrowser().then(isDefault => {
         const sub = document.getElementById('settingsDefaultBrowser')
@@ -10691,6 +10811,65 @@ SE.on('popup-autofill-save', (data) => {
   _handleAutofillSave(data || {})
 })
 
+// ══════════════════════════════════════════════════════════════════
+//  Per-origin permission prompts
+//  Main process asks us to surface a banner when a non-trusted origin
+//  requests cam/mic/screen/clipboard-read. We respond via IPC; main
+//  stores the decision in the profile if "Kom ihåg" was checked.
+// ══════════════════════════════════════════════════════════════════
+
+let _activePermPrompt = null   // { promptId, origin, permission, label }
+const _permPromptQueue = []    // queued requests if multiple origins ask in parallel
+
+const PERM_ICON_BY_KEY = {
+  media:             '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polygon points="23 7 16 12 23 17 23 7"/><rect x="1" y="5" width="15" height="14" rx="2" ry="2"/></svg>',
+  microphone:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+  audioCapture:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+  'display-capture': '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/><line x1="8" y1="21" x2="16" y2="21"/><line x1="12" y1="17" x2="12" y2="21"/></svg>',
+  'clipboard-read':  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2"/><rect x="8" y="2" width="8" height="4" rx="1" ry="1"/></svg>',
+}
+
+SE.on('permission-prompt', (req) => {
+  if (!req || !req.promptId) return
+  // If a prompt is already showing, queue the new one — main has its
+  // own 30s timeout per prompt so the queue can never grow unbounded.
+  if (_activePermPrompt) {
+    _permPromptQueue.push(req)
+    return
+  }
+  _showPermPrompt(req)
+})
+
+function _showPermPrompt(req) {
+  _activePermPrompt = req
+  const el     = document.getElementById('permPrompt')
+  const iconEl = document.getElementById('permPromptIcon')
+  const titleEl = document.getElementById('permPromptTitle')
+  const bodyEl = document.getElementById('permPromptBody')
+  const remEl  = document.getElementById('permPromptRemember')
+  if (!el) return
+  iconEl.innerHTML = PERM_ICON_BY_KEY[req.permission] || iconEl.innerHTML
+  titleEl.textContent = 'Tillåt åtkomst?'
+  // Strip protocol + trailing slash for readability — the origin string
+  // is "https://example.com" but users see "example.com" everywhere
+  // else (URL bar, history, bookmarks).
+  const pretty = String(req.origin || '').replace(/^https?:\/\//, '').replace(/\/+$/, '')
+  bodyEl.innerHTML = `<strong>${esc(pretty)}</strong> vill ${esc(req.label || req.permission)}.`
+  remEl.checked = false
+  el.classList.add('show')
+}
+
+function respondPermissionPrompt(allow) {
+  if (!_activePermPrompt) return
+  const remember = !!document.getElementById('permPromptRemember').checked
+  SE.permissionRespond(_activePermPrompt.promptId, !!allow, remember)
+  document.getElementById('permPrompt').classList.remove('show')
+  _activePermPrompt = null
+  // If more requests queued up while the user was deciding, show the next.
+  const next = _permPromptQueue.shift()
+  if (next) setTimeout(() => _showPermPrompt(next), 200)
+}
+
 let _pwSaveTimer = null
 function showSavePrompt({ title, body, acceptLabel }) {
   const el = document.getElementById('pwSaveBanner')
@@ -12000,6 +12179,65 @@ async function removeAnthropicKey() {
   await SE.storeSet('anthropicApiKey', '')
   toast('API-nyckel borttagen', '#e58a00')
   _settingsUpdateKeyStatus('settingsAnthropicKey', false)
+}
+
+// ══════════════════════════════════════════════════════
+//  Site permissions — Settings → Webbplatsbehörigheter
+// ══════════════════════════════════════════════════════
+const PERM_LABEL_SHORT = {
+  media:             'Kamera + mikrofon',
+  microphone:        'Mikrofon',
+  audioCapture:      'Mikrofon',
+  'display-capture': 'Skärmdelning',
+  'clipboard-read':  'Urklipp',
+}
+async function renderSitePermissions() {
+  const wrap = document.getElementById('settingsPermsList')
+  if (!wrap) return
+  let rows = []
+  try { rows = (await SE.permissionsList()) || [] } catch (_) {}
+  if (!rows.length) {
+    wrap.innerHTML = '<div class="set-perm-empty">Inga sparade val än. När en webbplats ber om kamera, mikrofon, skärmdelning eller urklipp och du kryssar "Kom ihåg val" hamnar den här.</div>'
+    return
+  }
+  // Sort: granted first, then by origin for stable display.
+  rows.sort((a, b) => {
+    if (a.decision !== b.decision) return a.decision === 'granted' ? -1 : 1
+    return (a.origin || '').localeCompare(b.origin || '')
+  })
+  const trashSvg = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg>'
+  wrap.innerHTML = rows.map(r => {
+    const pretty = String(r.origin || '').replace(/^https?:\/\//, '').replace(/\/+$/, '')
+    const label = PERM_LABEL_SHORT[r.permission] || r.permission
+    const stateLabel = r.decision === 'granted' ? 'Tillåten' : 'Nekad'
+    return `<div class="set-perm-row">
+      <span class="set-perm-origin" title="${esc(r.origin)}">${esc(pretty)}</span>
+      <span class="set-perm-perm">${esc(label)}</span>
+      <span class="set-perm-state ${r.decision === 'granted' ? 'granted' : 'denied'}">${stateLabel}</span>
+      <button class="set-perm-revoke" title="Återkalla val" onclick="revokeSitePermission('${esc(r.origin)}','${esc(r.permission)}')">${trashSvg}</button>
+    </div>`
+  }).join('')
+}
+
+async function revokeSitePermission(origin, permission) {
+  try {
+    await SE.permissionsRevoke(origin, permission)
+    toast('Behörighet återkallad', '#2ca87f')
+    renderSitePermissions()
+  } catch (_) {
+    toast('Kunde inte återkalla', '#dc2626')
+  }
+}
+
+async function clearAllSitePermissions() {
+  if (!confirm('Rensa alla sparade webbplatsbehörigheter?')) return
+  try {
+    await SE.permissionsClear()
+    toast('Alla val rensade', '#2ca87f')
+    renderSitePermissions()
+  } catch (_) {
+    toast('Kunde inte rensa', '#dc2626')
+  }
 }
 
 // ══════════════════════════════════════════════════════

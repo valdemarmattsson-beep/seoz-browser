@@ -6979,6 +6979,12 @@ function renderTabs() {
           tip.style.transform = 'translateX(-50%)'
         }
       })
+      // Right-click → tab context menu (Chrome / Arc / Strawberry style)
+      el.addEventListener('contextmenu', (e) => {
+        e.preventDefault()
+        e.stopPropagation()
+        showCtx(e, tabCtxItems(tab.id))
+      })
       attachTabDnD(el)
       bar.insertBefore(el, ntBtn)
     }
@@ -7800,6 +7806,13 @@ const _BTN = {
   file:     _L('<path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/>'),
   alertTri: _L('<path d="m10.29 3.86-8.3 14.4a2 2 0 0 0 1.73 3h16.56a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/>'),
   check:    _L('<polyline points="20 6 9 17 4 12"/>'),
+  plus:     _L('<line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/>'),
+  copy:     _L('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+  star:     _L('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
+  split:    _L('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>'),
+  external: _L('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>'),
+  closeX:   _L('<line x1="18" y1="6" x2="6" y2="18"/><line x1="6" y1="6" x2="18" y2="18"/>'),
+  rotate:   _L('<polyline points="1 4 1 10 7 10"/><polyline points="23 20 23 14 17 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/>'),
 }
 
 // Lucide line-icons for panel headers. 24-grid, 1.8 stroke, currentColor.
@@ -9283,6 +9296,94 @@ function bmCtxItems(bm) {
     }},
     '---',
     { icon: _BTN.trash, label: 'Ta bort', danger: true, action: () => { bookmarks = bookmarks.filter(b => b.id !== bm.id); saveBookmarks(); renderBmBar(); toast('Bokmärke borttaget','#e58a00') } },
+  ]
+}
+
+// Tab context menu (right-click on tab) — Chrome / Arc / Strawberry
+// browser style. Operates on the tab id passed in (not necessarily
+// the active tab) so right-click on an inactive tab affects that tab.
+function tabCtxItems(tabId) {
+  const tab = tabs.find(t => t.id === tabId)
+  if (!tab) return []
+  const idx = tabs.findIndex(t => t.id === tabId)
+  const tabsToRight = tabs.slice(idx + 1)
+  const tabsToLeft = tabs.slice(0, idx)
+  const otherTabs = tabs.filter(t => t.id !== tabId)
+  const isOnly = tabs.length === 1
+  const url = tab.url || ''
+  const isReal = url && !isOverlayUrl(url) && url !== 'about:blank'
+  const splitOpen = _splitWebviews.has(tabId)
+  const lastClosed = _recentClosed?.[0]
+
+  const closeTabsBatch = (list) => {
+    // Close in reverse so indices stay stable.
+    for (let i = list.length - 1; i >= 0; i--) {
+      const t = list[i]
+      if (t.id === activeId && tabs.length > 1) {
+        const fallback = tabs.find(x => x.id !== t.id)
+        if (fallback) switchTab(fallback.id)
+      }
+      const wvEl = _tabWebviews.get(t.id)
+      if (wvEl) { try { wvEl.remove() } catch (_) {}; _tabWebviews.delete(t.id) }
+      const split = _splitWebviews.get(t.id)
+      if (split?.wv) { try { split.wv.remove() } catch (_) {} }
+      _splitWebviews.delete(t.id); _splitFocused.delete(t.id)
+      _tabPreviews.delete(t.id)
+      _pushRecentClosed?.(t)
+      tabs = tabs.filter(x => x.id !== t.id)
+    }
+    scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    _persistTabs?.()
+  }
+
+  return [
+    { icon: _BTN.plus, label: 'Ny flik', action: () => newTab() },
+    { icon: _BTN.rotate, label: 'Ladda om', action: () => {
+      const wvEl = _tabWebviews.get(tabId)
+      try { wvEl?.reload() } catch (_) {}
+    } },
+    { icon: _BTN.copy, label: 'Duplicera flik', action: () => {
+      if (isReal) newTab(url)
+      else newTab()
+    } },
+    '---',
+    { icon: _BTN.split, label: splitOpen ? 'Stäng splitvy' : 'Öppna i splitvy', disabled: !isReal,
+      action: () => {
+        if (activeId !== tabId) switchTab(tabId)
+        if (typeof openSplitView === 'function' && !splitOpen) openSplitView()
+        else if (typeof closeSplitView === 'function' && splitOpen) closeSplitView(tabId)
+      } },
+    { icon: _BTN.star, label: 'Bokmärk denna sida', disabled: !isReal,
+      action: () => {
+        if (activeId !== tabId) switchTab(tabId)
+        setTimeout(() => { try { toggleBookmark() } catch (_) {} }, 50)
+      } },
+    { icon: _BTN.copy, label: 'Kopiera URL', disabled: !isReal,
+      action: () => { try { navigator.clipboard.writeText(url); toast('URL kopierad', '#2ca87f') } catch (_) {} } },
+    '---',
+    { icon: _BTN.external, label: 'Flytta till nytt fönster', disabled: !isReal || isOnly,
+      action: () => {
+        // Use the same path as drag-tear-off — main spawns a new window
+        // with the URL, then we close the original tab.
+        if (typeof SE.tabTearOff === 'function') {
+          SE.tabTearOff(url, 100, 100)
+          // Close the local tab via the existing helper.
+          setTimeout(() => closeTab({ stopPropagation: () => {} }, tabId), 80)
+        }
+      } },
+    '---',
+    { icon: _BTN.refresh, label: lastClosed ? `Återöppna: ${(lastClosed.title || lastClosed.url || '').slice(0, 40)}` : 'Återöppna senaste flik',
+      disabled: !lastClosed,
+      action: () => { if (lastClosed) newTab(lastClosed.url) } },
+    '---',
+    { icon: _BTN.closeX, label: 'Stäng flik', disabled: isOnly, danger: true,
+      action: () => closeTab({ stopPropagation: () => {} }, tabId) },
+    { icon: _BTN.closeX, label: `Stäng övriga (${otherTabs.length})`, disabled: otherTabs.length === 0,
+      action: () => closeTabsBatch(otherTabs) },
+    { icon: _BTN.closeX, label: `Stäng till höger (${tabsToRight.length})`, disabled: tabsToRight.length === 0,
+      action: () => closeTabsBatch(tabsToRight) },
+    { icon: _BTN.closeX, label: `Stäng till vänster (${tabsToLeft.length})`, disabled: tabsToLeft.length === 0,
+      action: () => closeTabsBatch(tabsToLeft) },
   ]
 }
 

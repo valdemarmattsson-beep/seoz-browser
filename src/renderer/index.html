@@ -1706,6 +1706,39 @@ input,textarea,select{user-select:text}
 .set-row.set-row-highlight:hover{background:rgba(70,128,255,.10)}
 .set-row-mono{font-family:'SF Mono','Fira Code','Consolas',monospace;font-size:10px;letter-spacing:.02em}
 
+/* ── Password autofill save-prompt banner ──
+   Shown when the user submits credentials on a page we haven't seen
+   before. Slides in from the bottom-right; auto-hides after 12s. */
+.pw-save-banner{
+  position:fixed;bottom:20px;right:20px;z-index:600;
+  width:340px;background:var(--card);border:1px solid var(--border);
+  border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.4);
+  padding:14px 16px;display:none;
+  transform:translateY(20px);opacity:0;
+  transition:transform .25s var(--ease-out),opacity .25s var(--ease-out);
+}
+.pw-save-banner.show{display:block;transform:translateY(0);opacity:1}
+.pw-save-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pw-save-icon{
+  width:24px;height:24px;border-radius:50%;background:rgba(70,128,255,.12);
+  display:flex;align-items:center;justify-content:center;color:var(--p);flex-shrink:0;
+}
+.pw-save-icon svg{width:13px;height:13px}
+.pw-save-title{font-size:12px;font-weight:700;color:var(--head)}
+.pw-save-body{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:11px}
+.pw-save-body strong{color:var(--head);font-weight:600}
+.pw-save-actions{display:flex;gap:6px}
+.pw-save-btn{
+  flex:1;height:30px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;
+  font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--txt);
+  transition:background .12s,border-color .12s,color .12s;
+}
+.pw-save-btn:hover{background:var(--panel)}
+.pw-save-btn.primary{background:var(--p);color:#fff;border-color:var(--p)}
+.pw-save-btn.primary:hover{opacity:.9;background:var(--p)}
+.pw-save-btn.never{color:var(--muted);font-weight:500}
+.pw-save-btn.never:hover{color:var(--r)}
+
 /* ── Agent Ready panel ── */
 .ar-url{
   font-size:10px;color:var(--muted);
@@ -2585,6 +2618,22 @@ input,textarea,select{user-select:text}
 <div class="chrome-dd" id="userDd" style="width:280px"></div>
 
 <!-- PASSWORD MANAGER MODAL -->
+<!-- Autofill save prompt — slides in when user submits unknown creds -->
+<div class="pw-save-banner" id="pwSaveBanner">
+  <div class="pw-save-hdr">
+    <div class="pw-save-icon">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>
+    </div>
+    <div class="pw-save-title" id="pwSaveTitle">Spara lösenord?</div>
+  </div>
+  <div class="pw-save-body" id="pwSaveBody"></div>
+  <div class="pw-save-actions">
+    <button class="pw-save-btn primary" id="pwSaveAccept">Spara</button>
+    <button class="pw-save-btn" onclick="hideSavePrompt()">Inte nu</button>
+    <button class="pw-save-btn never" onclick="neverSaveForDomain()">Aldrig</button>
+  </div>
+</div>
+
 <div class="pw-modal-bg" id="pwModal" onclick="if(event.target===this)closePasswords()">
   <div class="pw-modal">
     <div class="pw-hdr">
@@ -2660,6 +2709,7 @@ const SE = window.seoz || {
   passwordsList:async()=>[], passwordsAdd:async()=>null,
   passwordsUpdate:async()=>null, passwordsDelete:async()=>true,
   agentReadyScan:async()=>({ok:false,error:'Endast i Electron-builden'}),
+  webviewPreloadUrl: '',
 }
 
 // ══════════════════════════════════════════════════════
@@ -2907,6 +2957,10 @@ function createWebviewForTab(tabId, url) {
   const el = document.createElement('webview')
   el.setAttribute('useragent', CHROME_UA_WV)
   el.setAttribute('allowpopups', '')
+  // Attach the password autofill / login-form detection script. Must
+  // be set BEFORE src so the preload registers before the first
+  // navigation. SE.webviewPreloadUrl is provided by preload.js.
+  if (SE.webviewPreloadUrl) el.setAttribute('preload', SE.webviewPreloadUrl)
   el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none'
   el.src = url || 'about:blank'
   _wvStack.appendChild(el)
@@ -3081,7 +3135,12 @@ function _attachSplitWebviewListeners(el, tabId) {
 window.openSplitView = openSplitView
 window.closeSplitView = closeSplitView
 
-// Register initial webview (tab 1)
+// Register initial webview (tab 1) and attach the autofill preload —
+// can't be set in the static HTML because the file:// URL is profile-
+// dependent (computed in preload.js).
+if (SE.webviewPreloadUrl && !_wvTemplate.getAttribute('preload')) {
+  _wvTemplate.setAttribute('preload', SE.webviewPreloadUrl)
+}
 _tabWebviews.set(1, _wvTemplate)
 
 // Batched tab rendering — coalesce rapid events into one paint
@@ -3556,6 +3615,12 @@ function _attachWebviewListeners(el, tabId) {
     const t = _myTab(); if (t) t.url = e.url
     if (_isActive()) updateURL(e.url)
     _persistTabs()
+  })
+
+  // Password autofill IPC — guest webview-preload.js sends these.
+  el.addEventListener('ipc-message', (e) => {
+    if (e.channel === 'seoz-autofill-request') _handleAutofillRequest(el, e.args[0] || {})
+    else if (e.channel === 'seoz-autofill-save') _handleAutofillSave(e.args[0] || {})
   })
   el.addEventListener('did-navigate-in-page', e => {
     const t = _myTab(); if (t) t.url = e.url
@@ -9171,6 +9236,140 @@ async function savePassword() {
   } catch (err) {
     toast('Kunde inte spara: ' + (err?.message || 'okänt fel'), '#dc2626')
   }
+}
+
+// ══════════════════════════════════════════════════════
+//  PASSWORD AUTOFILL — listens to webview-preload IPC
+// ══════════════════════════════════════════════════════
+
+// "Aldrig"-listan per profil — domäner som användaren explicit har
+// avböjt sparande på. Persist via storeSet så valet håller vid
+// omstart men är profilspecifikt.
+let _pwAutofillBlocklist = null
+async function _pwGetBlocklist() {
+  if (_pwAutofillBlocklist) return _pwAutofillBlocklist
+  try {
+    const list = await SE.storeGet('autofillBlocklist', [])
+    _pwAutofillBlocklist = Array.isArray(list) ? list : []
+  } catch (_) { _pwAutofillBlocklist = [] }
+  return _pwAutofillBlocklist
+}
+async function _pwAddToBlocklist(domain) {
+  const list = await _pwGetBlocklist()
+  if (!list.includes(domain)) list.push(domain)
+  _pwAutofillBlocklist = list
+  try { await SE.storeSet('autofillBlocklist', list) } catch (_) {}
+}
+
+// Domain matching tolerates www / sub-domain mismatches: example.com
+// matches www.example.com and login.example.com both ways.
+function _pwSiteMatches(saved, current) {
+  if (!saved || !current) return false
+  const s = String(saved).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+  const c = String(current).toLowerCase().replace(/^https?:\/\//, '').replace(/^www\./, '').split('/')[0]
+  if (s === c) return true
+  if (c.endsWith('.' + s)) return true   // saved is parent domain
+  if (s.endsWith('.' + c)) return true   // saved is more-specific subdomain
+  return false
+}
+
+async function _handleAutofillRequest(webviewEl, payload) {
+  const site = (payload?.site || '').toLowerCase()
+  if (!site) return
+  let creds = []
+  try { creds = (await SE.passwordsList()) || [] } catch (_) { return }
+  const matches = creds.filter(c => _pwSiteMatches(c.site, site))
+  if (!matches.length) return
+  // V1: send the first match (most-recently saved). Future: show a
+  // picker if multiple usernames are saved for the same domain.
+  const cred = matches.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
+  try {
+    webviewEl.send('seoz-autofill-fill', {
+      username: cred.username || '',
+      password: cred.password || '',
+    })
+    toast(`Lösenord ifyllt (${esc(cred.site)})`, '#2ca87f')
+  } catch (_) {}
+}
+
+let _pendingSave = null   // { site, username, password, mode, existingId }
+
+async function _handleAutofillSave(payload) {
+  const site = (payload?.site || '').toLowerCase()
+  const username = String(payload?.username || '').trim()
+  const password = String(payload?.password || '')
+  if (!site || !password) return
+
+  // Blocklist check — user has said "Aldrig" for this domain.
+  const blocked = await _pwGetBlocklist()
+  if (blocked.includes(site)) return
+
+  // Already saved? If creds match exactly, do nothing. If username is
+  // the same but password changed, offer to update. Otherwise offer
+  // to save as new.
+  let creds = []
+  try { creds = (await SE.passwordsList()) || [] } catch (_) {}
+  const existing = creds.find(c => _pwSiteMatches(c.site, site) && (c.username || '').toLowerCase() === username.toLowerCase())
+  if (existing) {
+    if (existing.password === password) return  // no-op
+    _pendingSave = { site, username, password, mode: 'update', existingId: existing.id }
+    showSavePrompt({
+      title: 'Uppdatera lösenord?',
+      body: `Lösenordet för <strong>${esc(username || '(utan användarnamn)')}</strong> på <strong>${esc(site)}</strong> verkar ha ändrats. Spara den nya?`,
+      acceptLabel: 'Uppdatera',
+    })
+  } else {
+    _pendingSave = { site, username, password, mode: 'create' }
+    showSavePrompt({
+      title: 'Spara lösenord?',
+      body: `Spara inloggningen för <strong>${esc(username || '(utan användarnamn)')}</strong> på <strong>${esc(site)}</strong>?`,
+      acceptLabel: 'Spara',
+    })
+  }
+}
+
+let _pwSaveTimer = null
+function showSavePrompt({ title, body, acceptLabel }) {
+  const el = document.getElementById('pwSaveBanner')
+  if (!el) return
+  document.getElementById('pwSaveTitle').textContent = title || 'Spara lösenord?'
+  document.getElementById('pwSaveBody').innerHTML = body || ''
+  const accept = document.getElementById('pwSaveAccept')
+  accept.textContent = acceptLabel || 'Spara'
+  accept.onclick = acceptSavePrompt
+  el.classList.add('show')
+  clearTimeout(_pwSaveTimer)
+  _pwSaveTimer = setTimeout(hideSavePrompt, 12000)
+}
+function hideSavePrompt() {
+  const el = document.getElementById('pwSaveBanner')
+  if (el) el.classList.remove('show')
+  clearTimeout(_pwSaveTimer)
+}
+async function acceptSavePrompt() {
+  if (!_pendingSave) { hideSavePrompt(); return }
+  const { site, username, password, mode, existingId } = _pendingSave
+  try {
+    if (mode === 'update' && existingId) {
+      await SE.passwordsUpdate(existingId, { site, username, password })
+      toast(`Lösenord uppdaterat (${esc(site)})`, '#2ca87f')
+    } else {
+      await SE.passwordsAdd({ site, username, password })
+      toast(`Lösenord sparat (${esc(site)})`, '#2ca87f')
+    }
+  } catch (err) {
+    toast('Kunde inte spara: ' + (err?.message || 'okänt'), '#dc2626')
+  }
+  _pendingSave = null
+  hideSavePrompt()
+}
+async function neverSaveForDomain() {
+  if (_pendingSave) {
+    await _pwAddToBlocklist(_pendingSave.site)
+    toast(`Slutar fråga för ${esc(_pendingSave.site)}`, '#94a3b8')
+  }
+  _pendingSave = null
+  hideSavePrompt()
 }
 
 // ══════════════════════════════════════════════════════

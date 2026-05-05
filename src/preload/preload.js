@@ -1,7 +1,16 @@
 'use strict'
 const { contextBridge, ipcRenderer } = require('electron')
+const path = require('path')
+
+// Absolute file:// URL to the webview-preload script. Renderer sets
+// this on each <webview preload="..."> attribute so guest pages get
+// our autofill detector. Electron requires file:// for webview preloads.
+const WEBVIEW_PRELOAD_URL = 'file:///' + path.join(__dirname, 'webview-preload.js').replace(/\\/g, '/')
 
 contextBridge.exposeInMainWorld('seoz', {
+  // Path to the webview preload — used by the renderer when it
+  // creates new webview elements to wire autofill / detection scripts.
+  webviewPreloadUrl: WEBVIEW_PRELOAD_URL,
   // Window controls
   minimize:    () => ipcRenderer.send('win-min'),
   maximize:    () => ipcRenderer.send('win-max'),

@@ -366,9 +366,13 @@ body.wv-fullscreen .main{flex:1;height:100vh}
                       the "Moduler"-toggle; hero stays the only thing in flow.
 ══════════════════════════════════════════════════════════ */
 .home-layout{
-  width:100%;flex:1;min-height:0;
+  /* Cap the whole 3-track unit so it doesn't sprawl on wide displays.
+     Auto-centered horizontally because homeScreen is a flex column with
+     align-items:center — the layout naturally sits in the middle. */
+  width:100%;max-width:1280px;
+  flex:1;min-height:0;
   display:grid;
-  grid-template-columns: 280px minmax(0, 640px) 280px;
+  grid-template-columns: 280px minmax(0, 1fr) 280px;
   grid-template-areas: "left center right";
   gap:40px;
   align-items:stretch;
@@ -3088,18 +3092,59 @@ input,textarea,select{user-select:text}
 .zoom-btn:hover{background:rgba(255,255,255,.08)}
 .zoom-label{flex:1;text-align:center;font-size:11px;font-weight:600;color:var(--head)}
 
-/* ── FIND BAR ── */
+/* ── FIND BAR (Chrome/Brave-stil flytande overlay) ──
+   Tidigare var find-baren en inline-rad mellan URL-baren och
+   bokmärkesbaren som push:ade ned innehållet när den öppnades.
+   Det blev hopträngt i smala fönster och kändes oprofessionellt.
+   Den ligger nu som en flytande pil över webview-innehållet i
+   övre-högra hörnet, samma mönster som alla riktiga browsers
+   (Chrome, Brave, Firefox, Safari) använder för Ctrl+F. */
 .find-bar{
-  height:0;overflow:hidden;background:var(--card);
-  display:flex;align-items:center;padding:0 10px;gap:6px;
-  transition:height .15s ease;
+  position:absolute;
+  top:calc(var(--chrome-h) + 8px);
+  right:16px;
+  z-index:80;
+  display:flex;align-items:center;gap:4px;
+  background:var(--card);
+  border:1px solid var(--border-strong);
+  border-radius:10px;
+  padding:6px 6px 6px 10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.18), 0 2px 6px rgba(0,0,0,.10);
+  /* Hidden state: slide up + fade out, ignore pointer events */
+  transform:translateY(-12px);opacity:0;pointer-events:none;
+  transition:transform var(--dur-fast) var(--ease-out),opacity var(--dur-fast) var(--ease-out);
 }
-.find-bar.open{height:36px;border-bottom:1px solid var(--border)}
-.find-input{flex:1;max-width:260px;height:26px;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:0 8px;font-size:12px;font-family:inherit;color:var(--txt);outline:none}
-.find-input:focus{border-color:var(--p)}
-.find-count{font-size:10px;color:var(--muted);min-width:60px}
-.find-btn{width:26px;height:26px;border-radius:5px;border:none;background:none;color:var(--muted);cursor:pointer;font-size:12px;display:flex;align-items:center;justify-content:center;transition:background .12s}
-.find-btn:hover{background:rgba(255,255,255,.08)}
+.find-bar.open{
+  transform:translateY(0);opacity:1;pointer-events:auto;
+}
+.find-input{
+  width:240px;height:30px;
+  background:var(--panel);border:1px solid var(--border);border-radius:7px;
+  padding:0 10px;font-size:12.5px;font-family:inherit;color:var(--txt);
+  outline:none;
+  transition:border-color var(--dur-fast) var(--ease-out);
+}
+.find-input:focus{border-color:var(--border-strong);background:var(--card)}
+.find-input::placeholder{color:var(--ink-3)}
+.find-count{
+  font-size:10.5px;color:var(--ink-3);
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-variant-numeric:tabular-nums;
+  min-width:38px;text-align:center;
+  padding:0 4px;
+}
+.find-btn{
+  width:28px;height:28px;border-radius:6px;
+  border:none;background:none;color:var(--ink-2);cursor:pointer;
+  font-size:12px;
+  display:flex;align-items:center;justify-content:center;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
+}
+.find-btn:hover{background:var(--hover);color:var(--head)}
+.find-btn svg{width:13px;height:13px}
+/* Tunn separator innan stäng-knappen */
+.find-btn.close{margin-left:2px;border-left:1px solid var(--border);padding-left:8px;border-radius:0 6px 6px 0;width:32px}
+.find-btn.close:hover{background:var(--hover)}
 
 /* ── HISTORY PANEL ── */
 .history-overlay{position:fixed;inset:0;z-index:350;background:rgba(0,0,0,.4);display:none;align-items:center;justify-content:center}
@@ -3404,13 +3449,22 @@ input,textarea,select{user-select:text}
       <button class="chrome-menu-btn" id="chromeMenuBtn" onclick="toggleChromeMenu()" title="Inställningar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
     </div>
 
-    <!-- Find bar -->
-    <div class="find-bar" id="findBar">
+    <!-- Find bar — flytande pill i övre-högra hörnet av webview.
+         CSS positionerar den absolute relativt #app/chrome, så den
+         ligger ovanpå webview-innehållet och skjuter inte längre
+         ned andra rader när den öppnas (Chrome/Brave-mönster). -->
+    <div class="find-bar" id="findBar" role="search" aria-label="Sök på sidan">
       <input class="find-input" id="findInput" placeholder="Sök på sidan..." oninput="doFind(this.value)" onkeydown="findKeyHandler(event)">
       <span class="find-count" id="findCount"></span>
-      <button class="find-btn" onclick="doFindNav('back')" title="Föregående">▲</button>
-      <button class="find-btn" onclick="doFindNav('fwd')" title="Nästa">▼</button>
-      <button class="find-btn" onclick="closeFindBar()" title="Stäng"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
+      <button class="find-btn" onclick="doFindNav('back')" title="Föregående (Shift+Enter)" aria-label="Föregående träff">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="18 15 12 9 6 15"/></svg>
+      </button>
+      <button class="find-btn" onclick="doFindNav('fwd')" title="Nästa (Enter)" aria-label="Nästa träff">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+      </button>
+      <button class="find-btn close" onclick="closeFindBar()" title="Stäng (Esc)" aria-label="Stäng sökfält">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
     </div>
 
     <!-- Update banner -->

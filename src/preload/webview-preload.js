@@ -16,7 +16,196 @@
 //  'popup-' prefix and main relays to the main-window renderer.
 // ════════════════════════════════════════════════════════════════════
 
-const { ipcRenderer } = require('electron')
+const { ipcRenderer, webFrame } = require('electron')
+
+// ════════════════════════════════════════════════════════════════════
+//  STEALTH — make the page-side runtime indistinguishable from real
+//  Chrome so Google's "Webbläsaren eller appen kanske inte är säker"-
+//  block doesn't fire on accounts.google.com / OAuth flows.
+//
+//  We already spoof the User-Agent and Sec-CH-UA at the request layer
+//  (in main.js). What's left is the in-page JS fingerprint that Google
+//  inspects: navigator.webdriver, navigator.plugins, the chrome global,
+//  WebGL renderer, Permissions API quirks, etc. Real Chrome has all of
+//  those; default Electron has none of them, which is the signal.
+//
+//  Patches run in the page's main world via webFrame.executeJavaScript
+//  AT preload time — meaning they take effect before any page script
+//  reads the patched globals. This is the same approach the well-known
+//  puppeteer-extra-plugin-stealth library uses for Puppeteer.
+//
+//  This is best-effort. Bot detectors evolve. Some sites (e.g. Cloud-
+//  flare's Turnstile) may still block. We accept that as the cost of
+//  being a third-party browser; the goal here is to fix Google login.
+// ════════════════════════════════════════════════════════════════════
+;(function applyStealth() {
+  // Stringify a self-contained IIFE so we can inject it into the page's
+  // main world. No closures over the preload context — everything must
+  // be readable from within the page itself.
+  const STEALTH_PATCHES = String.raw`(function() {
+    try {
+      // ── 1. navigator.webdriver — real Chrome reports undefined when
+      //    not under automation. Default Electron reports false (still
+      //    detectable as "the property is defined") or true under some
+      //    paths. Defining it as undefined is what real Chrome does.
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: () => undefined,
+        configurable: true,
+      })
+
+      // ── 2. navigator.plugins — real Chrome has 5 PDF-related plugins.
+      //    Empty plugins.length is one of the most-checked bot signals.
+      const fakePlugins = (() => {
+        const make = (name, filename, description) => {
+          const plugin = Object.create(Plugin.prototype || {})
+          Object.defineProperties(plugin, {
+            name:        { value: name },
+            filename:    { value: filename },
+            description: { value: description },
+            length:      { value: 1 },
+          })
+          return plugin
+        }
+        const list = [
+          make('PDF Viewer',                 'internal-pdf-viewer', 'Portable Document Format'),
+          make('Chrome PDF Viewer',          'internal-pdf-viewer', 'Portable Document Format'),
+          make('Chromium PDF Viewer',        'internal-pdf-viewer', 'Portable Document Format'),
+          make('Microsoft Edge PDF Viewer',  'internal-pdf-viewer', 'Portable Document Format'),
+          make('WebKit built-in PDF',        'internal-pdf-viewer', 'Portable Document Format'),
+        ]
+        const arr = Object.create(PluginArray.prototype || Array.prototype)
+        list.forEach((p, i) => { arr[i] = p; arr[p.name] = p })
+        Object.defineProperty(arr, 'length', { value: list.length })
+        return arr
+      })()
+      Object.defineProperty(Navigator.prototype, 'plugins', {
+        get: () => fakePlugins,
+        configurable: true,
+      })
+
+      // ── 3. navigator.languages — must contain at least the UA's
+      //    primary language. Default Electron reports ['en-US'] which
+      //    Google flags as inconsistent for a Swedish user.
+      if (!navigator.languages || navigator.languages.length === 0) {
+        Object.defineProperty(Navigator.prototype, 'languages', {
+          get: () => ['sv-SE', 'sv', 'en-US', 'en'],
+          configurable: true,
+        })
+      }
+
+      // ── 4. window.chrome — real Chrome has window.chrome.runtime,
+      //    .loadTimes, .csi. Default Electron has nothing. Empty
+      //    window.chrome is itself a signal, so populate it.
+      if (!window.chrome) {
+        window.chrome = {}
+      }
+      if (!window.chrome.runtime) {
+        window.chrome.runtime = {
+          OnInstalledReason:  { CHROME_UPDATE: 'chrome_update', INSTALL: 'install', UPDATE: 'update' },
+          OnRestartRequiredReason: { APP_UPDATE: 'app_update', OS_UPDATE: 'os_update', PERIODIC: 'periodic' },
+          PlatformArch:       { ARM: 'arm', ARM64: 'arm64', MIPS: 'mips', X86_32: 'x86-32', X86_64: 'x86-64' },
+          PlatformOs:         { ANDROID: 'android', CROS: 'cros', LINUX: 'linux', MAC: 'mac', OPENBSD: 'openbsd', WIN: 'win' },
+          RequestUpdateCheckStatus: { NO_UPDATE: 'no_update', THROTTLED: 'throttled', UPDATE_AVAILABLE: 'update_available' },
+        }
+      }
+      if (!window.chrome.loadTimes) {
+        window.chrome.loadTimes = function() {
+          return {
+            commitLoadTime: Date.now() / 1000,
+            connectionInfo: 'h2',
+            finishDocumentLoadTime: Date.now() / 1000,
+            finishLoadTime: Date.now() / 1000,
+            firstPaintAfterLoadTime: 0,
+            firstPaintTime: Date.now() / 1000,
+            navigationType: 'Other',
+            npnNegotiatedProtocol: 'h2',
+            requestTime: Date.now() / 1000,
+            startLoadTime: Date.now() / 1000,
+            wasAlternateProtocolAvailable: false,
+            wasFetchedViaSpdy: true,
+            wasNpnNegotiated: true,
+          }
+        }
+      }
+      if (!window.chrome.csi) {
+        window.chrome.csi = function() {
+          return { onloadT: Date.now(), pageT: 1, startE: Date.now(), tran: 15 }
+        }
+      }
+
+      // ── 5. Permissions.prototype.query — Chrome on a "denied"
+      //    notification permission returns state:'denied' but on a
+      //    secure context returns 'prompt'. Default Electron mismatches
+      //    this for several queries, which is a strong bot signal.
+      try {
+        const origQuery = window.navigator.permissions && window.navigator.permissions.query
+        if (origQuery) {
+          window.navigator.permissions.query = function(p) {
+            if (p && p.name === 'notifications') {
+              return Promise.resolve({
+                state: typeof Notification !== 'undefined' ? Notification.permission : 'default',
+                onchange: null,
+                addEventListener: () => {},
+                removeEventListener: () => {},
+                dispatchEvent: () => true,
+              })
+            }
+            return origQuery.call(window.navigator.permissions, p)
+          }
+        }
+      } catch (_) {}
+
+      // ── 6. WebGL renderer — Google checks UNMASKED_VENDOR_WEBGL and
+      //    UNMASKED_RENDERER_WEBGL for "Google Inc."/"Google SwiftShader"
+      //    which is the headless-Chrome signal. Patch to look like a
+      //    desktop GPU.
+      const patchWebGL = (proto) => {
+        if (!proto) return
+        const orig = proto.getParameter
+        proto.getParameter = function(parameter) {
+          if (parameter === 37445) return 'Intel Inc.'                    // UNMASKED_VENDOR_WEBGL
+          if (parameter === 37446) return 'Intel Iris OpenGL Engine'      // UNMASKED_RENDERER_WEBGL
+          return orig.call(this, parameter)
+        }
+      }
+      try { patchWebGL(window.WebGLRenderingContext && window.WebGLRenderingContext.prototype) } catch (_) {}
+      try { patchWebGL(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype) } catch (_) {}
+
+      // ── 7. Notification.permission consistency — secureContext
+      //    pages query this, defaults to 'default' in real Chrome.
+      //    Electron sometimes returns 'denied' which looks unusual.
+      try {
+        if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+          Object.defineProperty(Notification, 'permission', {
+            get: () => 'default',
+            configurable: true,
+          })
+        }
+      } catch (_) {}
+
+      // ── 8. navigator.deviceMemory + hardwareConcurrency — Chrome
+      //    reports realistic values. Electron sometimes returns 8/4
+      //    in ways that don't align with the platform UA.
+      try {
+        if (!('deviceMemory' in navigator)) {
+          Object.defineProperty(Navigator.prototype, 'deviceMemory', { get: () => 8, configurable: true })
+        }
+      } catch (_) {}
+    } catch (e) {
+      // Defensive: any failure here must not break the page. Silent.
+    }
+  })();`
+
+  // webFrame.executeJavaScript runs in the page's main world. We don't
+  // await — page scripts that haven't run yet still see the patched
+  // globals when they later read them.
+  try {
+    webFrame.executeJavaScript(STEALTH_PATCHES, false).catch(() => {})
+  } catch (_) {
+    // Older Electron / unusual context — ignore. The autofill flow
+    // below still works regardless of whether stealth applied.
+  }
+})()
 
 // In webview guests `process.guestInstanceId` is set. In a native
 // popup BrowserWindow it's undefined. We pick the right transport

@@ -1,6 +1,6 @@
 {
   "name": "seoz-browser",
-  "version": "1.10.37",
+  "version": "1.10.38",
   "description": "SEOZ Desktop Browser",
   "main": "src/main/main.js",
   "author": "SEOZ <hello@seoz.io>",
@@ -9,6 +9,7 @@
     "start": "electron .",
     "dev": "cross-env NODE_ENV=development electron . --dev",
     "build:icons": "node scripts/build-icons.mjs",
+    "build:installer-bmps": "node scripts/build-installer-bmps.mjs",
     "build": "electron-builder --win --x64",
     "build:mac": "electron-builder --mac",
     "build:all": "electron-builder --win --mac",
@@ -71,12 +72,20 @@
       "category": "public.app-category.productivity"
     },
     "nsis": {
-      "oneClick": true,
+      "oneClick": false,
+      "perMachine": false,
       "allowElevation": true,
+      "allowToChangeInstallationDirectory": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
       "shortcutName": "SEOZ Browser",
+      "runAfterFinish": true,
       "differentialPackage": true,
+      "installerHeader": "build/installerHeader.bmp",
+      "installerSidebar": "build/installerSidebar.bmp",
+      "uninstallerSidebar": "build/uninstallerSidebar.bmp",
+      "installerIcon": "assets/icon.ico",
+      "uninstallerIcon": "assets/icon.ico",
       "include": "build/installer.nsh"
     }
   }

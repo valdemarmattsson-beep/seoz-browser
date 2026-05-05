@@ -1042,18 +1042,67 @@ input,textarea,select{user-select:text}
 .tab:hover .tab-x,.tab.active .tab-x{opacity:.6}
 .tab-x:hover{opacity:1!important;background:var(--danger-bg);color:var(--ds-danger)}
 .tab-spin{width:12px;height:12px;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite}
-/* Tab tooltip (Chrome-style) */
+/* Tab tooltip — richer hover preview with favicon header, URL,
+   domain, optional saved-passwords section, and action shortcuts.
+   The 8px padding-top above .tab-tip-card acts as a hover bridge so
+   the cursor can move between the tab and the tooltip without
+   triggering mouseleave; pointer-events:auto on the tooltip keeps it
+   open while the user is interacting with it. */
 .tab-tip{
-  position:absolute;left:50%;top:calc(100% + 6px);transform:translateX(-50%);z-index:150;
-  background:var(--card);border:1px solid var(--border);border-radius:8px;
-  box-shadow:0 6px 20px rgba(0,0,0,.35);
-  padding:8px 10px;min-width:180px;max-width:320px;
+  position:absolute;left:50%;top:100%;transform:translateX(-50%);z-index:150;
+  padding-top:6px;min-width:240px;max-width:320px;
   pointer-events:none;opacity:0;transition:opacity .2s .4s;
-  white-space:normal;
 }
-.tab:hover .tab-tip{opacity:1}
-.tab-tip-title{font-size:11px;font-weight:700;color:var(--head);margin-bottom:3px;overflow:hidden;text-overflow:ellipsis;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical}
-.tab-tip-url{font-size:10px;color:var(--muted);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tab:hover .tab-tip{opacity:1;pointer-events:auto}
+.tab-tip:hover{opacity:1;transition-delay:0s}
+.tab-tip-card{
+  background:var(--card);border:1px solid var(--border);border-radius:10px;
+  box-shadow:0 8px 24px rgba(0,0,0,.4);
+  padding:10px 12px;
+}
+.tab-tip-head{display:flex;align-items:center;gap:8px;margin-bottom:6px}
+.tab-tip-fav{
+  width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:contain;
+  display:none;
+}
+.tab-tip-fav.show{display:block}
+.tab-tip-title{
+  flex:1;min-width:0;font-size:12px;font-weight:700;color:var(--head);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tab-tip-url{
+  font-size:11px;color:var(--txt);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+  margin-bottom:2px;
+}
+.tab-tip-domain{
+  font-size:11px;color:var(--muted);
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tab-tip-section-label{
+  font-size:9px;font-weight:700;letter-spacing:.06em;text-transform:uppercase;
+  color:var(--muted);margin:10px 0 4px;
+}
+.tab-tip-pw-row{
+  display:flex;align-items:center;gap:7px;
+  font-size:11px;color:var(--head);
+  padding:4px 0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap;
+}
+.tab-tip-pw-row svg{width:11px;height:11px;color:var(--muted);flex-shrink:0}
+.tab-tip-pw-row .tab-tip-pw-user{flex:1;overflow:hidden;text-overflow:ellipsis}
+.tab-tip-actions{
+  display:flex;gap:4px;margin-top:8px;padding-top:8px;
+  border-top:1px solid var(--border);justify-content:center;
+}
+.tab-tip-action{
+  width:28px;height:28px;border-radius:6px;border:none;background:transparent;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  color:var(--muted);transition:background .12s,color .12s;
+  font-family:inherit;
+}
+.tab-tip-action svg{width:14px;height:14px}
+.tab-tip-action:hover{background:var(--panel);color:var(--p)}
 /* Agent tab in tab bar */
 .agent-tab{display:none;align-items:center;gap:5px;height:28px;padding:0 10px;border-radius:7px 7px 0 0;font-size:11px;color:var(--p);cursor:default;white-space:nowrap;-webkit-app-region:no-drag;flex-shrink:0;background:rgba(78,115,248,.08);transition:background .15s}
 .agent-tab.active{display:flex}
@@ -6668,8 +6717,26 @@ function renderTabs() {
         <div class="tab-title"></div>
         <div class="tab-x" aria-label="Stäng flik"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
         <div class="tab-tip">
-          <div class="tab-tip-title"></div>
-          <div class="tab-tip-url"></div>
+          <div class="tab-tip-card">
+            <div class="tab-tip-head">
+              <img class="tab-tip-fav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
+              <div class="tab-tip-title"></div>
+            </div>
+            <div class="tab-tip-url"></div>
+            <div class="tab-tip-domain"></div>
+            <div class="tab-tip-pw-section" style="display:none">
+              <div class="tab-tip-section-label">Passwords</div>
+              <div class="tab-tip-pw-list"></div>
+            </div>
+            <div class="tab-tip-actions">
+              <button class="tab-tip-action" type="button" data-tip-action="pin" data-tab-id="${tab.id}" title="Fäst flik">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+              </button>
+              <button class="tab-tip-action" type="button" data-tip-action="split" data-tab-id="${tab.id}" title="Splitvy">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+              </button>
+            </div>
+          </div>
         </div>
       `
       const xBtn = el.querySelector('.tab-x')
@@ -6715,12 +6782,84 @@ function renderTabs() {
     const escaped = esc(tab.title)
     if (titleEl.innerHTML !== escaped) titleEl.innerHTML = escaped
     const tipTitle = el.querySelector('.tab-tip-title')
-    if (tipTitle.innerHTML !== escaped) tipTitle.innerHTML = escaped
+    if (tipTitle && tipTitle.innerHTML !== escaped) tipTitle.innerHTML = escaped
     const tipUrl = el.querySelector('.tab-tip-url')
     const escUrl = esc(tab.url)
-    if (tipUrl.innerHTML !== escUrl) tipUrl.innerHTML = escUrl
+    if (tipUrl && tipUrl.innerHTML !== escUrl) tipUrl.innerHTML = escUrl
+    // Tooltip favicon — mirror the tab's favicon URL when present.
+    const tipFav = el.querySelector('.tab-tip-fav')
+    if (tipFav) {
+      if (tab.favicon) {
+        if (tipFav.getAttribute('src') !== tab.favicon) tipFav.setAttribute('src', tab.favicon)
+      } else {
+        tipFav.removeAttribute('src')
+        tipFav.classList.remove('show')
+      }
+    }
+    // Tooltip domain — bare hostname under the URL.
+    const tipDomain = el.querySelector('.tab-tip-domain')
+    if (tipDomain) {
+      let domain = ''
+      try {
+        if (tab.url && /^https?:\/\//i.test(tab.url)) {
+          domain = new URL(tab.url).hostname.replace(/^www\./, '')
+        }
+      } catch (_) {}
+      const want = esc(domain)
+      if (tipDomain.innerHTML !== want) tipDomain.innerHTML = want
+      tipDomain.style.display = domain ? '' : 'none'
+    }
+    // Tooltip passwords — list usernames saved for this domain.
+    const pwSection = el.querySelector('.tab-tip-pw-section')
+    const pwList = el.querySelector('.tab-tip-pw-list')
+    if (pwSection && pwList) {
+      let host = ''
+      try { host = new URL(tab.url).hostname.toLowerCase() } catch (_) {}
+      const matches = host
+        ? (_pwCacheForTabs || []).filter(p => _pwSiteMatches(p.site, host))
+        : []
+      if (matches.length) {
+        pwSection.style.display = ''
+        pwList.innerHTML = matches.slice(0, 3).map(p => `
+          <div class="tab-tip-pw-row" title="${esc(p.site)}">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>
+            <span class="tab-tip-pw-user">${esc(p.username || '(utan användarnamn)')}</span>
+          </div>
+        `).join('')
+      } else {
+        pwSection.style.display = 'none'
+        pwList.innerHTML = ''
+      }
+    }
   })
 }
+
+// Cached password list used by tab tooltips. Refreshed on init and
+// after any add/update/delete via the password manager so tooltips
+// stay in sync without an IPC hit on every tab render.
+let _pwCacheForTabs = []
+async function _refreshPwCacheForTabs() {
+  try { _pwCacheForTabs = (await SE.passwordsList()) || [] } catch (_) { _pwCacheForTabs = [] }
+  // Re-render the tab strip so newly-added password chips appear in
+  // their tabs' tooltips immediately.
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+}
+
+// Delegated handler for tooltip action icons.
+document.addEventListener('click', e => {
+  const btn = e.target.closest('[data-tip-action]')
+  if (!btn) return
+  e.stopPropagation()
+  const action = btn.getAttribute('data-tip-action')
+  const tabId = Number(btn.getAttribute('data-tab-id'))
+  if (action === 'split') {
+    if (activeId !== tabId) switchTab(tabId)
+    if (typeof openSplitView === 'function' && !_splitWebviews.has(tabId)) openSplitView()
+    else if (typeof closeSplitView === 'function' && _splitWebviews.has(tabId)) closeSplitView(tabId)
+  } else if (action === 'pin') {
+    toast('Fästa flikar kommer i nästa version', '#94a3b8')
+  }
+})
 
 // ── Tab drag & drop (Chrome-style reorder + tear-off) ───────────────
 let _dragTabId = null
@@ -8125,6 +8264,9 @@ async function init() {
     }
   }
   renderTabs()
+  // Pre-populate the tab-tooltip password cache once on startup so
+  // hover-cards work without an IPC round-trip on every render.
+  _refreshPwCacheForTabs().catch(() => {})
 }
 
 // Lucide alert-triangle + span wrapper for auth errors (keeps icon layout
@@ -9134,6 +9276,10 @@ async function loadPasswords() {
     _pwCache = await SE.passwordsList()
   } catch (_) { _pwCache = [] }
   renderPasswords()
+  // Mirror to the tab-tooltip cache so every tab's hover-card stays
+  // in sync after add/update/delete from the password manager modal.
+  _pwCacheForTabs = _pwCache.slice()
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
 }
 
 function renderPasswords(query = '') {
@@ -9357,6 +9503,8 @@ async function acceptSavePrompt() {
       await SE.passwordsAdd({ site, username, password })
       toast(`Lösenord sparat (${esc(site)})`, '#2ca87f')
     }
+    // Refresh the tab-tooltip cache so the new entry shows in hover.
+    _refreshPwCacheForTabs().catch(() => {})
   } catch (err) {
     toast('Kunde inte spara: ' + (err?.message || 'okänt'), '#dc2626')
   }

@@ -357,19 +357,36 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-mail-toggle.expanded svg{transform:rotate(180deg)}
 
 /* ══════════════════════════════════════════════════════════
-   HOME RAIL — Plan B sketch (centered hero + right rail)
-   Wide  (≥ 1100px): hero column 640 + sticky rail 280, side-by-side.
-   Narrow (< 1100px): rail collapses behind a "Moduler"-toggle and
-   slides in as an overlay so the centered hero stays intact.
+   HOME LAYOUT — 3-column grid (Plan B v2)
+   Wide  (≥ 1100px): [left rail 280] [center 1fr max 640] [right rail 280].
+                     Hero is align-self:center so it sits visually mid-page
+                     regardless of rail height; rails top-align and scroll
+                     internally if cards overflow viewport.
+   Narrow (< 1100px): both rails collapse into one slide-in overlay behind
+                      the "Moduler"-toggle; hero stays the only thing in flow.
 ══════════════════════════════════════════════════════════ */
 .home-layout{
-  width:100%;display:flex;align-items:flex-start;justify-content:center;
+  width:100%;flex:1;min-height:0;
+  display:grid;
+  grid-template-columns: 280px minmax(0, 640px) 280px;
+  grid-template-areas: "left center right";
   gap:40px;
+  align-items:stretch;
 }
-.home-rail{
-  width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px;
-  margin-top:140px; /* clears mark+greeting; lands top of rail near input */
+.home-inner{ grid-area:center; align-self:center; justify-self:center; }
+/* .home-rail is a passthrough wrapper — display:contents lets the
+   left/right side wrappers participate directly in the grid above. */
+.home-rail{ display:contents; }
+.home-rail-side{
+  display:flex; flex-direction:column; gap:14px;
+  /* Each rail scrolls internally so the hero never gets pushed off-center
+     by tall news lists or a full inbox preview. */
+  max-height: calc(100vh - 80px); overflow-y:auto;
 }
+.home-rail-side::-webkit-scrollbar{ width:3px }
+.home-rail-side::-webkit-scrollbar-thumb{ background:var(--border); border-radius:2px }
+.home-rail-left { grid-area:left;  }
+.home-rail-right{ grid-area:right; }
 .home-rail-card{
   background:var(--card);border:1px solid var(--border);border-radius:12px;
   padding:14px;display:flex;flex-direction:column;gap:8px;
@@ -453,12 +470,24 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-rail-backdrop{display:none}
 
 @media (max-width: 1099px){
+  /* Layout collapses: hero is the only thing in flow, both rails
+     slide in from the right as one shared overlay. */
+  .home-layout{
+    display:flex;flex-direction:column;align-items:center;
+    flex:none;gap:0;
+  }
   .home-rail{
+    display:flex;flex-direction:column;
     position:fixed;top:0;right:0;bottom:0;width:320px;max-width:90vw;
     background:var(--bg);border-left:1px solid var(--border);
-    padding:54px 16px 16px;gap:14px;z-index:7;margin-top:0;
+    padding:54px 16px 16px;gap:14px;z-index:7;
     transform:translateX(100%);transition:transform .22s ease;
     overflow-y:auto;
+  }
+  /* Sides flatten so left + right cards stack together in one panel. */
+  .home-rail-side{
+    display:contents;
+    max-height:none;overflow:visible;
   }
   #homeScreen.show-rail .home-rail{transform:translateX(0)}
   #homeScreen.show-rail .home-rail-backdrop{
@@ -3546,32 +3575,37 @@ input,textarea,select{user-select:text}
                 <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
               </button>
 
-              <!-- Inkorg — wraps existing #homeMailResults so JS keeps working unchanged.
-                   Card auto-hides via :has() when the inbox preview is empty. -->
-              <section class="home-rail-card">
-                <div class="home-mail-results" id="homeMailResults"></div>
-              </section>
+              <!-- Left rail (wide layout) — Inkorg + Senast öppnade. At narrow
+                   widths .home-rail-side flips to display:contents, so all
+                   sections flatten into the same slide-in column. -->
+              <div class="home-rail-side home-rail-left">
+                <!-- Inkorg — wraps #homeMailResults; auto-hides via :has() when empty. -->
+                <section class="home-rail-card">
+                  <div class="home-mail-results" id="homeMailResults"></div>
+                </section>
 
-              <!-- Senast öppnade — wraps #homeRecent. Card auto-hides on empty. -->
-              <section class="home-rail-card">
-                <div class="home-rail-eyebrow">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
-                  <span>Senast öppnade</span>
-                </div>
-                <div class="home-recent-title" id="homeRecentTitle" style="display:none">SENAST ÖPPNADE</div>
-                <div class="home-recent" id="homeRecent"></div>
-              </section>
+                <!-- Senast öppnade — wraps #homeRecent. Auto-hides on empty. -->
+                <section class="home-rail-card">
+                  <div class="home-rail-eyebrow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                    <span>Senast öppnade</span>
+                  </div>
+                  <div class="home-recent-title" id="homeRecentTitle" style="display:none">SENAST ÖPPNADE</div>
+                  <div class="home-recent" id="homeRecent"></div>
+                </section>
+              </div>
 
-              <!-- Nyheter — placeholder. Wired up to renderHomeNews() in JS;
-                   real RSS/Atom fetching is a follow-up step. -->
-              <section class="home-rail-card">
-                <div class="home-rail-eyebrow">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><line x1="8" y1="9" x2="14" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/></svg>
-                  <span>Nyheter</span>
-                  <button class="hre-action" type="button" onclick="openHomeNewsSettings()">Konfigurera</button>
-                </div>
-                <div class="home-news-list" id="homeNews"></div>
-              </section>
+              <!-- Right rail (wide layout) — Nyheter. -->
+              <div class="home-rail-side home-rail-right">
+                <section class="home-rail-card">
+                  <div class="home-rail-eyebrow">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><line x1="8" y1="9" x2="14" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/></svg>
+                    <span>Nyheter</span>
+                    <button class="hre-action" type="button" onclick="openHomeNewsSettings()">Konfigurera</button>
+                  </div>
+                  <div class="home-news-list" id="homeNews"></div>
+                </section>
+              </div>
             </aside>
           </div>
         </div>
@@ -9947,6 +9981,9 @@ const SETTINGS_NAV_ICONS = {
   konto:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   profiler:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
   losenord:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>',
+  bokmarken:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21l-7-5-7 5V5a2 2 0 0 1 2-2h10a2 2 0 0 1 2 2z"/></svg>',
+  historik:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/><polyline points="12 7 12 12 15.5 13.5"/></svg>',
+  nedladdningar:'<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>',
   utseende:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.5 0 1-.4 1-1 0-.4-.2-.7-.4-.9-.2-.2-.3-.5-.3-.9 0-.6.4-1 1-1h1.8c2.7 0 4.9-2.2 4.9-4.9C20 5.4 16.4 2 12 2z"/></svg>',
   shield:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   permissions:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
@@ -9966,6 +10003,9 @@ function _settingsSectionList() {
 
     { group: 'Data' },
     { id: 'losenord',    label: 'Lösenord',             icon: SETTINGS_NAV_ICONS.losenord },
+    { id: 'bokmarken',   label: 'Bokmärken',            icon: SETTINGS_NAV_ICONS.bokmarken },
+    { id: 'historik',    label: 'Historik',             icon: SETTINGS_NAV_ICONS.historik },
+    { id: 'nedladdningar', label: 'Nedladdningar',      icon: SETTINGS_NAV_ICONS.nedladdningar },
 
     { group: 'Browser' },
     { id: 'utseende',    label: 'Utseende',             icon: SETTINGS_NAV_ICONS.utseende },
@@ -10019,17 +10059,20 @@ function _settingsSelect(section) {
 
 // ── Per-section content renderers ────────────────────────────────────
 const SETTINGS_RENDERERS = {
-  konto:       () => _renderSettingsKonto(),
-  profiler:    () => _renderSettingsProfiler(),
-  losenord:    () => _renderSettingsLosenord(),
-  utseende:    () => _renderSettingsUtseende(),
-  shield:      () => _renderSettingsShield(),
-  permissions: () => _renderSettingsPermissions(),
-  default:     () => _renderSettingsDefault(),
-  ai:          () => _renderSettingsAi(),
-  diagnostik:  () => _renderSettingsDiagnostik(),
-  juridiskt:   () => _renderSettingsJuridiskt(),
-  system:      () => _renderSettingsSystem(),
+  konto:        () => _renderSettingsKonto(),
+  profiler:     () => _renderSettingsProfiler(),
+  losenord:     () => _renderSettingsLosenord(),
+  bokmarken:    () => _renderSettingsBokmarken(),
+  historik:     () => _renderSettingsHistorik(),
+  nedladdningar:() => _renderSettingsNedladdningar(),
+  utseende:     () => _renderSettingsUtseende(),
+  shield:       () => _renderSettingsShield(),
+  permissions:  () => _renderSettingsPermissions(),
+  default:      () => _renderSettingsDefault(),
+  ai:           () => _renderSettingsAi(),
+  diagnostik:   () => _renderSettingsDiagnostik(),
+  juridiskt:    () => _renderSettingsJuridiskt(),
+  system:       () => _renderSettingsSystem(),
 }
 
 function _renderSettingsKonto() {
@@ -10205,6 +10248,201 @@ async function _settingsClearPin() {
   } catch (_) {
     toast('Kunde inte återställa', '#dc2626')
   }
+}
+
+// ── Bokmärken ──────────────────────────────────────────
+function _renderSettingsBokmarken() {
+  if (typeof window._settingsBmFilter !== 'string') window._settingsBmFilter = ''
+  const q = window._settingsBmFilter.toLowerCase()
+  const list = q
+    ? bookmarks.filter(b =>
+        (b.title || '').toLowerCase().includes(q) ||
+        (b.url || '').toLowerCase().includes(q))
+    : bookmarks
+
+  let rows = ''
+  if (!list.length) {
+    rows = `<div class="settings-row"><div class="settings-row-content" style="text-align:center;color:var(--ink-3);padding:18px 0">${q ? 'Inga bokmärken matchar sökningen.' : 'Inga sparade bokmärken ännu — klicka stjärnan i adressraden för att spara aktuell sida.'}</div></div>`
+  } else {
+    rows = list.slice(0, 200).map(b => {
+      const fav = b.favicon
+        ? `<img src="${esc(b.favicon)}" style="width:14px;height:14px;border-radius:3px" onerror="this.style.display='none'">`
+        : SETTINGS_NAV_ICONS.bokmarken
+      const folder = b.folder ? ` · ${esc(b.folder)}` : ''
+      return `<div class="settings-row clickable" onclick="closeSettings();doNav('${esc(b.url)}')" title="${esc(b.url)}">
+        <div class="settings-row-icon gray" style="width:28px;height:28px">${fav}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(b.title || b.url)}</div>
+          <div class="settings-row-sub" style="font-family:'JetBrains Mono', ui-monospace, monospace;font-size:10.5px">${esc(b.url)}${folder}</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn danger" onclick="event.stopPropagation();_settingsDeleteBookmark(${b.id})" title="Ta bort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+        </div>
+      </div>`
+    }).join('')
+  }
+
+  return `
+    <div class="settings-section-h1">Bokmärken</div>
+    <div class="settings-section-sub">Sparade webbplatser. Klicka stjärnan i adressraden för att spara aktuell sida som bokmärke.</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="padding:10px 18px">
+        <input class="settings-input" id="settingsBmSearch" placeholder="Sök bokmärken..." value="${esc(window._settingsBmFilter)}" oninput="_settingsBmSearch(this.value)" style="flex:1">
+        <span style="font-size:11px;color:var(--ink-3);font-family:'JetBrains Mono', ui-monospace, monospace;font-variant-numeric:tabular-nums">${list.length} av ${bookmarks.length}</span>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      ${rows}
+    </div>
+  `
+}
+function _settingsBmSearch(v) {
+  window._settingsBmFilter = v || ''
+  const before = document.activeElement?.id
+  renderSettingsScreen()
+  if (before === 'settingsBmSearch') {
+    const inp = document.getElementById('settingsBmSearch')
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length) }
+  }
+}
+function _settingsDeleteBookmark(id) {
+  const b = bookmarks.find(x => x.id === id)
+  if (!b) return
+  if (!confirm(`Ta bort bokmärket "${b.title || b.url}"?`)) return
+  bookmarks = bookmarks.filter(x => x.id !== id)
+  saveBookmarks()
+  renderBmBar()
+  renderSettingsScreen()
+  toast('Bokmärke borttaget', '#e58a00')
+}
+
+// ── Historik ──────────────────────────────────────────
+function _renderSettingsHistorik() {
+  if (typeof window._settingsHistFilter !== 'string') window._settingsHistFilter = ''
+  const q = window._settingsHistFilter.toLowerCase()
+  const list = q
+    ? browsingHistory.filter(h =>
+        (h.title || '').toLowerCase().includes(q) ||
+        (h.url || '').toLowerCase().includes(q))
+    : browsingHistory
+
+  let rows = ''
+  if (!list.length) {
+    rows = `<div class="settings-row"><div class="settings-row-content" style="text-align:center;color:var(--ink-3);padding:18px 0">${q ? 'Inga sidor matchar sökningen.' : 'Ingen historik ännu.'}</div></div>`
+  } else {
+    let lastDate = ''
+    rows = list.slice(0, 200).map(h => {
+      const d = new Date(h.time)
+      const dateStr = d.toLocaleDateString('sv-SE')
+      const isToday = dateStr === new Date().toLocaleDateString('sv-SE')
+      const yesterday = new Date(); yesterday.setDate(yesterday.getDate() - 1)
+      const isYesterday = dateStr === yesterday.toLocaleDateString('sv-SE')
+      const heading = dateStr !== lastDate
+        ? `<div class="settings-card-h" style="padding:10px 18px 4px">${isToday ? 'Idag' : isYesterday ? 'Igår' : esc(dateStr)}</div>`
+        : ''
+      lastDate = dateStr
+      const timeStr = d.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' })
+      const fav = h.favicon
+        ? `<img src="${esc(h.favicon)}" style="width:14px;height:14px;border-radius:3px" onerror="this.style.display='none'">`
+        : SETTINGS_NAV_ICONS.historik
+      return `${heading}<div class="settings-row clickable" onclick="closeSettings();doNav('${esc(h.url)}')" title="${esc(h.url)}">
+        <div class="settings-row-icon gray" style="width:28px;height:28px">${fav}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(h.title || h.url)}</div>
+          <div class="settings-row-sub" style="font-family:'JetBrains Mono', ui-monospace, monospace;font-size:10.5px">${esc(h.url)}</div>
+        </div>
+        <div class="settings-row-action" style="font-family:'JetBrains Mono', ui-monospace, monospace;font-size:10.5px;color:var(--ink-3);font-variant-numeric:tabular-nums">${timeStr}</div>
+      </div>`
+    }).join('')
+  }
+
+  return `
+    <div class="settings-section-h1">Historik</div>
+    <div class="settings-section-sub">Sidor du har besökt. Lagras lokalt på din enhet och synkar inte mot någon server.</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="padding:10px 18px">
+        <input class="settings-input" id="settingsHistSearch" placeholder="Sök i historik..." value="${esc(window._settingsHistFilter)}" oninput="_settingsHistSearch(this.value)" style="flex:1">
+        <button class="settings-btn danger" onclick="_settingsClearHistory()">Rensa historik</button>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      ${rows}
+    </div>
+  `
+}
+function _settingsHistSearch(v) {
+  window._settingsHistFilter = v || ''
+  const before = document.activeElement?.id
+  renderSettingsScreen()
+  if (before === 'settingsHistSearch') {
+    const inp = document.getElementById('settingsHistSearch')
+    if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length) }
+  }
+}
+function _settingsClearHistory() {
+  if (!confirm('Rensa hela browser-historiken? Den här åtgärden går inte att ångra.')) return
+  clearHistory()
+  renderSettingsScreen()
+}
+
+// ── Nedladdningar ──────────────────────────────────────
+function _renderSettingsNedladdningar() {
+  let rows = ''
+  if (!downloads.length) {
+    rows = `<div class="settings-row"><div class="settings-row-content" style="text-align:center;color:var(--ink-3);padding:18px 0">Inga nedladdningar ännu.</div></div>`
+  } else {
+    rows = downloads.slice(0, 100).map(d => {
+      const when = new Date(d.time)
+      const dateStr = when.toLocaleDateString('sv-SE')
+      const timeStr = when.toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit' })
+      const isToday = dateStr === new Date().toLocaleDateString('sv-SE')
+      const whenStr = isToday ? `Idag ${timeStr}` : `${dateStr} ${timeStr}`
+      return `<div class="settings-row">
+        <div class="settings-row-icon gray" style="width:28px;height:28px"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:14px;height:14px"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(d.filename)}</div>
+          <div class="settings-row-sub" style="font-family:'JetBrains Mono', ui-monospace, monospace;font-size:10.5px;font-variant-numeric:tabular-nums">${whenStr}${d.url ? ' · ' + esc(d.url.slice(0, 60)) : ''}</div>
+        </div>
+      </div>`
+    }).join('')
+  }
+
+  return `
+    <div class="settings-section-h1">Nedladdningar</div>
+    <div class="settings-section-sub">Nyligen nedladdade filer. Filerna sparas i din OS-standardmapp för nedladdningar.</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="padding:10px 18px">
+        <span style="flex:1;font-size:12px;color:var(--ink-2)">${downloads.length} ${downloads.length === 1 ? 'nedladdning' : 'nedladdningar'} totalt</span>
+        ${downloads.length ? '<button class="settings-btn danger" onclick="_settingsClearDownloads()">Rensa lista</button>' : ''}
+      </div>
+    </div>
+
+    <div class="settings-card">
+      ${rows}
+    </div>
+  `
+}
+function _settingsClearDownloads() {
+  if (!confirm('Rensa nedladdningslistan? (Filerna på disken påverkas inte.)')) return
+  clearDownloads()
+  renderSettingsScreen()
+}
+
+// closeSettings: switch active settings tab back to home so a
+// subsequent doNav() loads the real URL in a webview instead of
+// trying to overlay it on top of the settings page.
+function closeSettings() {
+  const cur = tabs.find(t => t.id === activeId)
+  if (!cur || !isSettingsUrl(cur.url)) return
+  cur.url = HOME_URL
+  cur.title = 'SEOZ'
+  syncOverlayVisibility()
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
 }
 
 function _renderSettingsUtseende() {
@@ -11779,11 +12017,10 @@ function buildChromeMenu() {
     { icon: ico.search,    label:'Sök på sidan', shortcut:'Ctrl+F', action: () => openFindBar() },
     { icon: ico.printer,   label:'Skriv ut', shortcut:'Ctrl+P', action: () => doPrint() },
     '---',
-    { icon: ico.clock,     label:'Historik', shortcut:'Ctrl+H', action: () => openHistory() },
-    { icon: ico.download,  label:'Nedladdningar', shortcut:'Ctrl+J', action: () => openDownloads() },
-    { icon: ico.star,      label:'Bokmärken', shortcut:'Ctrl+D', action: () => toggleBookmark() },
-    '---',
-    { icon: ico.shield,    label: blockerOn ? 'Shield aktiv (' + blockerCount + ' blockerade)' : 'Shield avstängd', shortcut:'', action: () => { toggleBlockerEnabled() } },
+    // Bokmärken/Historik/Nedladdningar har egna sektioner i Inställningar
+    // sedan v1.10.41. Ctrl+D fortsätter spara aktuell sida (URL-bar
+    // ★-knappen). Ctrl+H och Ctrl+J öppnar respektive settings-sektion.
+    // Shield-status finns redan i URL-baren — togs bort härifrån.
     { icon: ico.scan,      label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
     { icon: ico.fullscreen,label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
     { icon: ico.split,     label: _splitWebviews.has(activeId) ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\', action: () => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() } },
@@ -17177,10 +17414,10 @@ document.addEventListener('keydown', e => {
       SE.isFullscreen?.().then(on => { if (on) SE.fullscreen() })
     }
   }
-  // Ctrl+H → History
-  else if (ctrl && key === 'h') { e.preventDefault(); openHistory() }
-  // Ctrl+J → Downloads
-  else if (ctrl && key === 'j') { e.preventDefault(); openDownloads() }
+  // Ctrl+H → /settings → Historik (var openHistory()-overlay innan v1.10.41)
+  else if (ctrl && key === 'h') { e.preventDefault(); openSettings('historik') }
+  // Ctrl+J → /settings → Nedladdningar (var openDownloads()-overlay innan v1.10.41)
+  else if (ctrl && key === 'j') { e.preventDefault(); openSettings('nedladdningar') }
   // Ctrl+D → Bookmark
   else if (ctrl && key === 'd') { e.preventDefault(); toggleBookmark() }
   // Ctrl+P → Print

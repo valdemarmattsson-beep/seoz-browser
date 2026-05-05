@@ -13,6 +13,7 @@ const mail = require('./mail')
 const mailCache = require('./mail-cache')
 const mailScheduler = require('./mail-scheduler')
 const mailClassifier = require('./mail-classifier')
+const news = require('./news')
 const PM = require('./profile-manager')
 const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')
@@ -1108,6 +1109,9 @@ ipcMain.handle('profile-switch', (_, id) => {
   // Restart sync with the new profile's API key
   stopSync()
   startSync()
+  // News store is keyed per profile — repoint it so sources/cache come
+  // from the right file after the switch.
+  try { news.setActiveProfile(id) } catch (_) {}
   return { ok: true, profile }
 })
 
@@ -2249,6 +2253,36 @@ mailScheduler.setHandler('snooze', async (entry) => {
 })
 mailScheduler.start()
 
+// ── News (RSS/Atom) ─────────────────────────────────────────────────
+// Per-profile store: point at the active profile up-front so first reads
+// land in the right file, then start the 15-min background refresh.
+try { news.setActiveProfile(PM.getActiveProfileId()) } catch (_) {}
+news.startScheduler()
+
+// Bridge "items-updated" → renderer so the home rail re-renders without
+// the user needing to click anything.
+news.events.on('items-updated', () => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('news:items-updated')
+  }
+})
+
+ipcMain.handle('news:get',          (_e, opts)    => ({ ok: true, items: news.getItems(opts || {}) }))
+ipcMain.handle('news:refresh',      async ()      => news.refreshAll())
+ipcMain.handle('news:get-sources',  ()            => ({ ok: true, sources: news.getSources() }))
+ipcMain.handle('news:set-sources',  (_e, list)    => ({ ok: true, sources: news.setSources(list) }))
+ipcMain.handle('news:get-presets',  ()            => ({ ok: true, presets: news.PRESETS }))
+ipcMain.handle('news:fetch-preview',(_e, url)     => news.fetchPreview(url))
+ipcMain.handle('news:get-themes',   ()            => ({ ok: true, themes: news.getThemes() }))
+// setThemes mutates ranking but doesn't refetch — emit items-updated so
+// the rail re-renders with the new boost order without waiting for the
+// next 15-min refresh tick.
+ipcMain.handle('news:set-themes',   (_e, list)    => {
+  const themes = news.setThemes(list)
+  news.events.emit('items-updated')
+  return { ok: true, themes }
+})
+
 // Unified-unread aggregator — polls every configured account's INBOX via
 // IMAP STATUS (cheap, doesn't disturb IDLE) and pushes the total to the
 // renderer so the badge reflects ALL accounts, not just the one the user
@@ -2673,8 +2707,42 @@ ipcMain.on('update-jump-list', () => {
 // We ALSO intercept Ctrl+R / Ctrl+Shift+R / F5 here because keyboard
 // events that originate inside a guest webview never bubble up to the
 // host renderer's document — the host's keydown handler can't see them.
+// Stealth-koden lazy-loadas från delad fil så main + webview-preload
+// använder samma sträng. Cachas vid första use så vi inte läser disken
+// vid varje page-load.
+let _stealthCodeCache = null
+function _getStealthCode() {
+  if (_stealthCodeCache) return _stealthCodeCache
+  try {
+    _stealthCodeCache = require('../preload/stealth-code.js')
+  } catch (_) { _stealthCodeCache = '' }
+  return _stealthCodeCache
+}
+
 app.on('web-contents-created', (_e, contents) => {
-  if (contents.getType() !== 'webview') return
+  const contentsType = contents.getType()
+
+  // ── Stealth injection (alla webContents utom vår egen chrome-renderer) ──
+  // Anropas från main för att vinna timing-racet mot t.ex. Googles
+  // detection-script. webview-preloaden kör samma kod via webFrame.
+  // executeJavaScript men det är async — main-process-vägen kör tidigare
+  // i navigation-livcykeln. Belt-and-suspenders.
+  //
+  // Filtrerar bort vår egen UI-renderer (file:// + about:) — vill inte
+  // spoof:a för vårt eget chrome.
+  if (contentsType === 'webview' || contentsType === 'window') {
+    contents.on('did-start-loading', () => {
+      try {
+        const url = contents.getURL()
+        if (!url || url.startsWith('file://') || url.startsWith('about:') || url.startsWith('chrome-extension:')) return
+        const code = _getStealthCode()
+        if (!code) return
+        contents.executeJavaScript(code, false).catch(() => {})
+      } catch (_) {}
+    })
+  }
+
+  if (contentsType !== 'webview') return
 
   // Ctrl+R / F5 → reload the guest. Ctrl+Shift+R → reload bypassing cache.
   contents.on('before-input-event', (event, input) => {

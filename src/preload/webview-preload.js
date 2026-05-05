@@ -26,13 +26,20 @@ const _IN_WEBVIEW = (() => {
   catch (_) { return false }
 })()
 function _send(channel, payload) {
-  if (_IN_WEBVIEW) ipcRenderer.sendToHost(channel, payload)
-  else ipcRenderer.send('popup-' + channel, payload)
+  try {
+    if (_IN_WEBVIEW) ipcRenderer.sendToHost(channel, payload)
+    else ipcRenderer.send('popup-' + channel, payload)
+  } catch (err) {
+    // Best-effort logging — visible in the page's devtools console
+    // so we can diagnose what failed when a site like Facebook
+    // mounts the form in unexpected ways.
+    try { console.warn('[seoz-autofill] _send failed:', channel, err?.message || err) } catch (_) {}
+  }
 }
 
 let _scanTimer = null
 let _detectedFields = null   // { user, pass, form } or null
-let _saveSentForCurrent = false
+let _lastSendKey = ''         // dedupe key for save sends
 
 // Lightweight signature so we don't fire requests for the same form
 // repeatedly when a SPA re-renders identical inputs.
@@ -83,45 +90,76 @@ function _wireFields(d) {
   d.pass.dataset.seozAutofill = 'wired'
   if (d.user) d.user.dataset.seozAutofill = 'wired'
 
-  // Capture submit (form-level OR Enter on password field) so we can
-  // offer to save the credentials on the host side.
+  // Capture submit OR Enter OR submit-button click — Facebook and
+  // other SPAs often preventDefault() the form submit and run a
+  // fetch() instead, so we listen to several signals and dedupe on
+  // the host side. Capture phase ensures we run BEFORE the page's
+  // own handler so even preventDefault'd events still feed us creds.
   const sendSave = () => {
-    if (_saveSentForCurrent) return
-    const username = d.user ? String(d.user.value || '').trim() : ''
-    const password = String(d.pass.value || '')
-    if (!password) return
-    _saveSentForCurrent = true
-    _send('seoz-autofill-save', {
-      site: location.hostname,
-      pageUrl: location.href,
-      username,
-      password,
-    })
+    try {
+      const username = d.user ? String(d.user.value || '').trim() : ''
+      const password = String(d.pass.value || '')
+      if (!password) return
+      // Dedupe identical sends within 1 second — covers cases where
+      // both form-submit and a button-click event fire for the same
+      // login attempt.
+      const key = username + '|' + password
+      if (_lastSendKey === key) return
+      _lastSendKey = key
+      setTimeout(() => { if (_lastSendKey === key) _lastSendKey = '' }, 1000)
+      _send('seoz-autofill-save', {
+        site: location.hostname,
+        pageUrl: location.href,
+        username,
+        password,
+      })
+    } catch (err) {
+      try { console.warn('[seoz-autofill] sendSave failed:', err?.message || err) } catch (_) {}
+    }
   }
+
+  // 1. Form submit — works whenever the page has a real <form>.
   if (d.form) {
     d.form.addEventListener('submit', sendSave, { capture: true })
-  } else {
-    // Form-less login (common in SPAs) — listen for Enter on the
-    // password input, plus a "submit-likely" button click nearby.
-    d.pass.addEventListener('keydown', (e) => {
-      if (e.key === 'Enter') sendSave()
-    }, { capture: true })
   }
+  // 2. Enter key on password field — covers most form-less SPAs.
+  d.pass.addEventListener('keydown', (e) => {
+    if (e.key === 'Enter') sendSave()
+  }, { capture: true })
+  // 3. Click on a submit-like button — Facebook's login button does
+  //    NOT trigger form-submit (they use fetch + history.pushState).
+  //    Scope the listener to the form when present, otherwise to the
+  //    password field's nearest section so we don't catch unrelated
+  //    buttons elsewhere on the page.
+  const scope = d.form || d.pass.closest('section, div[role="dialog"], .login, [class*="login"]') || document
+  scope.addEventListener('click', (e) => {
+    const btn = e.target.closest('button, [role="button"], input[type="submit"]')
+    if (!btn) return
+    const t = (btn.type || '').toLowerCase()
+    const text = (btn.textContent || btn.value || '').toLowerCase()
+    if (t === 'submit' || /^(log\s*in|sign\s*in|logga\s*in|continue|fortsätt|next|nästa)$/.test(text.trim())) {
+      // Defer slightly so the field values are settled.
+      setTimeout(sendSave, 50)
+    }
+  }, { capture: true })
 }
 
 function _scanAndRequest() {
-  const d = _detectLoginForm()
-  if (!d) return
-  _detectedFields = d
-  _wireFields(d)
-  const sig = _formSig(d.user, d.pass)
-  if (sig === _lastSig) return    // already asked for this form
-  _lastSig = sig
-  _saveSentForCurrent = false
-  _send('seoz-autofill-request', {
-    site: location.hostname,
-    pageUrl: location.href,
-  })
+  try {
+    const d = _detectLoginForm()
+    if (!d) return
+    _detectedFields = d
+    _wireFields(d)
+    const sig = _formSig(d.user, d.pass)
+    if (sig === _lastSig) return    // already asked for this form
+    _lastSig = sig
+    _send('seoz-autofill-request', {
+      site: location.hostname,
+      pageUrl: location.href,
+    })
+  } catch (err) {
+    try { console.warn('[seoz-autofill] scan failed:', err?.message || err) } catch (_) {}
+  }
 }
 
 // Host pushes credentials to fill. We only fill if our currently-wired

@@ -9862,6 +9862,14 @@ async function _handleAutofillRequest(webviewEl, payload) {
 let _pendingSave = null   // { site, username, password, mode, existingId }
 
 async function _handleAutofillSave(payload) {
+  try {
+    return await __handleAutofillSaveInner(payload)
+  } catch (err) {
+    console.warn('[seoz-autofill] save handler failed:', err?.message || err)
+    toast('Autofill-bug — kolla konsolen för detaljer', '#dc2626')
+  }
+}
+async function __handleAutofillSaveInner(payload) {
   const site = (payload?.site || '').toLowerCase()
   const username = String(payload?.username || '').trim()
   const password = String(payload?.password || '')

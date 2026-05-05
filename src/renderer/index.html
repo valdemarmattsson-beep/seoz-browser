@@ -3798,6 +3798,34 @@ function _attachWebviewListeners(el, tabId) {
     el.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
   })
 
+  // Surface guest-renderer crashes — without this they were silent
+  // (devtools just shows "disconnected"). Logs to host console + toast
+  // so we can see WHEN the guest dies, even when its own console is gone.
+  el.addEventListener('crashed', (e) => {
+    const t = _myTab()
+    const u = (t && t.url) || ''
+    console.warn('[seoz-wv-crash]', { tab: tabId, url: u, killed: e.killed, reason: e.reason })
+    toast(`Sidan kraschade (${e.reason || 'okänt'}) — försök ladda om`, '#dc2626')
+    // Auto-recovery: reload the dead webview so the user isn't stuck
+    // on a frozen gray page. They can hit Ctrl+R again if needed.
+    setTimeout(() => { try { el.reload() } catch (_) {} }, 1500)
+  })
+  el.addEventListener('plugin-crashed', () => {
+    console.warn('[seoz-wv-plugin-crash]', { tab: tabId })
+  })
+  el.addEventListener('gpu-crashed', () => {
+    console.warn('[seoz-wv-gpu-crash]', { tab: tabId })
+  })
+  // Electron 22+ replaced 'crashed' with 'render-process-gone' but
+  // both still fire on most current builds. Listen to both for safety.
+  el.addEventListener('render-process-gone', (e) => {
+    const t = _myTab()
+    const u = (t && t.url) || ''
+    console.warn('[seoz-wv-render-gone]', { tab: tabId, url: u, reason: e.reason, exitCode: e.exitCode })
+    toast(`Render-process dog (${e.reason || 'okänt'}) — laddar om`, '#dc2626')
+    setTimeout(() => { try { el.reload() } catch (_) {} }, 1500)
+  })
+
   // HTML5 fullscreen (e.g. SEOZ platform "expand chart" button) — hide
   // all our chrome AND put the OS window in true fullscreen (no taskbar,
   // no title bar). ESC inside the guest fires leave-html-full-screen;

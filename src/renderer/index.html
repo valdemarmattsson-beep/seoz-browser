@@ -1755,6 +1755,87 @@ input,textarea,select{user-select:text}
 .bm-modal-foot .bm-save{border:none;background:var(--p);color:#fff}
 .bm-modal-foot .bm-save:hover{background:var(--p600)}
 
+/* ══════════════════════════════════════════════════════════
+   NEWS SOURCES — modal for managing RSS/Atom feeds (presets +
+   custom URLs). Opened from the home rail's Nyheter card.
+══════════════════════════════════════════════════════════ */
+.ns-bg{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:24px}
+.ns-bg.open{display:flex}
+.ns-modal{
+  background:var(--card);border-radius:14px;border:1px solid var(--border);
+  box-shadow:0 12px 40px rgba(0,0,0,.4);
+  width:540px;max-width:100%;max-height:calc(100vh - 48px);
+  display:flex;flex-direction:column;overflow:hidden;
+}
+.ns-hdr{
+  padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
+  border-bottom:1px solid var(--border);flex-shrink:0;
+}
+.ns-hdr-t{font-family:'Inter Tight','Inter',sans-serif;font-size:14px;font-weight:600;color:var(--head);letter-spacing:-.01em}
+.ns-hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
+.ns-close{
+  width:26px;height:26px;border-radius:6px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;
+}
+.ns-close:hover{background:var(--panel);color:var(--head)}
+.ns-close svg{width:14px;height:14px}
+.ns-body{flex:1;overflow-y:auto;padding:14px 18px}
+.ns-body::-webkit-scrollbar{width:6px}
+.ns-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+.ns-section{margin-bottom:18px}
+.ns-section:last-child{margin-bottom:0}
+.ns-section-h{
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:8px;
+}
+.ns-row{
+  display:flex;align-items:center;gap:10px;padding:8px 10px;
+  border-radius:8px;cursor:pointer;transition:background .12s;
+  border:1px solid transparent;
+}
+.ns-row:hover{background:var(--panel)}
+.ns-row-main{min-width:0;flex:1;display:flex;flex-direction:column;gap:1px}
+.ns-row-name{font-size:12px;font-weight:600;color:var(--head)}
+.ns-row-url{font-size:10.5px;color:var(--muted);font-family:monospace;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ns-toggle{
+  width:32px;height:18px;border-radius:100px;background:var(--border);
+  position:relative;flex-shrink:0;transition:background .15s;
+}
+.ns-toggle.on{background:var(--p)}
+.ns-toggle-knob{
+  width:14px;height:14px;border-radius:50%;background:#fff;
+  position:absolute;top:2px;left:2px;transition:left .15s;
+  box-shadow:0 1px 2px rgba(0,0,0,.25);
+}
+.ns-toggle.on .ns-toggle-knob{left:16px}
+.ns-row-del{
+  width:24px;height:24px;border-radius:6px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;flex-shrink:0;
+}
+.ns-row-del:hover{background:rgba(220,38,38,.1);color:var(--r)}
+.ns-row-del svg{width:13px;height:13px}
+.ns-empty{padding:8px 10px;font-size:11px;color:var(--muted);font-style:italic}
+.ns-add{display:flex;gap:6px;margin-top:8px}
+.ns-add-input{
+  flex:1;height:32px;background:var(--panel);border:1px solid var(--border);
+  border-radius:7px;padding:0 10px;font-size:12px;font-family:inherit;color:var(--txt);
+  outline:none;transition:border-color .15s;
+}
+.ns-add-input:focus{border-color:var(--p)}
+.ns-add-btn{
+  height:32px;padding:0 14px;border-radius:7px;border:none;
+  background:var(--p);color:#fff;font-size:11px;font-weight:600;cursor:pointer;
+  font-family:inherit;transition:background .15s;
+}
+.ns-add-btn:hover{background:var(--p600)}
+.ns-add-btn:disabled{opacity:.6;cursor:not-allowed}
+.ns-add-msg{margin-top:8px;font-size:11px;line-height:1.4;display:none;padding:6px 10px;border-radius:6px}
+.ns-add-msg.show{display:block}
+.ns-add-msg.ok{display:block;background:rgba(44,168,127,.08);color:var(--g);border:1px solid rgba(44,168,127,.2)}
+.ns-add-msg.err{display:block;background:rgba(220,38,38,.08);color:var(--r);border:1px solid rgba(220,38,38,.2)}
+
 /* ── BODY ROW ── */
 .body-row{flex:1;display:flex;min-height:0;overflow:hidden}
 
@@ -3336,6 +3417,22 @@ input,textarea,select{user-select:text}
         <button class="bm-cancel" onclick="closeBmModal()">Avbryt</button>
         <button class="bm-save" onclick="saveBmModal()">Spara</button>
       </div>
+    </div>
+  </div>
+
+  <!-- News sources modal — opens from the home rail's Nyheter card. -->
+  <div class="ns-bg" id="newsSettingsBg" onclick="if(event.target.id==='newsSettingsBg')closeHomeNewsSettings()">
+    <div class="ns-modal" role="dialog" aria-label="Nyhetskällor">
+      <div class="ns-hdr">
+        <div>
+          <div class="ns-hdr-t">Nyhetskällor</div>
+          <div class="ns-hdr-sub">Välj bland förvalda eller lägg till egna RSS/Atom-flöden</div>
+        </div>
+        <button class="ns-close" onclick="closeHomeNewsSettings()" aria-label="Stäng">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+        </button>
+      </div>
+      <div class="ns-body" id="newsSettingsBody"></div>
     </div>
   </div>
 
@@ -5282,34 +5379,27 @@ async function renderHomeScreen() {
   renderHomeNews()
 }
 
-// ── Nyheter (sketch) ──────────────────────────────────────────
-// Real impl: pull selected RSS/Atom feeds via main-process net.fetch,
-// cache + dedupe, surface unread count on the dock and rail badge.
-// For the Plan B sketch we render a small static demo set so the
-// layout can be evaluated; user-configurable sources are stubbed
-// behind openHomeNewsSettings().
-const _HOME_NEWS_MOCK = [
-  { source: 'Search Engine Land', time: '14:23',
-    title: 'Google rolls out new helpful-content classifier — what it means for SEO',
-    url: 'https://searchengineland.com/' },
-  { source: 'Dagens Industri',    time: '13:08',
-    title: 'Almega varnar för pressade marginaler i konsultsektorn',
-    url: 'https://di.se/' },
-  { source: 'Search Engine Journal', time: '12:41',
-    title: 'Bing reports 35% jump in AI-powered search referrals',
-    url: 'https://searchenginejournal.com/' },
-  { source: 'Breakit',            time: '11:52',
-    title: 'Svensk SEO-byrå köps upp av amerikansk koncern',
-    url: 'https://breakit.se/' },
-]
+// ── Nyheter (RSS/Atom) ────────────────────────────────────────
+// Real-data path: main-process owns fetch + parse + 15-min refresh.
+// Renderer just reads from cache and re-renders when main signals
+// 'news:items-updated'. Sources are managed via openHomeNewsSettings().
+const HOME_NEWS_VISIBLE = 6
 
-function renderHomeNews() {
+async function renderHomeNews() {
   const box = document.getElementById('homeNews')
   if (!box) return
-  // No sources configured yet → empty state with a CTA.
-  // Toggle the constant below to false to preview the empty state.
-  const HAS_SOURCES = true
-  if (!HAS_SOURCES) {
+  let sources = [], items = []
+  try {
+    const [g, s] = await Promise.all([
+      SE.news.get({ limit: HOME_NEWS_VISIBLE }),
+      SE.news.getSources(),
+    ])
+    items  = (g && g.items)  || []
+    sources = (s && s.sources) || []
+  } catch (_) { /* main may not be ready yet — fall through to empty */ }
+
+  const enabled = sources.filter(s => s.enabled)
+  if (!enabled.length) {
     box.innerHTML = `
       <div class="home-news-empty">
         Inga källor valda än.
@@ -5318,20 +5408,178 @@ function renderHomeNews() {
       </div>`
     return
   }
-  box.innerHTML = _HOME_NEWS_MOCK.map(n => `
-    <div class="home-news-item" onclick="doNav('${esc(n.url)}')" title="${esc(n.title)}">
+  if (!items.length) {
+    box.innerHTML = `<div class="home-news-empty">Hämtar nyheter…</div>`
+    // Kick a refresh — the items-updated event will re-render us.
+    SE.news.refresh().catch(() => {})
+    return
+  }
+  box.innerHTML = items.map(n => `
+    <div class="home-news-item" onclick="doNav('${esc(n.link)}')" title="${esc(n.title)}">
       <div class="home-news-meta">
-        <span class="hnm-source">${esc(n.source)}</span>
+        <span class="hnm-source">${esc(n.sourceName || '')}</span>
         <span class="hnm-dot"></span>
-        <span class="hnm-time">${esc(n.time)}</span>
+        <span class="hnm-time">${esc(_formatMailDate(n.date))}</span>
       </div>
       <div class="home-news-title">${esc(n.title)}</div>
     </div>`).join('')
 }
 
-window.openHomeNewsSettings = function() {
-  // TODO: open the news-sources picker. For now just a placeholder.
-  alert('Nyhetskällor — kommer i nästa steg.\n\nHär ska du kunna välja förvalda källor (DN, SvD, SEJ, Search Engine Land …) eller klistra in egna RSS-URLs.')
+// Re-render whenever main has new items (background refresh, manual
+// refresh, or settings change). Listener is wired once at startup.
+SE.on('news:items-updated', () => { renderHomeNews().catch(() => {}) })
+
+// ── Nyhetskällor settings modal ──────────────────────────────
+window.openHomeNewsSettings = async function() {
+  const bg = document.getElementById('newsSettingsBg')
+  if (!bg) return
+  bg.classList.add('open')
+  await renderNewsSettings()
+  // Esc closes — bound once per open so we don't pile up listeners.
+  const onEsc = (e) => {
+    if (e.key === 'Escape') { closeHomeNewsSettings(); document.removeEventListener('keydown', onEsc) }
+  }
+  document.addEventListener('keydown', onEsc)
+}
+window.closeHomeNewsSettings = function() {
+  document.getElementById('newsSettingsBg')?.classList.remove('open')
+}
+
+async function renderNewsSettings() {
+  const body = document.getElementById('newsSettingsBody')
+  if (!body) return
+  let presets = [], sources = []
+  try {
+    const [pr, sr] = await Promise.all([SE.news.getPresets(), SE.news.getSources()])
+    presets = (pr && pr.presets) || []
+    sources = (sr && sr.sources) || []
+  } catch (_) {}
+
+  const enabledByUrl = new Map(sources.map(s => [s.url, s.enabled]))
+  const customSources = sources.filter(s => s.custom)
+  const seoPresets = presets.filter(p => p.category === 'seo')
+  const swePresets = presets.filter(p => p.category === 'sweden')
+
+  const presetRow = (p) => {
+    const on = enabledByUrl.get(p.url) === true
+    return `
+      <div class="ns-row" onclick="newsTogglePreset('${esc(p.id)}', '${esc(p.url)}', '${esc(p.name)}')">
+        <div class="ns-row-main">
+          <div class="ns-row-name">${esc(p.name)}</div>
+          <div class="ns-row-url">${esc(p.url)}</div>
+        </div>
+        <div class="ns-toggle ${on ? 'on' : ''}"><div class="ns-toggle-knob"></div></div>
+      </div>`
+  }
+  const customRow = (s) => `
+    <div class="ns-row">
+      <div class="ns-row-main">
+        <div class="ns-row-name">${esc(s.name)}</div>
+        <div class="ns-row-url">${esc(s.url)}</div>
+      </div>
+      <div class="ns-toggle ${s.enabled ? 'on' : ''}" onclick="newsToggleCustom('${esc(s.id)}')"><div class="ns-toggle-knob"></div></div>
+      <button class="ns-row-del" onclick="newsRemoveCustom('${esc(s.id)}')" aria-label="Ta bort">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`
+
+  body.innerHTML = `
+    <div class="ns-section">
+      <div class="ns-section-h">SEO &amp; branchen</div>
+      ${seoPresets.map(presetRow).join('')}
+    </div>
+    <div class="ns-section">
+      <div class="ns-section-h">Svenska redaktioner</div>
+      ${swePresets.map(presetRow).join('')}
+    </div>
+    <div class="ns-section">
+      <div class="ns-section-h">Egna RSS-flöden</div>
+      ${customSources.length === 0
+        ? '<div class="ns-empty">Inga egna källor än. Klistra in en RSS-URL nedan.</div>'
+        : customSources.map(customRow).join('')}
+      <div class="ns-add">
+        <input class="ns-add-input" id="newsAddInput" placeholder="https://example.com/feed.xml"
+               onkeydown="if(event.key==='Enter')newsAddCustom()">
+        <button class="ns-add-btn" id="newsAddBtn" onclick="newsAddCustom()">Lägg till</button>
+      </div>
+      <div class="ns-add-msg" id="newsAddMsg"></div>
+    </div>`
+}
+
+async function _newsLoadSources() {
+  const r = await SE.news.getSources()
+  return (r && r.sources) || []
+}
+
+window.newsTogglePreset = async function(id, url, name) {
+  const sources = await _newsLoadSources()
+  const i = sources.findIndex(s => s.url === url)
+  if (i >= 0) {
+    sources[i].enabled = !sources[i].enabled
+  } else {
+    sources.push({ id, url, name, enabled: true, custom: false })
+  }
+  await SE.news.setSources(sources)
+  await renderNewsSettings()
+  SE.news.refresh().catch(() => {})
+}
+
+window.newsToggleCustom = async function(id) {
+  const sources = await _newsLoadSources()
+  const i = sources.findIndex(s => s.id === id)
+  if (i >= 0) sources[i].enabled = !sources[i].enabled
+  await SE.news.setSources(sources)
+  await renderNewsSettings()
+  SE.news.refresh().catch(() => {})
+}
+
+window.newsRemoveCustom = async function(id) {
+  const sources = (await _newsLoadSources()).filter(s => s.id !== id)
+  await SE.news.setSources(sources)
+  await renderNewsSettings()
+  // Refresh so cache no longer surfaces items from the removed source.
+  SE.news.refresh().catch(() => {})
+}
+
+window.newsAddCustom = async function() {
+  const inp = document.getElementById('newsAddInput')
+  const msg = document.getElementById('newsAddMsg')
+  const btn = document.getElementById('newsAddBtn')
+  if (!inp || !msg || !btn) return
+  const url = (inp.value || '').trim()
+  if (!url) return
+  msg.className = 'ns-add-msg show'
+  msg.textContent = 'Validerar flödet…'
+  btn.disabled = true
+  try {
+    const preview = await SE.news.fetchPreview(url)
+    if (!preview || !preview.ok) {
+      msg.className = 'ns-add-msg err'
+      msg.textContent = (preview && preview.error) || 'Kunde inte hämta flödet'
+      return
+    }
+    const sources = await _newsLoadSources()
+    if (sources.some(s => s.url === url)) {
+      msg.className = 'ns-add-msg err'
+      msg.textContent = 'Källan finns redan i listan'
+      return
+    }
+    sources.push({
+      id: 'custom-' + Date.now().toString(36),
+      name: preview.title || url,
+      url,
+      enabled: true,
+      custom: true,
+    })
+    await SE.news.setSources(sources)
+    inp.value = ''
+    msg.className = 'ns-add-msg ok'
+    msg.textContent = `Lade till: ${preview.title || url}`
+    await renderNewsSettings()
+    SE.news.refresh().catch(() => {})
+  } finally {
+    btn.disabled = false
+  }
 }
 
 window.toggleHomeRail = function() {
@@ -9698,6 +9946,7 @@ function openSettings(section) {
 const SETTINGS_NAV_ICONS = {
   konto:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
   profiler:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  losenord:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="7.5" cy="15.5" r="5.5"/><path d="m21 2-9.6 9.6"/><path d="m15.5 7.5 4 4L22 9l-4-4"/></svg>',
   utseende:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.5 0 1-.4 1-1 0-.4-.2-.7-.4-.9-.2-.2-.3-.5-.3-.9 0-.6.4-1 1-1h1.8c2.7 0 4.9-2.2 4.9-4.9C20 5.4 16.4 2 12 2z"/></svg>',
   shield:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
   permissions:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
@@ -9714,6 +9963,9 @@ function _settingsSectionList() {
     { group: 'Konto' },
     { id: 'konto',       label: 'Konto',                icon: SETTINGS_NAV_ICONS.konto },
     { id: 'profiler',    label: 'Profiler',             icon: SETTINGS_NAV_ICONS.profiler },
+
+    { group: 'Data' },
+    { id: 'losenord',    label: 'Lösenord',             icon: SETTINGS_NAV_ICONS.losenord },
 
     { group: 'Browser' },
     { id: 'utseende',    label: 'Utseende',             icon: SETTINGS_NAV_ICONS.utseende },
@@ -9757,6 +10009,7 @@ function renderSettingsScreen() {
   if (window._settingsSection === 'diagnostik')  refreshCrashStatus()
   if (window._settingsSection === 'system')     _settingsPostSystem()
   if (window._settingsSection === 'default')    _settingsPostDefault()
+  if (window._settingsSection === 'losenord')   _settingsPostLosenord()
 }
 
 function _settingsSelect(section) {
@@ -9768,6 +10021,7 @@ function _settingsSelect(section) {
 const SETTINGS_RENDERERS = {
   konto:       () => _renderSettingsKonto(),
   profiler:    () => _renderSettingsProfiler(),
+  losenord:    () => _renderSettingsLosenord(),
   utseende:    () => _renderSettingsUtseende(),
   shield:      () => _renderSettingsShield(),
   permissions: () => _renderSettingsPermissions(),
@@ -9879,6 +10133,78 @@ function _renderSettingsProfiler() {
       </div>
     </div>
   `
+}
+
+function _renderSettingsLosenord() {
+  return `
+    <div class="settings-section-h1">Lösenord</div>
+    <div class="settings-section-sub">Krypterade lokalt med din OS-nyckelförvaring (Windows DPAPI / macOS Keychain). Skyddade av en master-PIN. Lämnar aldrig din enhet.</div>
+
+    <div class="settings-card">
+      <div class="settings-row clickable" onclick="openPasswords()">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.losenord}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Sparade lösenord</div>
+          <div class="settings-row-sub" id="settingsPasswordCount">Öppna lösenordshanteraren</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-h">Säkerhet</div>
+      <div class="settings-row">
+        <div class="settings-row-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/><polyline points="9 12 11 14 15 10"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Master-PIN</div>
+          <div class="settings-row-sub" id="settingsPinStatus">Kontrollerar...</div>
+        </div>
+        <div class="settings-row-action" id="settingsPinAction"></div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M5 3a2 2 0 0 0-2 2"/><path d="M19 3a2 2 0 0 1 2 2"/><path d="M21 19a2 2 0 0 1-2 2"/><path d="M5 21a2 2 0 0 1-2-2"/><path d="M9 3h1"/><path d="M9 21h1"/><path d="M14 3h1"/><path d="M14 21h2"/><path d="M3 9v1"/><path d="M21 9v1"/><path d="M3 14v2"/><path d="M21 14v2"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Krypteringsmetod</div>
+          <div class="settings-row-sub">PBKDF2-SHA256 · 600 000 iterationer · OS-nyckelförvaring</div>
+        </div>
+      </div>
+    </div>
+  `
+}
+async function _settingsPostLosenord() {
+  // Fyller i antalet sparade lösenord + master-PIN-status efter render
+  try {
+    const list = await SE.passwordsList()
+    const countEl = document.getElementById('settingsPasswordCount')
+    if (countEl) {
+      countEl.textContent = list?.length
+        ? `${list.length} ${list.length === 1 ? 'sparat lösenord' : 'sparade lösenord'} · klicka för att hantera`
+        : 'Inga sparade lösenord ännu'
+    }
+  } catch (_) {}
+  try {
+    const status = await SE.passwordsPinStatus()
+    const stEl = document.getElementById('settingsPinStatus')
+    const actEl = document.getElementById('settingsPinAction')
+    if (stEl) stEl.textContent = status?.hasPin
+      ? 'PIN aktiverad — krävs för att se lösenord'
+      : 'Ingen PIN satt — lösenordshanteraren är oskyddad'
+    if (actEl) {
+      actEl.innerHTML = status?.hasPin
+        ? '<button class="settings-btn danger" onclick="_settingsClearPin()">Återställ PIN</button>'
+        : '<button class="settings-btn primary" onclick="openPasswords()">Sätt PIN</button>'
+    }
+  } catch (_) {}
+}
+async function _settingsClearPin() {
+  if (!confirm('Återställ master-PIN? Du kommer behöva sätta en ny första gången du öppnar lösenordshanteraren.')) return
+  try {
+    await SE.passwordsPinClear()
+    toast('PIN återställd', '#2ca87f')
+    _settingsPostLosenord()
+  } catch (_) {
+    toast('Kunde inte återställa', '#dc2626')
+  }
 }
 
 function _renderSettingsUtseende() {
@@ -11462,7 +11788,7 @@ function buildChromeMenu() {
     { icon: ico.fullscreen,label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
     { icon: ico.split,     label: _splitWebviews.has(activeId) ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\', action: () => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() } },
     '---',
-    { icon: isDark ? ico.sun : ico.moon, label: isDark ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
+    // Tema flyttat till Inställningar → Utseende sedan v1.10.40
     { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => openSettings() },
   ]
   // Make the zoom-row icon available to the zoom block below
@@ -11555,14 +11881,11 @@ async function buildUserMenu() {
   `
   dd.appendChild(hdr)
 
+  // Slimmad meny (v1.10.40): allt utom user-info + Inställningar
+  // har flyttats till /settings (Profiler, Konto-synk, Lösenord) eller
+  // finns i chrome-menyn (Bokmärken, Historik via kortkommando + meny).
+  // Användarmenyn ska vara identitet + en länk in i Inställningar.
   const items = [
-    { icon: ico.user,     label: 'Hantera profiler',  action: () => showProfilePicker() },
-    { icon: ico.refresh,  label: 'Synka konto',       action: () => syncNow() },
-    'sep',
-    { icon: ico.key,      label: 'Lösenord',          action: () => openPasswords() },
-    { icon: ico.star,     label: 'Bokmärken',         action: () => toggleBookmark() },
-    { icon: ico.clock,    label: 'Historik',          action: () => openHistory() },
-    'sep',
     { icon: ico.settings, label: 'Inställningar',     action: () => openSettings() },
   ]
   items.forEach(item => {

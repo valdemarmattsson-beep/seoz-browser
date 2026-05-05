@@ -79,8 +79,12 @@
   --tab-h:38px; --addr-h:46px; --bm-h:28px; --chrome-h:112px;
   --dock-w:48px; --panel-w:280px; --status-h:22px;
 
-  /* Orbit S logomark as CSS mask — for spinners and chips */
-  --orbit-loader-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><circle cx='100' cy='100' r='10' fill='black'/><path d='M100 40 A 60 60 0 0 1 160 100' fill='none' stroke='black' stroke-width='16' stroke-linecap='round'/></svg>");
+  /* Orbit S logomark as CSS mask — för spinners och chips.
+     Två arc:s (top-right + bottom-left) + mittpricken så masken
+     matchar full Orbit-logo. Innan v1.10.46 hade vi bara en arc
+     här, vilket gjorde att laddnings-spinnern såg halv ut jämfört
+     med riktiga logon i hero/home-screen. */
+  --orbit-loader-mask: url("data:image/svg+xml;utf8,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 200 200'><circle cx='100' cy='100' r='10' fill='black'/><path d='M100 40 A 60 60 0 0 1 160 100' fill='none' stroke='black' stroke-width='18' stroke-linecap='round'/><path d='M100 160 A 60 60 0 0 1 40 100' fill='none' stroke='black' stroke-width='18' stroke-linecap='round'/></svg>");
 }
 [data-theme="light"] {
   /* Light mode — also 1:1 with platform tokens. The legacy aliases
@@ -586,8 +590,20 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   max-width:760px;margin:0 auto;
   padding:48px 56px 80px;
 }
+/* Wider variant — toggled by renderSettingsScreen for sections that
+   render a multi-column layout (e.g. Nyheter's 2-col preset grid). */
+.settings-content.is-wide{ max-width:980px }
 @media (max-width: 900px) {
   .settings-content{padding:32px 28px 64px}
+}
+/* Two-column row inside settings-content. Used by Nyheter to put the
+   SEO and Sverige preset cards side-by-side. Falls back to single
+   column under ~800px so cards keep breathing room. */
+.settings-twocol{
+  display:grid;grid-template-columns:1fr 1fr;gap:18px;margin-bottom:18px;
+}
+@media (max-width: 800px) {
+  .settings-twocol{grid-template-columns:1fr}
 }
 
 .settings-section-h1{
@@ -1574,6 +1590,10 @@ input,textarea,select{user-select:text}
 #urlInput::placeholder{color:var(--muted)}
 .addr-spinner{width:14px;height:14px;flex-shrink:0;background:var(--p);-webkit-mask:var(--orbit-loader-mask) center/contain no-repeat;mask:var(--orbit-loader-mask) center/contain no-repeat;animation:orbit-spin 1s linear infinite, orbit-loader-hue 3.6s linear infinite;display:none}
 .addr-spinner.on{display:block}
+/* När spinnern är aktiv (sida laddar), dölj favicon så de inte
+   konkurrerar om samma plats. Sibling-selektorn fungerar eftersom
+   spinnern numera ligger FÖRE faviconen i DOM-ordningen. */
+.addr-spinner.on ~ .url-fav{display:none !important}
 
 /* Zoom bar (in URL bar, right side) */
 .zoom-bar{display:none;align-items:center;gap:2px;flex-shrink:0;margin-left:2px;border-left:1px solid var(--border);padding-left:6px}
@@ -1807,39 +1827,13 @@ input,textarea,select{user-select:text}
 .bm-modal-foot .bm-save:hover{background:var(--p600)}
 
 /* ══════════════════════════════════════════════════════════
-   NEWS SOURCES — modal for managing RSS/Atom feeds (presets +
-   custom URLs). Opened from the home rail's Nyheter card.
+   NEWS SOURCES — shared visuals for RSS/Atom feed management.
+   Now lives inside the seoz://settings → Nyheter section, so the
+   modal-specific bits (.ns-bg, .ns-modal, .ns-hdr*, .ns-close,
+   .ns-body, .ns-section, .ns-section-h) are gone — only the row
+   / toggle / theme-chip / add-input visuals remain since those
+   are reused by _settingsPostNyheter().
 ══════════════════════════════════════════════════════════ */
-.ns-bg{position:fixed;inset:0;z-index:300;background:rgba(0,0,0,.5);display:none;align-items:center;justify-content:center;padding:24px}
-.ns-bg.open{display:flex}
-.ns-modal{
-  background:var(--card);border-radius:14px;border:1px solid var(--border);
-  box-shadow:0 12px 40px rgba(0,0,0,.4);
-  width:540px;max-width:100%;max-height:calc(100vh - 48px);
-  display:flex;flex-direction:column;overflow:hidden;
-}
-.ns-hdr{
-  padding:14px 18px;display:flex;align-items:center;justify-content:space-between;
-  border-bottom:1px solid var(--border);flex-shrink:0;
-}
-.ns-hdr-t{font-family:'Inter Tight','Inter',sans-serif;font-size:14px;font-weight:600;color:var(--head);letter-spacing:-.01em}
-.ns-hdr-sub{font-size:11px;color:var(--muted);margin-top:1px}
-.ns-close{
-  width:26px;height:26px;border-radius:6px;border:none;background:transparent;
-  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
-  transition:background .12s,color .12s;
-}
-.ns-close:hover{background:var(--panel);color:var(--head)}
-.ns-close svg{width:14px;height:14px}
-.ns-body{flex:1;overflow-y:auto;padding:14px 18px}
-.ns-body::-webkit-scrollbar{width:6px}
-.ns-body::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
-.ns-section{margin-bottom:18px}
-.ns-section:last-child{margin-bottom:0}
-.ns-section-h{
-  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
-  color:var(--muted);margin-bottom:8px;
-}
 .ns-row{
   display:flex;align-items:center;gap:10px;padding:8px 10px;
   border-radius:8px;cursor:pointer;transition:background .12s;
@@ -3439,12 +3433,16 @@ input,textarea,select{user-select:text}
       <div class="nb" onclick="wvFwd()" title="Framåt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="m9 18 6-6-6-6"/></svg></div>
       <div class="nb" id="relBtn" onclick="wvReload()" title="Ladda om"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></div>
       <div class="url-wrap" onclick="document.getElementById('urlInput').focus()">
+        <!-- Loading-spinner placeras FÖRE favicon så den ersätter
+             favicon-platsen under sidladdning. CSS-reglen
+             .addr-spinner.on ~ .url-fav döljer faviconen så de inte
+             båda syns samtidigt. -->
+        <div class="addr-spinner" id="spinner"></div>
         <img class="url-fav" id="urlFav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
         <span class="lock" id="urlLock" aria-label="Säker anslutning"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg></span>
         <input id="urlInput" placeholder="Sök eller ange URL..."
                onkeydown="if(event.key==='Enter')doNav(this.value)"
                onfocus="this.select()">
-        <div class="addr-spinner" id="spinner"></div>
         <div class="zoom-bar" id="zoomBar">
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(-10)" title="Zooma ut"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
           <span class="zoom-bar-pct" id="zoomBarPct" onclick="event.stopPropagation();doZoom(0)" title="Återställ zoom">100%</span>
@@ -3536,22 +3534,6 @@ input,textarea,select{user-select:text}
         <button class="bm-cancel" onclick="closeBmModal()">Avbryt</button>
         <button class="bm-save" onclick="saveBmModal()">Spara</button>
       </div>
-    </div>
-  </div>
-
-  <!-- News sources modal — opens from the home rail's Nyheter card. -->
-  <div class="ns-bg" id="newsSettingsBg" onclick="if(event.target.id==='newsSettingsBg')closeHomeNewsSettings()">
-    <div class="ns-modal" role="dialog" aria-label="Nyhetskällor">
-      <div class="ns-hdr">
-        <div>
-          <div class="ns-hdr-t">Nyhetskällor</div>
-          <div class="ns-hdr-sub">Välj bland förvalda eller lägg till egna RSS/Atom-flöden</div>
-        </div>
-        <button class="ns-close" onclick="closeHomeNewsSettings()" aria-label="Stäng">
-          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-        </button>
-      </div>
-      <div class="ns-body" id="newsSettingsBody"></div>
     </div>
   </div>
 
@@ -5281,7 +5263,17 @@ function _attachWebviewListeners(el, tabId) {
 _attachWebviewListeners(_wvTemplate, 1)
 
 function updateURL(url) {
-  document.getElementById('urlInput').value = (url === 'about:blank') ? '' : url
+  const tab = getActive()
+  // Guard: SEOZ overlay tabs (seoz://home/mail/settings) sit on an
+  // about:blank webview underneath. Don't let did-navigate→about:blank
+  // clobber the tab's internal seoz:// url — just refresh the bar.
+  if (url === 'about:blank' && tab && isOverlayUrl(tab.url) && tab.url !== '' && tab.url !== 'about:blank') {
+    _refreshUrlBar()
+    return
+  }
+  // Real navigation — promote to tab.url and re-derive what the bar shows.
+  if (tab) tab.url = url
+  document.getElementById('urlInput').value = _displayUrlForBar(tab)
   // Update status bar domain
   try { document.getElementById('sbDomain').textContent = new URL(url).hostname } catch(_){}
   // Set favicon from Google's service (instant, reliable)
@@ -5292,9 +5284,7 @@ function updateURL(url) {
       setUrlFavicon(gUrl)
     }
   } catch(_){}
-  const tab = getActive()
   if (tab) {
-    tab.url = url
     // Set tab favicon from Google's service
     try {
       const host = new URL(url).hostname
@@ -5326,6 +5316,20 @@ function setUrlFavicon(src) {
 function doNav(raw) {
   if (!raw) return
   let u = raw.trim()
+  // Recognise SEOZ-internal URLs so typing seoz://settings/nyheter into
+  // the bar routes to the matching overlay instead of being googled.
+  const seozMatch = u.match(/^seoz:\/\/(home|mail|settings)(?:\/(\w[\w-]*))?\/?$/i)
+  if (seozMatch) {
+    const target = seozMatch[1].toLowerCase()
+    const section = seozMatch[2] && seozMatch[2].toLowerCase()
+    if (target === 'home') {
+      const tab = tabs.find(t => t.id === activeId)
+      if (tab) { tab.url = HOME_URL; tab.title = 'SEOZ'; syncOverlayVisibility(); renderTabs(); _refreshUrlBar() }
+      return
+    }
+    if (target === 'mail' && typeof openMail === 'function') { openMail(); return }
+    if (target === 'settings' && typeof openSettings === 'function') { openSettings(section || undefined); return }
+  }
   if (/^https?:\/\//i.test(u)) { /* already has protocol */ }
   else if (/^localhost(:\d+)?/i.test(u)) u = 'http://' + u
   else if (/^127\.0\.0\.1(:\d+)?/.test(u)) u = 'http://' + u
@@ -5424,6 +5428,31 @@ function isHomeUrl(u)     { return u === HOME_URL || u === '' || u === 'about:bl
 function isMailUrl(u)     { return u === MAIL_URL }
 function isSettingsUrl(u) { return u === SETTINGS_URL }
 function isOverlayUrl(u)  { return isHomeUrl(u) || isMailUrl(u) || isSettingsUrl(u) }
+
+// What the URL bar should render for a given tab. Internal SEOZ pages
+// expose their seoz:// URL (settings appends the active sub-section)
+// so the user can tell at a glance that they're on an internal surface.
+// Home stays empty since it's the default tab state and showing
+// seoz://home in every fresh tab would be noisy.
+function _displayUrlForBar(tab) {
+  if (!tab) return ''
+  const u = tab.url || ''
+  if (u === SETTINGS_URL) {
+    const section = window._settingsSection || 'konto'
+    return SETTINGS_URL + '/' + section
+  }
+  if (u === MAIL_URL) return MAIL_URL
+  if (isHomeUrl(u)) return ''
+  return u
+}
+// Refresh the URL bar from whatever the active tab currently is. Cheap;
+// safe to call from any UI handler that mutates tab.url or _settingsSection.
+function _refreshUrlBar() {
+  const inp = document.getElementById('urlInput')
+  if (!inp) return
+  const active = tabs.find(t => t.id === activeId)
+  inp.value = _displayUrlForBar(active)
+}
 
 // Recent-closed ring buffer (persisted). Populated by closeTab().
 let _recentClosed = []
@@ -5560,107 +5589,10 @@ async function renderHomeNews() {
 SE.on('news:items-updated', () => { renderHomeNews().catch(() => {}) })
 
 // ── Nyhetskällor settings modal ──────────────────────────────
-window.openHomeNewsSettings = async function() {
-  const bg = document.getElementById('newsSettingsBg')
-  if (!bg) return
-  bg.classList.add('open')
-  await renderNewsSettings()
-  // Esc closes — bound once per open so we don't pile up listeners.
-  const onEsc = (e) => {
-    if (e.key === 'Escape') { closeHomeNewsSettings(); document.removeEventListener('keydown', onEsc) }
-  }
-  document.addEventListener('keydown', onEsc)
-}
-window.closeHomeNewsSettings = function() {
-  document.getElementById('newsSettingsBg')?.classList.remove('open')
-}
-
-async function renderNewsSettings() {
-  const body = document.getElementById('newsSettingsBody')
-  if (!body) return
-  let presets = [], sources = [], themes = []
-  try {
-    const [pr, sr, tr] = await Promise.all([
-      SE.news.getPresets(),
-      SE.news.getSources(),
-      SE.news.getThemes(),
-    ])
-    presets = (pr && pr.presets) || []
-    sources = (sr && sr.sources) || []
-    themes  = (tr && tr.themes)  || []
-  } catch (_) {}
-
-  const enabledByUrl = new Map(sources.map(s => [s.url, s.enabled]))
-  const customSources = sources.filter(s => s.custom)
-  const seoPresets = presets.filter(p => p.category === 'seo')
-  const swePresets = presets.filter(p => p.category === 'sweden')
-
-  const themeChip = (t) => `
-    <span class="ns-theme">
-      <span>${esc(t.label)}</span>
-      <button class="ns-theme-x" onclick="newsRemoveTheme('${esc(t.id)}')" aria-label="Ta bort">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </span>`
-
-  const presetRow = (p) => {
-    const on = enabledByUrl.get(p.url) === true
-    return `
-      <div class="ns-row" onclick="newsTogglePreset('${esc(p.id)}', '${esc(p.url)}', '${esc(p.name)}')">
-        <div class="ns-row-main">
-          <div class="ns-row-name">${esc(p.name)}</div>
-          <div class="ns-row-url">${esc(p.url)}</div>
-        </div>
-        <div class="ns-toggle ${on ? 'on' : ''}"><div class="ns-toggle-knob"></div></div>
-      </div>`
-  }
-  const customRow = (s) => `
-    <div class="ns-row">
-      <div class="ns-row-main">
-        <div class="ns-row-name">${esc(s.name)}</div>
-        <div class="ns-row-url">${esc(s.url)}</div>
-      </div>
-      <div class="ns-toggle ${s.enabled ? 'on' : ''}" onclick="newsToggleCustom('${esc(s.id)}')"><div class="ns-toggle-knob"></div></div>
-      <button class="ns-row-del" onclick="newsRemoveCustom('${esc(s.id)}')" aria-label="Ta bort">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
-      </button>
-    </div>`
-
-  body.innerHTML = `
-    <div class="ns-section">
-      <div class="ns-section-h">Bevakade ämnen</div>
-      <div class="ns-section-help">Rubriker som innehåller dessa ord boostas till toppen av nyhetslistan. Skriv ett ord eller en fras — exempel: SEO, content marketing, AI overviews.</div>
-      <div class="ns-themes" id="newsThemesList">
-        ${themes.length === 0
-          ? '<div class="ns-themes-empty">Inga ämnen bevakas än.</div>'
-          : themes.map(themeChip).join('')}
-      </div>
-      <div class="ns-add">
-        <input class="ns-add-input" id="newsThemeInput" placeholder="t.ex. SEO, content marketing…"
-               onkeydown="if(event.key==='Enter')newsAddTheme()">
-        <button class="ns-add-btn" onclick="newsAddTheme()">Lägg till</button>
-      </div>
-    </div>
-    <div class="ns-section">
-      <div class="ns-section-h">SEO &amp; branchen</div>
-      ${seoPresets.map(presetRow).join('')}
-    </div>
-    <div class="ns-section">
-      <div class="ns-section-h">Svenska redaktioner</div>
-      ${swePresets.map(presetRow).join('')}
-    </div>
-    <div class="ns-section">
-      <div class="ns-section-h">Egna RSS-flöden</div>
-      ${customSources.length === 0
-        ? '<div class="ns-empty">Inga egna källor än. Klistra in en RSS-URL nedan.</div>'
-        : customSources.map(customRow).join('')}
-      <div class="ns-add">
-        <input class="ns-add-input" id="newsAddInput" placeholder="https://example.com/feed.xml"
-               onkeydown="if(event.key==='Enter')newsAddCustom()">
-        <button class="ns-add-btn" id="newsAddBtn" onclick="newsAddCustom()">Lägg till</button>
-      </div>
-      <div class="ns-add-msg" id="newsAddMsg"></div>
-    </div>`
+// Routes the "Konfigurera" button in the home rail to the new
+// seoz://settings → Nyheter section. Replaces the old standalone modal.
+window.openHomeNewsSettings = function() {
+  if (typeof openSettings === 'function') openSettings('nyheter')
 }
 
 async function _newsLoadSources() {
@@ -5687,7 +5619,7 @@ window.newsAddTheme = async function() {
   themes.push({ id: 'theme-' + Date.now().toString(36), label })
   await SE.news.setThemes(themes)
   inp.value = ''
-  await renderNewsSettings()
+  await _settingsPostNyheter()
   // setThemes also emits items-updated in main, but call directly so
   // the rail re-renders immediately even if the event bridge is slow.
   renderHomeNews().catch(() => {})
@@ -5696,7 +5628,7 @@ window.newsAddTheme = async function() {
 window.newsRemoveTheme = async function(id) {
   const themes = (await _newsLoadThemes()).filter(t => t.id !== id)
   await SE.news.setThemes(themes)
-  await renderNewsSettings()
+  await _settingsPostNyheter()
   renderHomeNews().catch(() => {})
 }
 
@@ -5709,7 +5641,7 @@ window.newsTogglePreset = async function(id, url, name) {
     sources.push({ id, url, name, enabled: true, custom: false })
   }
   await SE.news.setSources(sources)
-  await renderNewsSettings()
+  await _settingsPostNyheter()
   SE.news.refresh().catch(() => {})
 }
 
@@ -5718,14 +5650,14 @@ window.newsToggleCustom = async function(id) {
   const i = sources.findIndex(s => s.id === id)
   if (i >= 0) sources[i].enabled = !sources[i].enabled
   await SE.news.setSources(sources)
-  await renderNewsSettings()
+  await _settingsPostNyheter()
   SE.news.refresh().catch(() => {})
 }
 
 window.newsRemoveCustom = async function(id) {
   const sources = (await _newsLoadSources()).filter(s => s.id !== id)
   await SE.news.setSources(sources)
-  await renderNewsSettings()
+  await _settingsPostNyheter()
   // Refresh so cache no longer surfaces items from the removed source.
   SE.news.refresh().catch(() => {})
 }
@@ -5764,7 +5696,7 @@ window.newsAddCustom = async function() {
     inp.value = ''
     msg.className = 'ns-add-msg ok'
     msg.textContent = `Lade till: ${preview.title || url}`
-    await renderNewsSettings()
+    await _settingsPostNyheter()
     SE.news.refresh().catch(() => {})
   } finally {
     btn.disabled = false
@@ -6152,6 +6084,7 @@ window.openMail = function() {
     active.title = 'Mejl'
     syncOverlayVisibility()
     scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    _refreshUrlBar()
     return
   }
   // Fall back to opening a new tab for mail.
@@ -8815,7 +8748,9 @@ function newTab(url, opts) {
   // home-screen input or anywhere else. User asked explicitly.
   const urlInput = document.getElementById('urlInput')
   if (urlInput) {
-    urlInput.value = isHome ? '' : tabUrl
+    // Use the same SEOZ-aware display logic as switchTab so opening a
+    // tab via openSettings/openMail lands with the right path showing.
+    urlInput.value = _displayUrlForBar(tabs.find(t => t.id === id))
     urlInput.focus()
     urlInput.select()
   }
@@ -8835,8 +8770,7 @@ function switchTab(id) {
   }
 
   if (tab) {
-    const showVal = isOverlayUrl(tab.url) ? '' : (tab.url === 'about:blank' ? '' : tab.url)
-    document.getElementById('urlInput').value = showVal
+    document.getElementById('urlInput').value = _displayUrlForBar(tab)
     // Always reset — passing null/undefined clears the stale favicon from
     // the previous tab so a fresh Ny-flik doesn't inherit its icon.
     setUrlFavicon(tab.favicon || null)
@@ -10122,6 +10056,7 @@ function openSettings(section) {
     active.title = 'Inställningar'
     syncOverlayVisibility()
     scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    _refreshUrlBar()
     return
   }
   // Otherwise: open a new tab.
@@ -10146,6 +10081,7 @@ const SETTINGS_NAV_ICONS = {
   diagnostik:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
   default:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>',
   juridiskt:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  nyheter:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><line x1="8" y1="9" x2="14" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/></svg>',
   system:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.55" y2="4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
 }
 
@@ -10164,6 +10100,7 @@ function _settingsSectionList() {
 
     { group: 'Browser' },
     { id: 'utseende',    label: 'Utseende',             icon: SETTINGS_NAV_ICONS.utseende },
+    { id: 'nyheter',     label: 'Nyheter',              icon: SETTINGS_NAV_ICONS.nyheter },
     { id: 'shield',      label: 'SEOZ Shield',          icon: SETTINGS_NAV_ICONS.shield },
     { id: 'permissions', label: 'Webbplatsbehörigheter',icon: SETTINGS_NAV_ICONS.permissions },
     { id: 'default',     label: 'Standardwebbläsare',   icon: SETTINGS_NAV_ICONS.default },
@@ -10205,11 +10142,20 @@ function renderSettingsScreen() {
   if (window._settingsSection === 'system')     _settingsPostSystem()
   if (window._settingsSection === 'default')    _settingsPostDefault()
   if (window._settingsSection === 'losenord')   _settingsPostLosenord()
+  if (window._settingsSection === 'nyheter')    _settingsPostNyheter()
+
+  // Some sections need extra horizontal room for multi-column layouts.
+  // Default settings-content max-width is 760px which is too narrow for
+  // a 2-col preset grid; widen it just for those sections.
+  content.classList.toggle('is-wide', window._settingsSection === 'nyheter')
 }
 
 function _settingsSelect(section) {
   window._settingsSection = section
   renderSettingsScreen()
+  // URL bar appends the section to seoz://settings — refresh it so
+  // clicking a nav item updates the bar from /konto → /nyheter etc.
+  _refreshUrlBar()
 }
 
 // ── Per-section content renderers ────────────────────────────────────
@@ -10228,6 +10174,7 @@ const SETTINGS_RENDERERS = {
   diagnostik:   () => _renderSettingsDiagnostik(),
   juridiskt:    () => _renderSettingsJuridiskt(),
   system:       () => _renderSettingsSystem(),
+  nyheter:      () => _renderSettingsNyheter(),
 }
 
 function _renderSettingsKonto() {
@@ -10849,8 +10796,124 @@ function _settingsPostSystem() {
 }
 
 // ══════════════════════════════════════════════════════
-//  CLIENT SELECTION & DATA FETCHING
+//  SETTINGS — NYHETER (RSS sources + watched themes)
+//  Static scaffold first; _settingsPostNyheter fetches the live
+//  source/theme data via SE.news.* and fills the placeholders.
 // ══════════════════════════════════════════════════════
+function _renderSettingsNyheter() {
+  return `
+    <div class="settings-section-h1">Nyheter</div>
+    <div class="settings-section-sub">Hantera vilka RSS-flöden som visas på startsidan och vilka ämnen som boostas till toppen av listan.</div>
+    <div id="newsSettingsBody"><div class="settings-card" style="padding:18px;color:var(--ink-3);font-size:12px">Hämtar konfiguration…</div></div>
+  `
+}
+
+async function _settingsPostNyheter() {
+  const body = document.getElementById('newsSettingsBody')
+  if (!body) return
+  let presets = [], sources = [], themes = []
+  try {
+    const [pr, sr, tr] = await Promise.all([
+      SE.news.getPresets(),
+      SE.news.getSources(),
+      SE.news.getThemes(),
+    ])
+    presets = (pr && pr.presets) || []
+    sources = (sr && sr.sources) || []
+    themes  = (tr && tr.themes)  || []
+  } catch (_) {}
+
+  const enabledByUrl = new Map(sources.map(s => [s.url, s.enabled]))
+  const customSources = sources.filter(s => s.custom)
+  const seoPresets = presets.filter(p => p.category === 'seo')
+  const swePresets = presets.filter(p => p.category === 'sweden')
+
+  const themeChip = (t) => `
+    <span class="ns-theme">
+      <span>${esc(t.label)}</span>
+      <button class="ns-theme-x" onclick="newsRemoveTheme('${esc(t.id)}')" aria-label="Ta bort">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </span>`
+
+  const presetRow = (p) => {
+    const on = enabledByUrl.get(p.url) === true
+    return `
+      <div class="ns-row" onclick="newsTogglePreset('${esc(p.id)}', '${esc(p.url)}', '${esc(p.name)}')">
+        <div class="ns-row-main">
+          <div class="ns-row-name">${esc(p.name)}</div>
+          <div class="ns-row-url">${esc(p.url)}</div>
+        </div>
+        <div class="ns-toggle ${on ? 'on' : ''}"><div class="ns-toggle-knob"></div></div>
+      </div>`
+  }
+
+  const customRow = (s) => `
+    <div class="ns-row">
+      <div class="ns-row-main">
+        <div class="ns-row-name">${esc(s.name)}</div>
+        <div class="ns-row-url">${esc(s.url)}</div>
+      </div>
+      <div class="ns-toggle ${s.enabled ? 'on' : ''}" onclick="newsToggleCustom('${esc(s.id)}')"><div class="ns-toggle-knob"></div></div>
+      <button class="ns-row-del" onclick="newsRemoveCustom('${esc(s.id)}')" aria-label="Ta bort">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>`
+
+  body.innerHTML = `
+    <!-- Bevakade ämnen — full width since themes are global. -->
+    <div class="settings-card">
+      <div class="settings-card-h">Bevakade ämnen</div>
+      <div style="padding:4px 18px 18px">
+        <div class="ns-section-help" style="margin-top:0">Rubriker som innehåller dessa ord boostas till toppen av nyhetslistan. Skriv ett ord eller en fras — exempel: SEO, content marketing, AI overviews.</div>
+        <div class="ns-themes" id="newsThemesList">
+          ${themes.length === 0
+            ? '<div class="ns-themes-empty">Inga ämnen bevakas än.</div>'
+            : themes.map(themeChip).join('')}
+        </div>
+        <div class="ns-add">
+          <input class="ns-add-input" id="newsThemeInput" placeholder="t.ex. SEO, content marketing…"
+                 onkeydown="if(event.key==='Enter')newsAddTheme()">
+          <button class="ns-add-btn" onclick="newsAddTheme()">Lägg till</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- 2-col preset grid: SEO/branche left, Sverige right. -->
+    <div class="settings-twocol">
+      <div class="settings-card">
+        <div class="settings-card-h">SEO &amp; branchen</div>
+        <div style="padding:4px 8px 8px">
+          ${seoPresets.map(presetRow).join('')}
+        </div>
+      </div>
+      <div class="settings-card">
+        <div class="settings-card-h">Svenska redaktioner</div>
+        <div style="padding:4px 8px 8px">
+          ${swePresets.map(presetRow).join('')}
+        </div>
+      </div>
+    </div>
+
+    <!-- Egna RSS-flöden — full width since list of arbitrary URLs. -->
+    <div class="settings-card">
+      <div class="settings-card-h">Egna RSS-flöden</div>
+      <div style="padding:4px 8px 18px">
+        ${customSources.length === 0
+          ? '<div class="ns-empty" style="margin:6px 10px">Inga egna källor än. Klistra in en RSS-URL nedan.</div>'
+          : customSources.map(customRow).join('')}
+        <div class="ns-add" style="padding:8px 10px 0">
+          <input class="ns-add-input" id="newsAddInput" placeholder="https://example.com/feed.xml"
+                 onkeydown="if(event.key==='Enter')newsAddCustom()">
+          <button class="ns-add-btn" id="newsAddBtn" onclick="newsAddCustom()">Lägg till</button>
+        </div>
+        <div class="ns-add-msg" id="newsAddMsg" style="margin:8px 10px 0"></div>
+      </div>
+    </div>
+  `
+}
+
+
 async function selectClient(clientId) {
   // ── Per-client tab spaces ──
   // Save the OUTGOING client's tabs first so we can come back to
@@ -17824,7 +17887,7 @@ if (_restored) {
   // Refresh the URL bar for the active tab
   const active = tabs.find(t => t.id === activeId)
   const urlInput = document.getElementById('urlInput')
-  if (active && urlInput) urlInput.value = isOverlayUrl(active.url) ? '' : active.url
+  if (active && urlInput) urlInput.value = _displayUrlForBar(active)
 }
 syncHomeVisibility()
 

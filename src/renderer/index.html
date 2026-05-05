@@ -8291,17 +8291,124 @@ window._settingsCopyMcp = function(btn) {
 //  CLIENT SELECTION & DATA FETCHING
 // ══════════════════════════════════════════════════════
 async function selectClient(clientId) {
+  // ── Per-client tab spaces ──
+  // Save the OUTGOING client's tabs first so we can come back to
+  // them later, then restore the INCOMING client's tab set (or open
+  // a fresh home tab if this client has never been used). This
+  // gives each SEOZ client its own browsing space — no more 30
+  // tabs from 5 different clients fighting for screen real estate.
+  const oldClientId = synced.activeClientId
+  if (oldClientId && oldClientId !== clientId) {
+    await _saveTabsForClient(oldClientId)
+  }
+
   synced.activeClientId = clientId
   await SE.storeSet('activeClientId', clientId)
   const cl = synced.clients.find(c => c.id === clientId)
+
+  const restored = await _restoreTabsForClient(clientId)
+
   // Re-render bookmark bar to update client selector
   renderBmBar()
   // Fetch client-specific data
   await fetchClientData(clientId)
   // Re-render current panel
   if (currentPanel) renderPanelContent(currentPanel)
-  toast('Klient vald: ' + (cl?.name || ''), '#4680ff')
+
+  const name = cl?.name || ''
+  if (restored.count > 0) {
+    toast(`${name} — ${restored.count} flikar återställda`, '#4680ff')
+  } else if (oldClientId && oldClientId !== clientId) {
+    toast(`${name} — fräsch start`, '#4680ff')
+  } else {
+    toast('Klient vald: ' + name, '#4680ff')
+  }
 }
+
+// ── Tab spaces per client (workspaces) ──
+// Each client gets their own slot in storeGet('tabsByClient'):
+//   { [clientId]: { tabs: [{url, title, favicon}], activeUrl, savedAt } }
+// Saved + restored automatically on selectClient() above.
+
+async function _saveTabsForClient(clientId) {
+  if (!clientId) return
+  const tabData = tabs
+    .filter(t => t.url && t.url !== 'about:blank' && !isOverlayUrl(t.url))
+    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon }))
+  const activeTab = tabs.find(t => t.id === activeId)
+  const activeUrl = activeTab && !isOverlayUrl(activeTab.url) ? activeTab.url : ''
+  const all = (await SE.storeGet('tabsByClient', null)) || {}
+  all[clientId] = { tabs: tabData, activeUrl, savedAt: Date.now() }
+  await SE.storeSet('tabsByClient', all)
+}
+
+async function _restoreTabsForClient(clientId) {
+  if (!clientId) return { count: 0 }
+  const all = (await SE.storeGet('tabsByClient', null)) || {}
+  const saved = all[clientId]
+  const targetTabs = (saved?.tabs?.length) ? saved.tabs.slice() : []
+  const hadSaved = targetTabs.length > 0
+
+  // Tear down all current tabs except slot 0 (the static webview).
+  // We keep slot 0 because the inline <webview id="wv"> in the HTML
+  // can't be re-created without re-parsing the page.
+  for (let i = tabs.length - 1; i >= 1; i--) {
+    const t = tabs[i]
+    const wvEl = _tabWebviews.get(t.id)
+    if (wvEl) { try { wvEl.remove() } catch (_) {}; _tabWebviews.delete(t.id) }
+    const split = _splitWebviews.get(t.id)
+    if (split?.wv) { try { split.wv.remove() } catch (_) {} }
+    _splitWebviews.delete(t.id)
+    _splitFocused.delete(t.id)
+    tabs.splice(i, 1)
+  }
+  // Drop split for slot 0 too (per-client reset).
+  const slot0Split = _splitWebviews.get(1)
+  if (slot0Split?.wv) { try { slot0Split.wv.remove() } catch (_) {} }
+  _splitWebviews.delete(1)
+  _splitFocused.delete(1)
+
+  // Repurpose slot 0 to either the first saved URL or a fresh home.
+  const first = hadSaved ? targetTabs[0] : { url: HOME_URL, title: 'SEOZ', favicon: null }
+  tabs[0].url = first.url
+  tabs[0].title = first.title || 'SEOZ'
+  tabs[0].favicon = first.favicon || null
+  tabs[0].loading = false
+  tabs[0]._zoom = 100
+  wv = _wvTemplate
+  wv.loadURL(isHomeUrl(first.url) ? 'about:blank' : first.url)
+  activeId = 1
+
+  // Spin up the rest of the saved tabs into fresh webview elements.
+  for (let i = 1; i < targetTabs.length; i++) {
+    const s = targetTabs[i]
+    const id = nextId++
+    tabs.push({ id, title: s.title || 'SEOZ', url: s.url, loading: false, favicon: s.favicon, _zoom: 100 })
+    createWebviewForTab(id, isHomeUrl(s.url) ? 'about:blank' : s.url)
+  }
+
+  // Switch to the previously-active tab when we have a match.
+  if (saved?.activeUrl) {
+    const match = tabs.find(t => t.url === saved.activeUrl)
+    if (match) switchTab(match.id)
+    else switchTab(1)
+  } else {
+    switchTab(1)
+  }
+
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+  return { count: hadSaved ? targetTabs.length : 0 }
+}
+
+// Save tabs for the active client when the user closes the window so
+// they aren't lost on next launch.
+window.addEventListener('beforeunload', () => {
+  if (synced.activeClientId) {
+    // Fire-and-forget — beforeunload doesn't wait for promises but
+    // storeSet is fast enough and main process flushes on quit.
+    _saveTabsForClient(synced.activeClientId).catch(() => {})
+  }
+})
 
 async function fetchClientData(clientId) {
   if (!clientId) return

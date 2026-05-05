@@ -81,6 +81,11 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,Translate')
 // Use a realistic number of cores / RAM when asked via Navigator APIs
 app.commandLine.appendSwitch('enable-features', 'NetworkService,NetworkServiceInProcess')
+// Bump V8 heap from the default 1.4 GB to 4 GB. SEOZ portal (and any
+// other heavy SPA) loads enough JS bundles + Supabase realtime + audio
+// buffers that the default sometimes OOMs the renderer mid-load,
+// surfacing as 'render-process-gone reason: okänt'.
+app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
 
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {

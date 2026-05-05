@@ -9322,6 +9322,29 @@ async function buildUserMenu() {
 // ══════════════════════════════════════════════════════
 let _pwCache = []        // last fetched list
 let _pwRevealed = new Set() // ids whose password is currently visible
+const _pwAutoHideTimers = new Map()  // id -> setTimeout handle
+const PW_AUTO_HIDE_MS = 30_000        // re-mask 30s after reveal
+
+function _pwScheduleAutoHide(id) {
+  _pwClearAutoHide(id)
+  _pwAutoHideTimers.set(id, setTimeout(() => {
+    _pwRevealed.delete(id)
+    _pwAutoHideTimers.delete(id)
+    // Only re-render if the manager modal is still open — otherwise
+    // the next openPasswords() will rebuild from a clean state anyway.
+    if (document.getElementById('pwModal')?.classList.contains('open')) {
+      renderPasswords(document.getElementById('pwSearch').value)
+    }
+  }, PW_AUTO_HIDE_MS))
+}
+function _pwClearAutoHide(id) {
+  const t = _pwAutoHideTimers.get(id)
+  if (t) { clearTimeout(t); _pwAutoHideTimers.delete(id) }
+}
+function _pwClearAllAutoHide() {
+  for (const t of _pwAutoHideTimers.values()) clearTimeout(t)
+  _pwAutoHideTimers.clear()
+}
 let _pwEditingId = null   // id being edited; null = create-mode
 
 // Master-PIN guard — set once per profile, required to unlock the
@@ -9345,6 +9368,7 @@ async function openPasswords() {
 function closePasswords() {
   document.getElementById('pwModal').classList.remove('open')
   _pwRevealed.clear()
+  _pwClearAllAutoHide()
   // Keep _pwUnlockedUntil — same session re-open within 5 min skips PIN.
 }
 
@@ -9504,7 +9528,7 @@ function renderPasswords(query = '') {
         <div class="pw-site">${esc(p.site || '')}</div>
         <div class="pw-user">${esc(p.username || '')}</div>
       </div>
-      <div class="pw-pwd">${revealed ? esc(p.password || '') : '••••••••••'}</div>
+      <div class="pw-pwd">${revealed ? esc(p.password || '') : '••••••••••••••'}</div>
       <div class="pw-actions">
         <button class="pw-act" data-pw-action="reveal" data-pw-id="${esc(p.id)}" title="${revealed ? 'Dölj' : 'Visa'}">${eyeIcon}</button>
         <button class="pw-act" data-pw-action="copy" data-pw-id="${esc(p.id)}" title="Kopiera lösenord"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
@@ -9526,7 +9550,13 @@ document.addEventListener('click', async (e) => {
   const entry = _pwCache.find(p => p.id === id)
   if (!entry) return
   if (action === 'reveal') {
-    if (_pwRevealed.has(id)) _pwRevealed.delete(id); else _pwRevealed.add(id)
+    if (_pwRevealed.has(id)) {
+      _pwRevealed.delete(id)
+      _pwClearAutoHide(id)
+    } else {
+      _pwRevealed.add(id)
+      _pwScheduleAutoHide(id)
+    }
     renderPasswords(document.getElementById('pwSearch').value)
   } else if (action === 'copy') {
     try { await navigator.clipboard.writeText(entry.password || '') } catch (_) {}

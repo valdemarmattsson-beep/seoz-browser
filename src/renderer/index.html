@@ -8220,8 +8220,12 @@ async function renderPanelContent(name) {
         })
       }
       html += '</div>'
-      const openCount = tasks.filter(t => t.status !== 'done').length
-      const doneCount = tasks.filter(t => t.status === 'done').length
+      // NOTE: previously this referenced an undefined `tasks` variable
+      // which threw a ReferenceError before body.innerHTML ran — leaving
+      // whatever the previous panel rendered visible. Use allTasks
+      // (the full sorted list, ignoring search/status filters).
+      const openCount = allTasks.filter(t => t.status !== 'done').length
+      const doneCount = allTasks.filter(t => t.status === 'done').length
       html += `<div style="margin-top:8px;font-size:9px;color:var(--muted);display:flex;justify-content:space-between;align-items:center">
         <span>${doneCount} klara / ${openCount} öppna</span>
         <button class="act-btn" style="font-size:9px;padding:2px 8px;height:auto" onclick="refreshTasks()">↻ Synka</button>

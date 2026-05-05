@@ -7,6 +7,12 @@ out/
 build/
 !build/installer.nsh
 !build/entitlements.mac.plist
+# NSIS installer-bilder — genereras från SVG via scripts/build-installer-bmps.mjs
+# men committas till git så CI inte behöver köra sharp (failar på Windows runners).
+# Regenerera lokalt med `npm run build:installer-bmps` om SVG-källan ändras.
+!build/installerHeader.bmp
+!build/installerSidebar.bmp
+!build/uninstallerSidebar.bmp
 
 # OS
 .DS_Store

@@ -29,13 +29,6 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
-      # NSIS-konfigen i package.json refererar build/installerHeader.bmp
-      # m.fl. som inte tracking:as i git (de genereras från SVG via sharp).
-      # Generera dem innan electron-builder körs, annars failar build:en
-      # på "Cannot find file build/installerHeader.bmp".
-      - name: Generate installer BMPs
-        run: npm run build:installer-bmps
-
       - name: Build & Publish
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
@@ -76,13 +69,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-
-      # NSIS-konfigen i package.json refererar build/installerHeader.bmp
-      # m.fl. som inte tracking:as i git (de genereras från SVG via sharp).
-      # Generera dem innan electron-builder körs, annars failar build:en
-      # på "Cannot find file build/installerHeader.bmp".
-      - name: Generate installer BMPs
-        run: npm run build:installer-bmps
 
       - name: Build & Publish (unsigned)
         env:

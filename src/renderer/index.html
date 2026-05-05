@@ -14181,8 +14181,18 @@ document.addEventListener('keydown', e => {
   else if (ctrl && key === 'p') { e.preventDefault(); doPrint() }
   // F12 → SEOZ Inspector
   else if (e.key === 'F12') { e.preventDefault(); toggleInspector() }
-  // Ctrl+Shift+I → DevTools (dev only)
+  // Ctrl+Shift+I → DevTools (host renderer)
   else if (ctrl && e.shiftKey && key === 'i') { e.preventDefault(); SE.toggleDevTools() }
+  // Ctrl+Shift+J → DevTools for the active webview (guest page) —
+  // useful when a site renders blank / errors and you can't right-
+  // click into it (e.g. a modal overlay swallowing pointer events).
+  else if (ctrl && e.shiftKey && key === 'j') {
+    e.preventDefault()
+    try {
+      if (wv && typeof wv.openDevTools === 'function') wv.openDevTools()
+      else toast('Aktiv flik har ingen webview att inspektera', '#e58a00')
+    } catch (_) {}
+  }
   // F11 → Fullscreen
   else if (e.key === 'F11') { e.preventDefault(); SE.fullscreen() }
   // Ctrl+Plus → Zoom in

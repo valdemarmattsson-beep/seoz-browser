@@ -2,6 +2,7 @@
 
 const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
 const path = require('path')
+const fs = require('fs')
 const https = require('https')
 const os = require('os')
 const { exec, spawn } = require('child_process')
@@ -13,6 +14,7 @@ const mailCache = require('./mail-cache')
 const mailScheduler = require('./mail-scheduler')
 const mailClassifier = require('./mail-classifier')
 const PM = require('./profile-manager')
+const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')
 
 // Cap stdout/stderr so we don't blow the JSON-RPC payload, but make it
@@ -279,6 +281,203 @@ ipcMain.handle('permissions-revoke', (_e, { origin, permission } = {}) => {
 })
 ipcMain.handle('permissions-clear', () => {
   _permStoreWrite({})
+  return { ok: true }
+})
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  CRASH REPORTING — local-first, opt-in upload
+// ══════════════════════════════════════════════════════════════════════════════
+//
+// Two layers:
+//
+//   1. ALWAYS-ON local logging.  Every uncaught exception, unhandled
+//      rejection and renderer crash gets written to a JSON file in
+//      <userData>/crash-reports/ as an audit trail. The file stays on
+//      the user's machine — no network call, no privacy concern. The
+//      user can view recent reports in Inställningar → Diagnostik.
+//
+//   2. OPT-IN upload.  If the user toggles "Skicka kraschrapporter"
+//      on, every new report is also POSTed to seoz.io. The report
+//      contains: app version, OS, error message, stack, anonymous
+//      install ID. It does NOT contain: URLs, page titles, cookies,
+//      passwords, mail content, or any user-identifying data beyond
+//      the random install ID.
+//
+// We don't bundle Sentry — the dependency footprint isn't worth it
+// for a small-team product. The custom POST endpoint on seoz.io is
+// a future task; until it exists, opt-in is essentially a no-op
+// beyond the local log.
+//
+// Native (Chromium-level) crashes are captured via Electron's built-in
+// crashReporter into <userData>/Crashpad/ — those are .dmp files we
+// don't auto-upload. They can be attached manually to a bug report.
+
+const CRASH_DIR = path.join(app.getPath('userData'), 'crash-reports')
+const CRASH_OPTIN_KEY = 'crashReportingEnabled'   // false by default
+const CRASH_INSTALL_ID_KEY = 'crashInstallId'      // random per profile, anonymous
+const CRASH_UPLOAD_URL = 'https://seoz.io/api/browser/crash-report'  // endpoint TBD
+const CRASH_MAX_LOGS = 50
+const CRASH_DEDUPE_WINDOW_MS = 60_000  // identical msg within 60s = ignored
+
+let _crashLastSig = ''
+let _crashLastSigAt = 0
+
+function _crashEnsureDir() {
+  try { if (!fs.existsSync(CRASH_DIR)) fs.mkdirSync(CRASH_DIR, { recursive: true }) }
+  catch (_) {}
+}
+function _crashGetInstallId() {
+  let id = PM.profileGet(CRASH_INSTALL_ID_KEY, null)
+  if (!id) {
+    id = crypto.randomBytes(16).toString('hex')
+    PM.profileSet(CRASH_INSTALL_ID_KEY, id)
+  }
+  return id
+}
+function _crashRotate() {
+  try {
+    const files = fs.readdirSync(CRASH_DIR)
+      .filter(f => f.endsWith('.json'))
+      .sort()  // ISO-timestamp filenames sort naturally oldest-first
+    if (files.length <= CRASH_MAX_LOGS) return
+    files.slice(0, files.length - CRASH_MAX_LOGS).forEach(f => {
+      try { fs.unlinkSync(path.join(CRASH_DIR, f)) } catch (_) {}
+    })
+  } catch (_) {}
+}
+function _crashBuildReport(kind, error, extra = {}) {
+  const err = error instanceof Error ? error : new Error(String(error || ''))
+  return {
+    schema: 1,
+    timestamp: new Date().toISOString(),
+    kind,
+    appVersion: app.getVersion(),
+    platform: process.platform,
+    arch: process.arch,
+    osVersion: os.release(),
+    electronVersion: process.versions.electron,
+    chromeVersion: process.versions.chrome,
+    nodeVersion: process.versions.node,
+    installId: _crashGetInstallId(),
+    message: String(err.message || '').slice(0, 2000),
+    stack: String(err.stack || '').slice(0, 8000),
+    ...extra,
+  }
+}
+function _crashUpload(report) {
+  if (!PM.profileGet(CRASH_OPTIN_KEY, false)) return
+  // Best-effort fire-and-forget. We never throw from inside the crash
+  // reporter — that would crash the crash reporter, which is silly.
+  try {
+    net.fetch(CRASH_UPLOAD_URL, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(report),
+    }).catch(() => {})
+  } catch (_) {}
+}
+function recordCrash(kind, error, extra = {}) {
+  try {
+    // Dedupe identical bursts so a renderer in a tight error-loop
+    // doesn't fill the disk with 100 copies of the same crash.
+    const sig = String(kind) + '|' + (error?.message || error)
+    const now = Date.now()
+    if (sig === _crashLastSig && (now - _crashLastSigAt) < CRASH_DEDUPE_WINDOW_MS) return
+    _crashLastSig = sig
+    _crashLastSigAt = now
+
+    _crashEnsureDir()
+    const report = _crashBuildReport(kind, error, extra)
+    const fname = report.timestamp.replace(/[:.]/g, '-') + '.json'
+    fs.writeFileSync(path.join(CRASH_DIR, fname), JSON.stringify(report, null, 2))
+    _crashRotate()
+    _crashUpload(report)
+  } catch (e) {
+    try { console.error('[crash-reporter] failed to record:', e) } catch (_) {}
+  }
+}
+
+// Capture main-process JS errors. Don't crash the app — for an
+// uncaught exception we'd normally let Electron tear down, but with
+// the renderer running things like mail and live tabs, killing the
+// whole app on a stray promise rejection is harsh. Log it and move on.
+process.on('uncaughtException', err => {
+  recordCrash('main:uncaught', err)
+})
+process.on('unhandledRejection', reason => {
+  recordCrash('main:unhandled-rejection',
+    reason instanceof Error ? reason : new Error(String(reason)))
+})
+
+// Electron's native crash reporter for Chromium-level crashes.
+// uploadToServer:false keeps dumps local at <userData>/Crashpad/.
+// We start it as soon as the app is ready — it must run before any
+// renderer tab spins up.
+app.whenReady().then(() => {
+  try {
+    const { crashReporter } = require('electron')
+    crashReporter.start({
+      productName: 'SEOZ Browser',
+      companyName: 'SEOZ',
+      submitURL: '',                 // local-only by default
+      uploadToServer: false,
+      ignoreSystemCrashHandler: false,
+    })
+  } catch (_) { /* crash reporter is best-effort */ }
+})
+
+// Renderer process forwards its window.onerror / unhandledrejection here.
+ipcMain.on('crash-report-renderer', (_e, payload = {}) => {
+  recordCrash('renderer:' + (payload.kind || 'uncaught'),
+    { message: payload.message || '', stack: payload.stack || '' },
+    { rendererUrl: payload.url || '' })
+})
+
+// Settings IPC
+ipcMain.handle('crash-reporting-status', () => {
+  let logCount = 0
+  try {
+    if (fs.existsSync(CRASH_DIR)) {
+      logCount = fs.readdirSync(CRASH_DIR).filter(f => f.endsWith('.json')).length
+    }
+  } catch (_) {}
+  return {
+    enabled: PM.profileGet(CRASH_OPTIN_KEY, false),
+    installId: _crashGetInstallId(),
+    logCount,
+    logDir: CRASH_DIR,
+  }
+})
+ipcMain.handle('crash-reporting-set-enabled', (_e, enabled) => {
+  PM.profileSet(CRASH_OPTIN_KEY, !!enabled)
+  return { ok: true, enabled: !!enabled }
+})
+ipcMain.handle('crash-reporting-list', () => {
+  try {
+    if (!fs.existsSync(CRASH_DIR)) return []
+    const files = fs.readdirSync(CRASH_DIR)
+      .filter(f => f.endsWith('.json'))
+      .sort()
+      .reverse()
+      .slice(0, 30)
+    return files.map(f => {
+      try { return JSON.parse(fs.readFileSync(path.join(CRASH_DIR, f), 'utf-8')) }
+      catch (_) { return null }
+    }).filter(Boolean)
+  } catch (_) { return [] }
+})
+ipcMain.handle('crash-reporting-clear', () => {
+  try {
+    if (!fs.existsSync(CRASH_DIR)) return { ok: true }
+    fs.readdirSync(CRASH_DIR).forEach(f => {
+      try { fs.unlinkSync(path.join(CRASH_DIR, f)) } catch (_) {}
+    })
+  } catch (_) {}
+  return { ok: true }
+})
+ipcMain.handle('crash-reporting-open-folder', () => {
+  _crashEnsureDir()
+  shell.openPath(CRASH_DIR)
   return { ok: true }
 })
 
@@ -1376,7 +1575,7 @@ ipcMain.handle('terminal-history-clear', () => {
 //  stored encrypted via Electron's safeStorage (OS-level: Keychain on macOS,
 //  DPAPI on Windows, libsecret on Linux).
 // ══════════════════════════════════════════════════════════════════════
-const crypto = require('crypto')
+// crypto already imported at top of file
 const LEGACY_MAIL_STORE_KEY = 'mailConfig'
 
 function _encryptPassword(pw) {

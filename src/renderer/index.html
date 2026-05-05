@@ -2112,6 +2112,7 @@ input,textarea,select{user-select:text}
 .set-icon-purple{background:rgba(124,58,237,.10);color:#7c3aed}
 .set-icon-gray{background:rgba(116,136,146,.12);color:var(--muted)}
 .set-icon-cyan{background:rgba(6,151,167,.10);color:#0097a7}
+.set-icon-red{background:rgba(220,38,38,.10);color:var(--ds-danger)}
 .set-row-content{flex:1;min-width:0}
 .set-row-title{font-size:12px;font-weight:500;color:var(--head);line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .set-row-sub{font-size:10px;color:var(--muted);margin-top:1px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;line-height:1.4}
@@ -3407,6 +3408,26 @@ input,textarea,select{user-select:text}
   </div>
 </div>
 
+<!-- Crash log viewer modal — listed by Inställningar → Diagnostik. -->
+<div class="legal-modal-bg" id="crashLogModal" onclick="if(event.target===this)closeCrashLogModal()">
+  <div class="legal-modal" role="dialog" aria-modal="true" aria-labelledby="crashLogTitle">
+    <div class="legal-hdr">
+      <h3 id="crashLogTitle">Kraschloggar</h3>
+      <button class="legal-close" onclick="closeCrashLogModal()" aria-label="Stäng">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </div>
+    <div class="legal-body" id="crashLogBody"><div style="color:var(--ink-3)">Laddar...</div></div>
+    <div class="legal-foot">
+      <span id="crashLogCount"></span>
+      <div style="display:flex;gap:6px">
+        <button onclick="crashOpenFolder()" style="background:transparent;color:var(--head);border:1px solid var(--border)">Öppna mapp</button>
+        <button onclick="closeCrashLogModal()">Stäng</button>
+      </div>
+    </div>
+  </div>
+</div>
+
 <!-- Legal-doc modal — Integritetspolicy + Användarvillkor.
      Body is filled in by showLegalDoc() from the LEGAL_DOCS constant. -->
 <div class="legal-modal-bg" id="legalModal" onclick="if(event.target===this)closeLegalModal()">
@@ -3525,8 +3546,39 @@ const SE = window.seoz || {
   agentReadyScan:async()=>({ok:false,error:'Endast i Electron-builden'}),
   // Per-origin permission stubs for the dev/preview path
   permissionRespond:()=>{}, permissionsList:async()=>[], permissionsRevoke:async()=>({ok:true}), permissionsClear:async()=>({ok:true}),
+  // Crash reporting stubs
+  crashStatus:async()=>({enabled:false,installId:'',logCount:0,logDir:''}), crashSetEnabled:async()=>({ok:true}),
+  crashList:async()=>[], crashClear:async()=>({ok:true}), crashOpenFolder:async()=>({ok:true}), crashReportRenderer:()=>{},
   webviewPreloadUrl: '',
 }
+
+// ──────────────────────────────────────────────────────────────────
+// Renderer-side crash catchers — wired EARLY so we catch init errors
+// too. Forwards every uncaught error / rejected promise to main, which
+// writes it to the local crash log + (if user opted in) uploads to
+// SEOZ. Defensive — must never throw from inside the catcher.
+// ──────────────────────────────────────────────────────────────────
+window.addEventListener('error', (e) => {
+  try {
+    SE.crashReportRenderer({
+      kind: 'uncaught',
+      message: e.message || String(e.error || ''),
+      stack: e.error?.stack || '',
+      url: location.href,
+    })
+  } catch (_) {}
+})
+window.addEventListener('unhandledrejection', (e) => {
+  try {
+    const r = e.reason
+    SE.crashReportRenderer({
+      kind: 'unhandled-rejection',
+      message: String(r?.message || r || ''),
+      stack: r?.stack || '',
+      url: location.href,
+    })
+  } catch (_) {}
+})
 
 // ══════════════════════════════════════════════════════
 //  WINDOW DRAG — Manual handling for Windows.
@@ -8970,6 +9022,35 @@ async function renderPanelContent(name) {
         ${apiRow('ElevenLabs', 'settingsElevenlabsKey', 'elevenlabsKeyInput', 'xi-...', 'saveElevenlabsKey()', 'removeElevenlabsKey()', 'https://elevenlabs.io/app/settings/api-keys', 'Valfri TTS-röst (annars browser-TTS)', _SI.volume, 'set-icon-orange')}
       </div>
 
+      <!-- DIAGNOSTIK / CRASH REPORTING -->
+      <div class="set-group">
+        <div class="set-label">Diagnostik</div>
+        <div class="set-row">
+          <div class="set-row-icon set-icon-red">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>
+          </div>
+          <div class="set-row-content">
+            <div class="set-row-title">Skicka kraschrapporter till SEOZ</div>
+            <div class="set-row-sub">Anonym installID + version + stack-trace. Ingen browsing-historik, inga lösenord eller mail.</div>
+          </div>
+          <div class="set-row-action">
+            <div class="toggle-sw" id="crashOptInToggle" onclick="toggleCrashReporting()"></div>
+          </div>
+        </div>
+        <div class="set-row" id="crashLogsRow" onclick="showCrashLogModal()" style="cursor:pointer">
+          <div class="set-row-icon set-icon-gray">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>
+          </div>
+          <div class="set-row-content">
+            <div class="set-row-title">Lokala kraschloggar</div>
+            <div class="set-row-sub" id="crashLogCountText">Inga loggar hittade</div>
+          </div>
+          <div class="set-row-action">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-3)"><polyline points="9 18 15 12 9 6"/></svg>
+          </div>
+        </div>
+      </div>
+
       <!-- WEBBPLATSBEHÖRIGHETER -->
       <div class="set-group">
         <div class="set-label" style="display:flex;justify-content:space-between;align-items:center">
@@ -9102,6 +9183,7 @@ async function renderPanelContent(name) {
     // Populate the Site permissions list lazily — IPC is fast, no need
     // to block the panel render. Awaited inside the helper.
     renderSitePermissions()
+    refreshCrashStatus()
     if (SE.isWindows && SE.isDefaultBrowser) {
       SE.isDefaultBrowser().then(isDefault => {
         const sub = document.getElementById('settingsDefaultBrowser')
@@ -12380,6 +12462,102 @@ async function clearAllSitePermissions() {
   }
 }
 
+// ══════════════════════════════════════════════════════
+//  Diagnostik — crash reporting toggle + log viewer
+// ══════════════════════════════════════════════════════
+async function refreshCrashStatus() {
+  try {
+    const s = await SE.crashStatus()
+    const toggle = document.getElementById('crashOptInToggle')
+    if (toggle) toggle.classList.toggle('on', !!s.enabled)
+    const sub = document.getElementById('crashLogCountText')
+    if (sub) {
+      sub.textContent = s.logCount > 0
+        ? `${s.logCount} ${s.logCount === 1 ? 'sparad logg' : 'sparade loggar'} · klicka för att se`
+        : 'Inga loggar hittade — bra! Inget har kraschat'
+    }
+  } catch (_) {}
+}
+
+async function toggleCrashReporting() {
+  let s = { enabled: false }
+  try { s = await SE.crashStatus() } catch (_) {}
+  const next = !s.enabled
+  // First time enabling: confirm so user knows what they're agreeing to.
+  if (next) {
+    const ok = confirm(
+      'Aktivera kraschrapporter?\n\n' +
+      'När browsern kraschar skickas följande till SEOZ:\n' +
+      '  • SEOZ Browser-version\n' +
+      '  • Operativsystem\n' +
+      '  • Felmeddelande och stack-trace\n' +
+      '  • En anonym installations-ID\n\n' +
+      'Det skickas INTE: dina besökta sidor, lösenord, mail, eller andra personliga data.\n\n' +
+      'Du kan stänga av detta när som helst.'
+    )
+    if (!ok) return
+  }
+  try {
+    await SE.crashSetEnabled(next)
+    toast(next ? 'Kraschrapporter aktiverade' : 'Kraschrapporter avstängda',
+          next ? '#2ca87f' : '#e58a00')
+    refreshCrashStatus()
+  } catch (_) {
+    toast('Kunde inte uppdatera inställningen', '#dc2626')
+  }
+}
+
+async function showCrashLogModal() {
+  const modal = document.getElementById('crashLogModal')
+  const body  = document.getElementById('crashLogBody')
+  const count = document.getElementById('crashLogCount')
+  if (!modal || !body) return
+  body.innerHTML = '<div style="color:var(--ink-3)">Laddar...</div>'
+  modal.classList.add('open')
+  let logs = []
+  try { logs = (await SE.crashList()) || [] } catch (_) {}
+  if (!logs.length) {
+    body.innerHTML = `<p style="color:var(--ink-3);font-size:12px;line-height:1.5">Inga kraschloggar — browsern har inte kraschat sedan första installationen, eller så har loggarna rensats.</p>`
+    count.textContent = ''
+    return
+  }
+  count.textContent = `${logs.length} senaste`
+  body.innerHTML = logs.map(l => {
+    const when = new Date(l.timestamp).toLocaleString('sv-SE')
+    const kindColor = l.kind?.startsWith('main') ? 'var(--ds-danger)' : 'var(--warn)'
+    const safeMsg = String(l.message || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    const safeStack = String(l.stack || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+    return `<div style="border:1px solid var(--border);border-radius:8px;padding:10px 12px;margin-bottom:8px">
+      <div style="display:flex;justify-content:space-between;align-items:baseline;gap:8px;margin-bottom:6px">
+        <span style="font-size:10.5px;font-family:'JetBrains Mono',ui-monospace,monospace;color:${kindColor};font-weight:600">${l.kind || 'unknown'}</span>
+        <span style="font-size:10px;color:var(--ink-3);font-family:'JetBrains Mono',ui-monospace,monospace">v${l.appVersion || '?'} · ${when}</span>
+      </div>
+      <div style="font-size:11.5px;color:var(--head);font-weight:500;margin-bottom:5px;word-break:break-word">${safeMsg || '(inget meddelande)'}</div>
+      ${safeStack ? `<pre style="font-size:10px;color:var(--ink-2);background:var(--panel);padding:8px;border-radius:5px;max-height:140px;overflow:auto;white-space:pre-wrap;word-break:break-word;margin:0;font-family:'JetBrains Mono',ui-monospace,monospace">${safeStack}</pre>` : ''}
+    </div>`
+  }).join('') +
+  `<div style="display:flex;gap:6px;margin-top:12px;justify-content:flex-end">
+    <button onclick="clearCrashLogs()" style="background:transparent;color:var(--ds-danger);border:1px solid var(--border);padding:6px 12px;border-radius:6px;font-size:11px;cursor:pointer;font-family:inherit">Rensa alla</button>
+  </div>`
+}
+function closeCrashLogModal() {
+  document.getElementById('crashLogModal').classList.remove('open')
+}
+async function crashOpenFolder() {
+  try { await SE.crashOpenFolder() } catch (_) {}
+}
+async function clearCrashLogs() {
+  if (!confirm('Rensa alla kraschloggar?')) return
+  try {
+    await SE.crashClear()
+    toast('Loggar rensade', '#2ca87f')
+    closeCrashLogModal()
+    refreshCrashStatus()
+  } catch (_) {
+    toast('Kunde inte rensa', '#dc2626')
+  }
+}
+
 // ══════════════════════════════════════════════════════════════════
 //  Legal documents — Integritetspolicy + Användarvillkor
 //
@@ -12391,7 +12569,7 @@ async function clearAllSitePermissions() {
 //
 //  When updating: bump LEGAL_VERSION + the date string.
 // ══════════════════════════════════════════════════════════════════
-const LEGAL_VERSION  = '2026-05-05'
+const LEGAL_VERSION  = '2026-05-05.b'
 const LEGAL_UPDATED  = '5 maj 2026'
 
 const LEGAL_DOCS = {
@@ -12408,6 +12586,7 @@ const LEGAL_DOCS = {
   <li><strong>All din data lagras lokalt på din enhet</strong> om inte annat uttryckligen anges.</li>
   <li><strong>Vi har ingen central server</strong> som samlar in din browsing-historik, dina lösenord, eller dina mail.</li>
   <li><strong>Vi spårar dig inte.</strong> Inga analytics, inga reklam-pixlar, ingen telemetri som standard.</li>
+  <li><strong>Kraschrapporter är opt-in.</strong> Avstängda som default. Du aktiverar dem själv i Inställningar → Diagnostik om du vill hjälpa oss åtgärda buggar.</li>
 </ul>
 
 <h2>Data som lagras lokalt på din enhet</h2>
@@ -12445,6 +12624,19 @@ const LEGAL_DOCS = {
 
 <h3>Auto-uppdatering</h3>
 <p>Browsern frågar <code>github.com/valdemarmattsson-beep/seoz-browser/releases</code> om det finns nya versioner. Endast version och OS-info skickas — ingen användardata.</p>
+
+<h3>Kraschrapporter (opt-in)</h3>
+<p>Browsern loggar alla krascher lokalt på din enhet (i mappen <code>crash-reports</code> under användardatamappen). Detta sker alltid, men loggen lämnar aldrig din dator om du inte själv slår på "Skicka kraschrapporter" i Inställningar → Diagnostik.</p>
+<p>När du aktiverar uppladdning skickas följande till SEOZ när browsern kraschar:</p>
+<ul>
+  <li>SEOZ Browser-version, Electron-version, Chromium-version</li>
+  <li>Operativsystem och arkitektur</li>
+  <li>Felmeddelande och stack-trace</li>
+  <li>En slumpmässigt genererad anonym <strong>installations-ID</strong> (16 hex-tecken) — gör att vi kan se om samma installation kraschar flera gånger, men vi kan inte koppla det till dig personligen</li>
+  <li>Tidsstämpel</li>
+</ul>
+<p>Det skickas <strong>inte</strong>: URL:er du besökt, sidtitlar, cookies, formulärdata, lösenord, mail-innehåll, IP-adress (mer än vad HTTP-lagret naturligt avslöjar för servern), eller någon annan personidentifierande information.</p>
+<p>Du kan när som helst stänga av uppladdning, granska de lokala loggarna eller rensa dem helt i Inställningar → Diagnostik.</p>
 
 <h3>Webbsidor du besöker</h3>
 <p>När du surfar pratar browsern med de webbplatser du själv navigerar till — precis som vilken annan browser. Cookies, formulärdata och webbplatslagring hanteras av Chromium på samma sätt som i Chrome.</p>
@@ -15635,6 +15827,7 @@ document.addEventListener('keydown', e => {
   // Escape → Close find bar / overlays / exit fullscreen
   else if (e.key === 'Escape') {
     if (findActive) closeFindBar()
+    else if (document.getElementById('crashLogModal')?.classList.contains('open')) closeCrashLogModal()
     else if (document.getElementById('legalModal')?.classList.contains('open')) closeLegalModal()
     else if (document.getElementById('pwAuthModal')?.classList.contains('open')) hidePwAuthModal()
     else if (document.body.classList.contains('wv-fullscreen')) {

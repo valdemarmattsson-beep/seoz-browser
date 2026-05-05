@@ -155,6 +155,15 @@ contextBridge.exposeInMainWorld('seoz', {
   permissionsRevoke: (origin, permission)     => ipcRenderer.invoke('permissions-revoke', { origin, permission }),
   permissionsClear:  ()                       => ipcRenderer.invoke('permissions-clear'),
 
+  // Crash reporting. Local logging is always-on; the toggle here only
+  // controls whether reports are also POSTed to seoz.io.
+  crashStatus:        ()       => ipcRenderer.invoke('crash-reporting-status'),
+  crashSetEnabled:    (v)      => ipcRenderer.invoke('crash-reporting-set-enabled', !!v),
+  crashList:          ()       => ipcRenderer.invoke('crash-reporting-list'),
+  crashClear:         ()       => ipcRenderer.invoke('crash-reporting-clear'),
+  crashOpenFolder:    ()       => ipcRenderer.invoke('crash-reporting-open-folder'),
+  crashReportRenderer:(payload)=> ipcRenderer.send('crash-report-renderer', payload || {}),
+
   // Screenshot save dialog
   saveScreenshot: (buffer) => ipcRenderer.invoke('save-screenshot', buffer),
 

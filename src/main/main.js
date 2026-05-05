@@ -767,11 +767,19 @@ async function apiFetch(endpoint, apiKey, options = {}) {
   const { method = 'GET', params = {}, body } = options
   const url = new URL(API_BASE + endpoint)
   Object.entries(params).forEach(([k, v]) => v != null && url.searchParams.set(k, String(v)))
+  // Cache-buster so any intermediate proxy / Vercel edge cache /
+  // Electron net stack doesn't hand us a stale list. The platform
+  // hard-deletes clients (no soft-delete flag) so a stale response
+  // would otherwise keep showing rows that no longer exist in DB.
+  url.searchParams.set('_t', String(Date.now()))
   const fetchOpts = {
     method,
+    cache: 'no-store',
     headers: {
       'Content-Type': 'application/json',
       'Authorization': `Bearer ${apiKey}`,
+      'Cache-Control': 'no-cache, no-store, must-revalidate',
+      'Pragma': 'no-cache',
     },
   }
   if (body && method !== 'GET') {

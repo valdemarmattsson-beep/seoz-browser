@@ -8547,10 +8547,12 @@ async function doConnect(mode) {
         })
         updateProfileStatusBar()
       }
-      // NOTE: previously called applySyncedTheme(res.user.theme) here,
-      // which forced the browser to whatever the SEOZ.io account had —
-      // overriding the user's local toggle every 30 s. Theme is now a
-      // per-device preference; cross-device sync removed.
+      // Apply the SEOZ.io account theme on initial login. The
+      // _maybeApplySyncedTheme guard tracks the last value we saw
+      // from the platform so subsequent auto-syncs only re-apply
+      // when the user changed it on platform — local toggles in the
+      // browser are not overwritten.
+      _maybeApplySyncedTheme(res.user?.theme)
       okEl.classList.add('show')
       setTimeout(() => {
         document.getElementById('auth').classList.add('gone')
@@ -8589,8 +8591,11 @@ async function syncNow() {
       synced.workspace = res.workspace
       synced.clients = res.clients || []
       updateSyncUI()
-      // Theme is intentionally NOT synced from SEOZ.io — see note in
-      // doConnect(). Local toggle owns the theme on each device.
+      // Pull theme from platform on every sync but only re-apply
+      // when it has actually changed since the last sync (see
+      // _maybeApplySyncedTheme). Avoids the v1.7-era loop where
+      // every 30s sync forced dark mode.
+      _maybeApplySyncedTheme(res.user?.theme)
       // Restore active client
       const saved = await SE.storeGet('activeClientId')
       if (saved && synced.clients.find(c => c.id === saved)) {
@@ -8654,10 +8659,25 @@ SE.on('sync-data', data => {
   }
 
   updateSyncUI()
+  // Apply theme only when it actually changed on the platform — see
+  // _maybeApplySyncedTheme guard. Local toggles always win.
+  _maybeApplySyncedTheme(data.user?.theme)
   // Re-render bookmark bar so the client picker reflects the fresh list.
   renderBmBar()
   if (currentPanel) renderPanelContent(currentPanel)
 })
+
+// Track the last theme value the platform reported so we only re-
+// apply it when it changes. If the user toggles locally we DON'T
+// touch _lastSyncedTheme — that way the next auto-sync sees the same
+// platform value, the diff is zero, and the local choice survives.
+let _lastSyncedTheme = null
+function _maybeApplySyncedTheme(seozTheme) {
+  if (!seozTheme) return
+  if (seozTheme === _lastSyncedTheme) return  // platform unchanged — leave local choice alone
+  _lastSyncedTheme = seozTheme
+  applySyncedTheme(seozTheme)
+}
 
 // ══════════════════════════════════════════════════════
 //  AGENT READY — scan any URL for agent/LLM-readiness

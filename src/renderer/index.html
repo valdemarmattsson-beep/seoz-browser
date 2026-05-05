@@ -3783,7 +3783,18 @@ function _attachWebviewListeners(el, tabId) {
   function _isActive() { return tabId === activeId }
 
   el.addEventListener('dom-ready', () => {
-    el.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+    // Skip Chrome-spoofing on our own domains. The shim was added to
+    // get past Cloudflare / Google bot-detection on third-party sites
+    // — running it on flow.seoz.io / seoz.io / seoz.se has no upside
+    // and was breaking the in-portal chat overlay (rendering gray
+    // because some chat-client feature detection didn't like our
+    // navigator shims).
+    let host = ''
+    try { host = new URL(el.getURL() || '').hostname.toLowerCase() } catch (_) {}
+    const isOurOwnDomain = /(^|\.)(seoz\.io|seoz\.se|flow\.seoz\.io)$/.test(host)
+    if (!isOurOwnDomain) {
+      el.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
+    }
     el.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
   })
 

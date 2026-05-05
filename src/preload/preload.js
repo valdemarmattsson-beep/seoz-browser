@@ -34,6 +34,10 @@ contextBridge.exposeInMainWorld('seoz', {
   passwordsPinVerify: (pin) => ipcRenderer.invoke('passwords-pin-verify', pin),
   passwordsPinClear:  ()    => ipcRenderer.invoke('passwords-pin-clear'),
 
+  // Push autofill data into a specific OAuth popup BrowserWindow
+  // (looked up by webContents id in main).
+  sendToPopup: (popupId, payload) => ipcRenderer.send('popup-autofill-fill', { popupId, payload }),
+
   // DevTools
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),
 
@@ -159,7 +163,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

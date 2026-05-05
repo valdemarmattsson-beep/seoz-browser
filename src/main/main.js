@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu } = require('electron')
+const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
 const path = require('path')
 const https = require('https')
 const os = require('os')
@@ -501,6 +501,31 @@ ipcMain.handle('passwords-pin-verify', (_e, pin) => {
 ipcMain.handle('passwords-pin-clear', () => {
   PM.profileDelete('passwordsPinHashEnc')
   return { ok: true }
+})
+
+// ── Autofill IPC relay for OAuth popup BrowserWindows ──
+// Webview guests use ipcRenderer.sendToHost() — that lands in their
+// owning <webview> tag's 'ipc-message' event, handled by the main
+// renderer directly. Native popups can't do that; their preload
+// sends to main with a 'popup-' prefix and we relay to the main
+// renderer so all autofill UI stays in one place. The popup's
+// webContents id is included so the renderer can answer back via
+// 'popup-autofill-fill' below.
+ipcMain.on('popup-seoz-autofill-request', (e, payload) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('popup-autofill-request', { ...(payload || {}), popupId: e.sender.id })
+  }
+})
+ipcMain.on('popup-seoz-autofill-save', (e, payload) => {
+  if (win && !win.isDestroyed()) {
+    win.webContents.send('popup-autofill-save', { ...(payload || {}), popupId: e.sender.id })
+  }
+})
+// Renderer asks us to push fill data into a specific popup.
+ipcMain.on('popup-autofill-fill', (_e, { popupId, payload } = {}) => {
+  if (!popupId) return
+  const wc = webContents.fromId(popupId)
+  if (wc && !wc.isDestroyed()) wc.send('seoz-autofill-fill', payload || {})
 })
 
 // ── DevTools ──
@@ -2143,6 +2168,11 @@ app.on('web-contents-created', (_e, contents) => {
               contextIsolation: true,
               nodeIntegration: false,
               sandbox: false,
+              // Run the same login-form detector as in regular tabs so
+              // OAuth popups (Sign in with Google etc.) get autofill
+              // and save-prompt support too. The preload is shared —
+              // it detects context and switches transport.
+              preload: path.join(__dirname, '..', 'preload', 'webview-preload.js'),
             },
           },
         }

@@ -1,17 +1,34 @@
 'use strict'
 // ════════════════════════════════════════════════════════════════════
-//  Webview preload — runs inside every guest page in our <webview>
-//  tags. Detects login forms, asks the host renderer for matching
-//  saved credentials, and offers to save new ones on form submit.
+//  Login-form preload — runs inside every guest page (both <webview>
+//  tags AND native OAuth popup BrowserWindows). Detects login forms,
+//  asks the host renderer for matching saved credentials, and offers
+//  to save new ones on form submit.
 //
-//  Communicates with the host via ipcRenderer.sendToHost() / on().
 //  Channels:
 //    seoz-autofill-request {site, pageUrl}     → host
 //    seoz-autofill-fill    {username, password} → guest (from host)
 //    seoz-autofill-save    {site, username, password} → host
+//
+//  In <webview> guests we use ipcRenderer.sendToHost() — the message
+//  goes to the parent renderer (host page). In native popup
+//  BrowserWindows there's no host page, so we send to main with a
+//  'popup-' prefix and main relays to the main-window renderer.
 // ════════════════════════════════════════════════════════════════════
 
 const { ipcRenderer } = require('electron')
+
+// In webview guests `process.guestInstanceId` is set. In a native
+// popup BrowserWindow it's undefined. We pick the right transport
+// once at startup so the rest of the script doesn't have to care.
+const _IN_WEBVIEW = (() => {
+  try { return typeof process !== 'undefined' && process.guestInstanceId !== undefined }
+  catch (_) { return false }
+})()
+function _send(channel, payload) {
+  if (_IN_WEBVIEW) ipcRenderer.sendToHost(channel, payload)
+  else ipcRenderer.send('popup-' + channel, payload)
+}
 
 let _scanTimer = null
 let _detectedFields = null   // { user, pass, form } or null
@@ -74,7 +91,7 @@ function _wireFields(d) {
     const password = String(d.pass.value || '')
     if (!password) return
     _saveSentForCurrent = true
-    ipcRenderer.sendToHost('seoz-autofill-save', {
+    _send('seoz-autofill-save', {
       site: location.hostname,
       pageUrl: location.href,
       username,
@@ -101,7 +118,7 @@ function _scanAndRequest() {
   if (sig === _lastSig) return    // already asked for this form
   _lastSig = sig
   _saveSentForCurrent = false
-  ipcRenderer.sendToHost('seoz-autofill-request', {
+  _send('seoz-autofill-request', {
     site: location.hostname,
     pageUrl: location.href,
   })

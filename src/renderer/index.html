@@ -2821,6 +2821,7 @@ const SE = window.seoz || {
   passwordsUpdate:async()=>null, passwordsDelete:async()=>true,
   passwordsPinStatus:async()=>({hasPin:false}), passwordsPinSet:async()=>({ok:true}),
   passwordsPinVerify:async()=>({ok:true}), passwordsPinClear:async()=>({ok:true}),
+  sendToPopup:()=>{},
   agentReadyScan:async()=>({ok:false,error:'Endast i Electron-builden'}),
   webviewPreloadUrl: '',
 }
@@ -9700,6 +9701,30 @@ async function _handleAutofillSave(payload) {
     })
   }
 }
+
+// OAuth popup BrowserWindows can't send via webview ipc-message — main
+// relays their autofill request/save events here. Reply route is via
+// SE.sendToPopup(popupId, payload) which goes back through main.
+SE.on('popup-autofill-request', async (data) => {
+  const site = (data?.site || '').toLowerCase()
+  const popupId = data?.popupId
+  if (!site || !popupId) return
+  let creds = []
+  try { creds = (await SE.passwordsList()) || [] } catch (_) { return }
+  const matches = creds.filter(c => _pwSiteMatches(c.site, site))
+  if (!matches.length) return
+  const cred = matches.sort((a, b) => (b.updatedAt || 0) - (a.updatedAt || 0))[0]
+  SE.sendToPopup(popupId, {
+    username: cred.username || '',
+    password: cred.password || '',
+  })
+  toast(`Lösenord ifyllt i popup (${esc(cred.site)})`, '#2ca87f')
+})
+SE.on('popup-autofill-save', (data) => {
+  // Same banner UI as the in-tab autofill flow — main window must be
+  // visible for the user to see it. Acceptable trade-off for v1.
+  _handleAutofillSave(data || {})
+})
 
 let _pwSaveTimer = null
 function showSavePrompt({ title, body, acceptLabel }) {

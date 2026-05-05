@@ -418,7 +418,7 @@ app.whenReady().then(() => {
   try {
     const { crashReporter } = require('electron')
     crashReporter.start({
-      productName: 'SEOZ Browser',
+      productName: 'SEOZ',
       companyName: 'SEOZ',
       submitURL: '',                 // local-only by default
       uploadToServer: false,
@@ -1122,7 +1122,7 @@ ipcMain.handle('claude-chat', async (_, { messages, systemPrompt, apiKey }) => {
     const body = JSON.stringify({
       model: 'claude-sonnet-4-20250514',
       max_tokens: 4096,
-      system: systemPrompt || 'You are a helpful SEO assistant integrated in the SEOZ Browser. Respond in Swedish unless the user writes in another language. Be concise and actionable.',
+      system: systemPrompt || 'You are a helpful SEO assistant integrated in SEOZ. Respond in Swedish unless the user writes in another language. Be concise and actionable.',
       messages
     })
     const res = await net.fetch('https://api.anthropic.com/v1/messages', {
@@ -2666,7 +2666,7 @@ async function updateJumpList() {
         title: 'Nytt fönster',
         program: exePath,
         args: '--new-window',
-        description: 'Öppna ett nytt SEOZ Browser-fönster',
+        description: 'Öppna ett nytt SEOZ-fönster',
         iconPath: exePath,
         iconIndex: 0,
       },
@@ -2805,7 +2805,7 @@ app.on('web-contents-created', (_e, contents) => {
             icon: APP_ICON,
             backgroundColor: isDark ? '#131920' : '#f8f9fa',
             autoHideMenuBar: true,
-            title: 'SEOZ Browser',
+            title: 'SEOZ',
             ...(process.platform === 'win32' ? {
               titleBarStyle: 'hidden',
               titleBarOverlay: {

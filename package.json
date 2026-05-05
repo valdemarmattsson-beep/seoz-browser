@@ -1,6 +1,6 @@
 {
   "name": "seoz-browser",
-  "version": "1.10.48",
+  "version": "1.10.49",
   "description": "SEOZ Desktop Browser",
   "main": "src/main/main.js",
   "author": "SEOZ <hello@seoz.io>",
@@ -34,7 +34,7 @@
   },
   "build": {
     "appId": "se.seoz.browser",
-    "productName": "SEOZ Browser",
+    "productName": "SEOZ",
     "icon": "assets/icon.png",
     "files": [
       "src/**/*",
@@ -76,7 +76,7 @@
       "allowElevation": true,
       "createDesktopShortcut": true,
       "createStartMenuShortcut": true,
-      "shortcutName": "SEOZ Browser",
+      "shortcutName": "SEOZ",
       "differentialPackage": true,
       "include": "build/installer.nsh"
     }

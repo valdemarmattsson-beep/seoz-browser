@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * SEOZ Browser MCP Server
+ * SEOZ MCP Server
  *
  * Exposes browser capabilities via the Model Context Protocol (MCP) over HTTP+SSE.
  * Claude Code / Cowork can connect to this server to control the browser.
@@ -431,7 +431,7 @@ async function handleRequest(body, sessionId) {
       return jsonrpcResult(id, {
         protocolVersion: PROTOCOL_VERSION,
         capabilities: { tools: {} },
-        serverInfo: { name: 'SEOZ Browser', version: '1.0.0' }
+        serverInfo: { name: 'SEOZ', version: '1.0.0' }
       })
 
     case 'notifications/initialized':
@@ -545,7 +545,7 @@ function startMCPServer() {
     if (req.method === 'GET' && req.url === '/') {
       res.writeHead(200, { 'Content-Type': 'application/json' })
       res.end(JSON.stringify({
-        name: 'SEOZ Browser MCP Server',
+        name: 'SEOZ MCP Server',
         version: '1.0.0',
         protocol: PROTOCOL_VERSION,
         tools: TOOLS.map(t => t.name),
@@ -572,16 +572,16 @@ function startMCPServer() {
   })
 
   server.listen(MCP_PORT, '127.0.0.1', () => {
-    console.log(`[MCP] SEOZ Browser MCP Server running on http://127.0.0.1:${MCP_PORT}`)
+    console.log(`[MCP] SEOZ MCP Server running on http://127.0.0.1:${MCP_PORT}`)
   })
 
   server.on('error', (err) => {
     if (err.code === 'EADDRINUSE') {
       // DO NOT silently shift to another port — the stdio proxy hardcodes 19532.
-      // Most likely cause: a stale instance of SEOZ Browser is still running.
+      // Most likely cause: a stale instance of SEOZ is still running.
       console.error(
         `[MCP] Port ${MCP_PORT} already in use. ` +
-        `Another SEOZ Browser instance is likely running. ` +
+        `Another SEOZ instance is likely running. ` +
         `Close it (check Task Manager for electron.exe) and relaunch.`
       )
       server = null

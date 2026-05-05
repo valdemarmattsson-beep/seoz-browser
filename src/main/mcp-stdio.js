@@ -2,7 +2,7 @@
 'use strict'
 
 /**
- * SEOZ Browser MCP — stdio wrapper
+ * SEOZ MCP — stdio wrapper
  *
  * Claude Desktop launches this as a child process.
  * It reads JSON-RPC from stdin and proxies to the HTTP MCP server
@@ -73,7 +73,7 @@ function launchApp() {
   appSpawned = true
   try {
     const npmCmd = process.platform === 'win32' ? 'npm.cmd' : 'npm'
-    logStderr(`launching SEOZ Browser via "${npmCmd} start" in ${PROJECT_ROOT}`)
+    logStderr(`launching SEOZ via "${npmCmd} start" in ${PROJECT_ROOT}`)
     const child = spawn(npmCmd, ['start'], {
       cwd: PROJECT_ROOT,
       detached: true,
@@ -164,7 +164,7 @@ async function handleMessage(raw) {
     writeResult(id, {
       protocolVersion: '2024-11-05',
       capabilities: { tools: {} },
-      serverInfo: { name: 'SEOZ Browser', version: '1.1.0' }
+      serverInfo: { name: 'SEOZ', version: '1.1.0' }
     })
     return
   }
@@ -176,7 +176,7 @@ async function handleMessage(raw) {
   const ready = await ensureAppReady()
   if (!ready) {
     writeError(id, -32000,
-      'SEOZ Browser did not start within ' + (STARTUP_TIMEOUT_MS / 1000) + 's. ' +
+      'SEOZ did not start within ' + (STARTUP_TIMEOUT_MS / 1000) + 's. ' +
       'Start it manually with "npm start" in ' + PROJECT_ROOT + '.')
     return
   }
@@ -205,7 +205,7 @@ async function handleMessage(raw) {
   }
 
   if (lastErr && lastErr.code === 'ECONNREFUSED') {
-    writeError(id, -32000, 'SEOZ Browser connection lost. Please restart the app.')
+    writeError(id, -32000, 'SEOZ connection lost. Please restart the app.')
   } else if (lastErr) {
     writeError(id, -32603, `Proxy error: ${lastErr.message}`)
   }
@@ -223,4 +223,4 @@ function writeError(id, code, message) {
   write({ jsonrpc: '2.0', id, error: { code, message } })
 }
 
-logStderr('SEOZ Browser MCP proxy ready')
+logStderr('SEOZ MCP proxy ready')

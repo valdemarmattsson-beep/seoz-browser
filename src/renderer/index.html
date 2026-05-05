@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com https://www.google.com https://*.seoz.io https://seoz.io; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'; media-src 'self' blob: data:">
-<title>SEOZ Browser</title>
+<title>SEOZ</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -7433,7 +7433,7 @@ function _renderMailSetup(body) {
   const title = hasExisting ? 'Mejl-inställningar' : 'Anslut din e-post'
   const sub = hasExisting
     ? 'Hantera konto, signatur, profilbild och autosvar för ' + esc(_mailCfgMeta.email || '')
-    : 'SEOZ Browser ansluter direkt mot din mejlserver via IMAP/SMTP. App-lösenordet krypteras lokalt med ditt operativsystems keychain.'
+    : 'SEOZ ansluter direkt mot din mejlserver via IMAP/SMTP. App-lösenordet krypteras lokalt med ditt operativsystems keychain.'
   body.innerHTML = `
     <div class="mail-setup">
       <div class="mail-setup-card">
@@ -7528,7 +7528,7 @@ function _renderMailSetup(body) {
             <textarea id="mailCfgAutoReplyBody" placeholder="Hej,&#10;&#10;Tack för ditt mejl. Jag är för tillfället ur kontoret och återkommer den XX/XX.&#10;&#10;Vid akuta ärenden, kontakta …"></textarea>
           </div>
           <div class="mail-form-hint" style="margin-top:-6px;margin-bottom:14px">
-            <strong>OBS:</strong> Autosvar skickas bara när SEOZ Browser körs. För 24/7-autosvar även när appen är stängd, sätt upp det direkt i ditt mejlkonto-gränssnitt (t.ex. Zoho Mail → Settings → Vacation Reply).
+            <strong>OBS:</strong> Autosvar skickas bara när SEOZ körs. För 24/7-autosvar även när appen är stängd, sätt upp det direkt i ditt mejlkonto-gränssnitt (t.ex. Zoho Mail → Settings → Vacation Reply).
           </div>
         </div>
 
@@ -9893,7 +9893,7 @@ async function renderPanelContent(name) {
           </div>
           <div class="set-row-content">
             <div class="set-row-title">Integritetspolicy</div>
-            <div class="set-row-sub">Vad SEOZ Browser lagrar och hur datan behandlas</div>
+            <div class="set-row-sub">Vad SEOZ lagrar och hur datan behandlas</div>
           </div>
           <div class="set-row-action">
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="color:var(--ink-3)"><polyline points="9 18 15 12 9 6"/></svg>
@@ -9920,7 +9920,7 @@ async function renderPanelContent(name) {
           <div class="set-row-icon set-icon-gray">${_SI.package}</div>
           <div class="set-row-content">
             <div class="set-row-title">Version</div>
-            <div class="set-row-sub">SEOZ Browser</div>
+            <div class="set-row-sub">SEOZ</div>
           </div>
           <div class="set-row-action">
             <span class="set-version-chip" id="settingsVersion">v—</span>
@@ -10007,7 +10007,7 @@ async function renderPanelContent(name) {
       SE.isDefaultBrowser().then(isDefault => {
         const sub = document.getElementById('settingsDefaultBrowser')
         const act = document.getElementById('settingsDefaultBrowserAction')
-        if (sub) sub.textContent = isDefault ? 'SEOZ Browser är standard' : 'Ej standardwebbläsare'
+        if (sub) sub.textContent = isDefault ? 'SEOZ är standard' : 'Ej standardwebbläsare'
         if (act) {
           act.innerHTML = isDefault
             ? '<span class="set-badge set-badge-green">✓ Standard</span>'
@@ -10198,7 +10198,7 @@ function _renderSettingsKonto() {
           <div class="settings-hero-avatar" style="width:40px;height:40px;font-size:14px">?</div>
           <div class="settings-row-content">
             <div class="settings-row-title">Inte ansluten</div>
-            <div class="settings-row-sub">Du använder SEOZ Browser i standalone-läge</div>
+            <div class="settings-row-sub">Du använder SEOZ i standalone-läge</div>
           </div>
           <div class="settings-row-action">
             <span class="set-badge" style="background:var(--panel);color:var(--ink-3);border:1px solid var(--border);padding:3px 9px;border-radius:6px;font-size:10.5px">Lokalt</span>
@@ -10599,7 +10599,7 @@ function _renderSettingsShield() {
       <div class="settings-card-h">Cookie-banners</div>
       <div class="settings-row">
         <div style="flex:1;font-size:12px;color:var(--ink-2);line-height:1.5">
-          När en cookie-banner dyker upp på en sajt — vad ska SEOZ Browser göra?
+          När en cookie-banner dyker upp på en sajt — vad ska SEOZ göra?
         </div>
       </div>
       <div class="settings-row" style="gap:8px">
@@ -10636,7 +10636,7 @@ function _renderSettingsPermissions() {
 function _renderSettingsDefault() {
   return `
     <div class="settings-section-h1">Standardwebbläsare</div>
-    <div class="settings-section-sub">Sätt SEOZ Browser som standardwebbläsare på din dator så https-länkar öppnas här.</div>
+    <div class="settings-section-sub">Sätt SEOZ som standardwebbläsare på din dator så https-länkar öppnas här.</div>
 
     <div class="settings-card">
       <div class="settings-row">
@@ -10655,7 +10655,7 @@ function _settingsPostDefault() {
     SE.isDefaultBrowser().then(isDefault => {
       const sub = document.getElementById('settingsDefaultBrowser')
       const act = document.getElementById('settingsDefaultBrowserAction')
-      if (sub) sub.textContent = isDefault ? 'SEOZ Browser är standard' : 'Inte standardwebbläsare'
+      if (sub) sub.textContent = isDefault ? 'SEOZ är standard' : 'Inte standardwebbläsare'
       if (act) {
         act.innerHTML = isDefault
           ? '<span class="set-badge set-badge-green" style="background:rgba(44,168,127,.10);color:var(--g);padding:4px 10px;border-radius:7px;font-size:10.5px;font-weight:600">✓ Standard</span>'
@@ -10736,14 +10736,14 @@ function _renderSettingsDiagnostik() {
 function _renderSettingsJuridiskt() {
   return `
     <div class="settings-section-h1">Juridiskt</div>
-    <div class="settings-section-sub">Vilka data SEOZ Browser lagrar och vilka villkor som gäller när du använder appen.</div>
+    <div class="settings-section-sub">Vilka data SEOZ lagrar och vilka villkor som gäller när du använder appen.</div>
 
     <div class="settings-card">
       <div class="settings-row clickable" onclick="showLegalDoc('privacy')">
         <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.shield}</div>
         <div class="settings-row-content">
           <div class="settings-row-title">Integritetspolicy</div>
-          <div class="settings-row-sub">Vad SEOZ Browser lagrar och hur datan behandlas</div>
+          <div class="settings-row-sub">Vad SEOZ lagrar och hur datan behandlas</div>
         </div>
         <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
@@ -11337,7 +11337,7 @@ async function doSetDefaultBrowser() {
   if (!SE.isWindows || !SE.setDefaultBrowser) return
   const ok = await SE.setDefaultBrowser()
   if (ok) {
-    toast('Windows-inställningar öppnade — välj SEOZ Browser som standard', '#4680ff')
+    toast('Windows-inställningar öppnade — välj SEOZ som standard', '#4680ff')
   }
 }
 
@@ -12384,7 +12384,7 @@ async function buildUserMenu() {
   const ver = await (SE.updaterGetVersion ? SE.updaterGetVersion() : Promise.resolve(''))
   const ftr = document.createElement('div')
   ftr.style.cssText = 'padding:8px 14px;border-top:1px solid var(--border);font-size:10px;color:var(--muted);display:flex;justify-content:space-between'
-  ftr.innerHTML = `<span>SEOZ Browser</span><span>v${esc(ver || '—')}</span>`
+  ftr.innerHTML = `<span>SEOZ</span><span>v${esc(ver || '—')}</span>`
   dd.appendChild(ftr)
 }
 
@@ -14088,7 +14088,7 @@ async function sendClaudeMessage() {
 
   // Get page context
   const ctx = await getPageContext()
-  const systemPrompt = `Du är Claude, en AI-assistent inbyggd i SEOZ Browser — en SEO-fokuserad webbläsare. Svara på svenska om inte användaren skriver på ett annat språk. Var koncis och handlingsinriktad.
+  const systemPrompt = `Du är Claude, en AI-assistent inbyggd i SEOZ — en SEO-fokuserad webbläsare. Svara på svenska om inte användaren skriver på ett annat språk. Var koncis och handlingsinriktad.
 
 ${ctx ? `AKTUELL SIDA:
 URL: ${ctx.url}
@@ -14296,7 +14296,7 @@ async function toggleCrashReporting() {
     const ok = confirm(
       'Aktivera kraschrapporter?\n\n' +
       'När browsern kraschar skickas följande till SEOZ:\n' +
-      '  • SEOZ Browser-version\n' +
+      '  • SEOZ-version\n' +
       '  • Operativsystem\n' +
       '  • Felmeddelande och stack-trace\n' +
       '  • En anonym installations-ID\n\n' +
@@ -14384,10 +14384,10 @@ const LEGAL_DOCS = {
   privacy: {
     title: 'Integritetspolicy',
     body: `
-<h1>Integritetspolicy för SEOZ Browser</h1>
+<h1>Integritetspolicy för SEOZ</h1>
 <div class="legal-meta">Senast uppdaterad: ${LEGAL_UPDATED}</div>
 
-<p>SEOZ Browser är en webbläsare byggd med integritet i fokus. Den här policyn beskriver vilken data som lagras, var, och vem som har åtkomst.</p>
+<p>SEOZ är en webbläsare byggd med integritet i fokus. Den här policyn beskriver vilken data som lagras, var, och vem som har åtkomst.</p>
 
 <h2>I korthet</h2>
 <ul>
@@ -14413,7 +14413,7 @@ const LEGAL_DOCS = {
 <p>Ingen av denna data lämnar din enhet utan att du själv begär det.</p>
 
 <h2>Data som skickas till externa tjänster</h2>
-<p>SEOZ Browser kontaktar externa tjänster <em>endast</em> när du själv använder en funktion som kräver det:</p>
+<p>SEOZ kontaktar externa tjänster <em>endast</em> när du själv använder en funktion som kräver det:</p>
 
 <h3>SEOZ-plattformen (seoz.io)</h3>
 <p>Om du <strong>kopplar ditt SEOZ-konto</strong> synkar browsern klientdata, sökord och tasks till seoz.io var 30:e sekund. Synkningen är krypterad via HTTPS och autentiserad med din personliga API-nyckel. Du kan koppla från när som helst i Inställningar → Konto → Koppla från, vilket nollställer all synkad data lokalt.</p>
@@ -14438,7 +14438,7 @@ const LEGAL_DOCS = {
 <p>Browsern loggar alla krascher lokalt på din enhet (i mappen <code>crash-reports</code> under användardatamappen). Detta sker alltid, men loggen lämnar aldrig din dator om du inte själv slår på "Skicka kraschrapporter" i Inställningar → Diagnostik.</p>
 <p>När du aktiverar uppladdning skickas följande till SEOZ när browsern kraschar:</p>
 <ul>
-  <li>SEOZ Browser-version, Electron-version, Chromium-version</li>
+  <li>SEOZ-version, Electron-version, Chromium-version</li>
   <li>Operativsystem och arkitektur</li>
   <li>Felmeddelande och stack-trace</li>
   <li>En slumpmässigt genererad anonym <strong>installations-ID</strong> (16 hex-tecken) — gör att vi kan se om samma installation kraschar flera gånger, men vi kan inte koppla det till dig personligen</li>
@@ -14451,7 +14451,7 @@ const LEGAL_DOCS = {
 <p>När du surfar pratar browsern med de webbplatser du själv navigerar till — precis som vilken annan browser. Cookies, formulärdata och webbplatslagring hanteras av Chromium på samma sätt som i Chrome.</p>
 
 <h2>Cookies och webbplatsdata</h2>
-<p>SEOZ Browser lagrar cookies, localStorage och sessionStorage från webbplatser du besöker, i samma användarmapp som beskrivs ovan. Du kan radera detta via webbplatsens egna inställningar eller genom att radera SEOZ Browser-mappen.</p>
+<p>SEOZ lagrar cookies, localStorage och sessionStorage från webbplatser du besöker, i samma användarmapp som beskrivs ovan. Du kan radera detta via webbplatsens egna inställningar eller genom att radera SEOZ-mappen.</p>
 <p>Den inbyggda annonsblockeraren (<strong>SEOZ Shield</strong>) stoppar kända reklamspårare innan de kontaktas. Cookie-banner-hanteraren (om aktiverad) klickar automatiskt accept/reject på sajter med kända CMP-system.</p>
 
 <h2>Säkerhet</h2>
@@ -14466,7 +14466,7 @@ const LEGAL_DOCS = {
 <h2>Dina rättigheter (GDPR/EU)</h2>
 <p>Eftersom all data lagras lokalt har du fysisk kontroll över den. Specifikt:</p>
 <ul>
-  <li><strong>Åtkomst</strong>: alla data finns i SEOZ Browser-mappen på din enhet.</li>
+  <li><strong>Åtkomst</strong>: alla data finns i SEOZ-mappen på din enhet.</li>
   <li><strong>Radering</strong>: avinstallera browsern eller radera mappen.</li>
   <li><strong>Portabilitet</strong>: bokmärken, lösenord, mail-konfiguration kan exporteras (planerad funktion).</li>
   <li><strong>Rättning</strong>: ändra direkt i appen.</li>
@@ -14474,7 +14474,7 @@ const LEGAL_DOCS = {
 </ul>
 
 <h2>Ändringar</h2>
-<p>Vi kan komma att uppdatera denna policy. Senaste versionen finns alltid i SEOZ Browser → Inställningar → Juridiskt.</p>
+<p>Vi kan komma att uppdatera denna policy. Senaste versionen finns alltid i SEOZ → Inställningar → Juridiskt.</p>
 
 <h2>Kontakt</h2>
 <p>Frågor om integritet eller data-rättigheter:<br><a href="mailto:hello@seoz.io" onclick="event.preventDefault();SE.openExternal('mailto:hello@seoz.io')">hello@seoz.io</a></p>
@@ -14485,10 +14485,10 @@ const LEGAL_DOCS = {
   terms: {
     title: 'Användarvillkor',
     body: `
-<h1>Användarvillkor för SEOZ Browser</h1>
+<h1>Användarvillkor för SEOZ</h1>
 <div class="legal-meta">Senast uppdaterad: ${LEGAL_UPDATED}</div>
 
-<p>Genom att installera, ladda ner eller använda SEOZ Browser ("Browsern") accepterar du följande villkor.</p>
+<p>Genom att installera, ladda ner eller använda SEOZ ("Browsern") accepterar du följande villkor.</p>
 
 <h2>1. Licens</h2>
 <p>Browsern tillhandahålls <strong>gratis</strong> av SEOZ. Du får:</p>
@@ -15152,7 +15152,7 @@ H1: ${ctx.h1s?.join(', ') || '—'}` : 'Ingen sida laddad.'}`
   if (action && pendingData) {
     _voiceMessages.push({ role: 'user', content: `[SYSTEM: Data hämtad, sammanfatta kort de viktigaste punkterna. Max 3 meningar.]\n${pendingData}`, ts: Date.now() })
     const provider2 = await SE.storeGet('voiceAiProvider', 'claude')
-    const dataSysPrompt = `Du är ${av.name}, en SEO-expert inbyggd i SEOZ Browser. Sammanfatta datan kort på svenska, max 3 meningar. Fokusera på det viktigaste och eventuella problem.`
+    const dataSysPrompt = `Du är ${av.name}, en SEO-expert inbyggd i SEOZ. Sammanfatta datan kort på svenska, max 3 meningar. Fokusera på det viktigaste och eventuella problem.`
     let summaryText = ''
     try {
       const apiMessages2 = _voiceMessages.map(m => ({ role: m.role, content: m.content }))

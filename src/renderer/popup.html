@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://fonts.gstatic.com; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
-<title>SEOZ Browser</title>
+<title>SEOZ</title>
 <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
 <style>
 :root {
@@ -206,7 +206,7 @@ wv.addEventListener('did-navigate', e => { setUrlDisplay(e.url); refreshNavState
 wv.addEventListener('did-navigate-in-page', e => { setUrlDisplay(e.url); refreshNavState() })
 wv.addEventListener('did-start-loading', () => { spinner.classList.add('show') })
 wv.addEventListener('did-stop-loading', () => { spinner.classList.remove('show'); refreshNavState() })
-wv.addEventListener('page-title-updated', e => { document.title = e.title || 'SEOZ Browser' })
+wv.addEventListener('page-title-updated', e => { document.title = e.title || 'SEOZ' })
 
 backBtn.onclick = () => { try { if (wv.canGoBack()) wv.goBack() } catch (_) {} }
 fwdBtn.onclick = () => { try { if (wv.canGoForward()) wv.goForward() } catch (_) {} }

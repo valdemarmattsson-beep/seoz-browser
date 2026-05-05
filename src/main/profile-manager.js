@@ -1,7 +1,7 @@
 'use strict'
 
 /**
- * Profile Manager — Chrome-like user profiles for SEOZ Browser
+ * Profile Manager — Chrome-like user profiles for SEOZ
  *
  * Each profile gets its own electron-store namespace, isolating:
  *   - API key (SEOZ)

@@ -4227,10 +4227,10 @@ function _attachWebviewListeners(el, tabId) {
     toast(`Sidan kraschade (${reason || 'okänt'}) — laddar om (${el._crashHistory.length}/2)`, '#dc2626')
     setTimeout(() => { try { el.reload() } catch (_) {} }, 1500)
   }
-  el.addEventListener('crashed', (e) => _handleGuestCrash(e.reason || (e.killed ? 'killed' : ''), { killed: e.killed }))
+  // 'render-process-gone' replaces both 'crashed' and 'plugin-crashed'
+  // since Electron 12+. The pre-v25 'crashed' event no longer fires in
+  // Electron 30+ — see https://www.electronjs.org/docs/latest/breaking-changes
   el.addEventListener('render-process-gone', (e) => _handleGuestCrash(e.reason, { exitCode: e.exitCode }))
-  el.addEventListener('plugin-crashed', () => console.warn('[seoz-wv-plugin-crash]', { tab: tabId }))
-  el.addEventListener('gpu-crashed', () => console.warn('[seoz-wv-gpu-crash]', { tab: tabId }))
 
   // HTML5 fullscreen (e.g. SEOZ platform "expand chart" button) — hide
   // all our chrome AND put the OS window in true fullscreen (no taskbar,
@@ -15202,10 +15202,10 @@ document.addEventListener('click', e => {
   if (!e.target.closest('#userDd') && !e.target.closest('#userBtn')) closeUserMenu()
 })
 
-// Track downloads from webview
-wv.addEventListener('will-download', (e) => {
-  // NOTE: will-download doesn't fire on webview easily, but we set it up as a hook
-})
+// 'will-download' is a session/webContents event, not a DOM event on
+// <webview> — it never fired here. Removed in v1.10.31. If we want to
+// intercept downloads, do it in main via session.defaultSession on
+// 'will-download'. Left as a TODO since the default download flow works.
 
 // ══════════════════════════════════════════════════════
 //  AUTO-UPDATER UI

@@ -357,6 +357,118 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-mail-toggle.expanded svg{transform:rotate(180deg)}
 
 /* ══════════════════════════════════════════════════════════
+   HOME RAIL — Plan B sketch (centered hero + right rail)
+   Wide  (≥ 1100px): hero column 640 + sticky rail 280, side-by-side.
+   Narrow (< 1100px): rail collapses behind a "Moduler"-toggle and
+   slides in as an overlay so the centered hero stays intact.
+══════════════════════════════════════════════════════════ */
+.home-layout{
+  width:100%;display:flex;align-items:flex-start;justify-content:center;
+  gap:40px;
+}
+.home-rail{
+  width:280px;flex-shrink:0;display:flex;flex-direction:column;gap:14px;
+  margin-top:140px; /* clears mark+greeting; lands top of rail near input */
+}
+.home-rail-card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:14px;display:flex;flex-direction:column;gap:8px;
+}
+.home-rail-card:has(> .home-recent:empty){display:none}
+.home-rail-card:has(> .home-mail-results:not(.show)){display:none}
+.home-rail-eyebrow{
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);display:flex;align-items:center;gap:6px;
+}
+.home-rail-eyebrow svg{width:11px;height:11px;color:var(--muted)}
+.home-rail-eyebrow .hre-action{
+  margin-left:auto;background:none;border:none;cursor:pointer;
+  font:inherit;font-size:9px;font-weight:700;color:var(--muted);
+  letter-spacing:.08em;text-transform:uppercase;padding:0;
+  transition:color .12s;
+}
+.home-rail-eyebrow .hre-action:hover{color:var(--p)}
+
+/* Inkorg in rail context — let card padding own spacing. */
+.home-rail .home-mail-results{margin-top:0;display:flex}
+.home-rail .home-mail-result-from{max-width:90px}
+.home-rail .home-mail-result-subject{display:none}
+
+/* Senast öppnade in rail context — pill row → single-col list. */
+.home-rail .home-recent{flex-direction:column;flex-wrap:nowrap;gap:2px;justify-content:flex-start}
+.home-rail .home-recent-item{
+  width:100%;max-width:none;border:none;background:transparent;border-radius:6px;
+  padding:5px 8px;height:auto;justify-content:flex-start;
+}
+.home-rail .home-recent-item:hover{background:var(--panel);border:none}
+.home-rail .home-recent-title{display:none}
+
+/* Nyheter — placeholder styling, no fetch yet. */
+.home-news-list{display:flex;flex-direction:column;gap:1px}
+.home-news-item{
+  display:flex;flex-direction:column;gap:2px;
+  padding:6px 8px;border-radius:6px;cursor:pointer;
+  transition:background .12s;
+}
+.home-news-item:hover{background:var(--panel)}
+.home-news-meta{
+  font-size:9px;color:var(--muted);font-weight:600;letter-spacing:.04em;
+  display:flex;align-items:center;gap:6px;
+}
+.home-news-meta .hnm-source{color:var(--p)}
+.home-news-meta .hnm-dot{width:2px;height:2px;border-radius:50%;background:var(--muted);opacity:.6}
+.home-news-meta .hnm-time{font-variant-numeric:tabular-nums;opacity:.85}
+.home-news-title{
+  font-size:11.5px;color:var(--head);font-weight:500;line-height:1.3;
+  display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
+}
+.home-news-empty{padding:4px 8px 2px;color:var(--muted);font-size:11px;line-height:1.5}
+.home-news-empty a{color:var(--p);cursor:pointer;text-decoration:underline}
+
+/* Narrow-viewport toggle + slide-in overlay. */
+.home-rail-toggle{
+  position:absolute;top:14px;right:14px;z-index:8;
+  display:none;align-items:center;gap:6px;height:30px;padding:0 12px;
+  background:var(--card);border:1px solid var(--border);border-radius:100px;
+  font:inherit;font-size:11px;font-weight:500;color:var(--txt);
+  cursor:pointer;transition:background .12s,border-color .12s;
+}
+.home-rail-toggle:hover{background:var(--panel);border-color:var(--p)}
+.home-rail-toggle svg{width:13px;height:13px;color:var(--muted)}
+.home-rail-toggle .hrt-badge{
+  display:inline-flex;align-items:center;justify-content:center;
+  min-width:18px;height:16px;padding:0 5px;border-radius:8px;
+  background:var(--p);color:#fff;font-size:9px;font-weight:700;
+  font-variant-numeric:tabular-nums;
+}
+.home-rail-close{
+  display:none;position:absolute;top:14px;right:14px;
+  width:28px;height:28px;border-radius:6px;
+  background:transparent;border:1px solid var(--border);color:var(--muted);
+  cursor:pointer;align-items:center;justify-content:center;
+  transition:background .12s,color .12s;
+}
+.home-rail-close:hover{background:var(--panel);color:var(--head)}
+.home-rail-close svg{width:14px;height:14px}
+.home-rail-backdrop{display:none}
+
+@media (max-width: 1099px){
+  .home-rail{
+    position:fixed;top:0;right:0;bottom:0;width:320px;max-width:90vw;
+    background:var(--bg);border-left:1px solid var(--border);
+    padding:54px 16px 16px;gap:14px;z-index:7;margin-top:0;
+    transform:translateX(100%);transition:transform .22s ease;
+    overflow-y:auto;
+  }
+  #homeScreen.show-rail .home-rail{transform:translateX(0)}
+  #homeScreen.show-rail .home-rail-backdrop{
+    display:block;position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:6;
+  }
+  .home-rail-toggle{display:inline-flex}
+  .home-rail-close{display:inline-flex}
+}
+
+/* ══════════════════════════════════════════════════════════
    MAIL SCREEN — full-tab Gmail-style inbox
 ══════════════════════════════════════════════════════════ */
 #mailScreen{
@@ -364,6 +476,161 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   background:var(--bg);display:none;flex-direction:column;overflow:hidden;
 }
 #mailScreen.show{display:flex}
+
+/* ══════════════════════════════════════════════════════════
+   SETTINGS SCREEN — full-tab page (Strawberry/Chrome-style)
+   Replaces the cramped 280px sidebar settings panel. Two-pane:
+   left nav with grouped sections, right panel with content.
+══════════════════════════════════════════════════════════ */
+#settingsScreen{
+  position:absolute;inset:0;z-index:6;
+  background:var(--bg);display:none;
+  flex-direction:row;overflow:hidden;
+}
+#settingsScreen.show{display:flex}
+
+.settings-nav{
+  width:240px;flex-shrink:0;background:var(--card);
+  border-right:1px solid var(--border);
+  padding:24px 0;overflow-y:auto;
+  display:flex;flex-direction:column;
+}
+.settings-nav-title{
+  font-family:'Inter Tight', Inter, sans-serif;
+  font-size:14px;font-weight:700;color:var(--head);
+  letter-spacing:-0.015em;
+  padding:0 22px 16px;
+}
+.settings-nav-list{flex:1}
+.settings-nav-group{
+  font-size:10.5px;font-weight:600;color:var(--ink-3);
+  letter-spacing:0.04em;text-transform:uppercase;
+  padding:14px 22px 6px;
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+}
+.settings-nav-item{
+  display:flex;align-items:center;gap:10px;
+  padding:8px 22px;font-size:12.5px;color:var(--txt);
+  cursor:pointer;border-left:2px solid transparent;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);
+  user-select:none;
+}
+.settings-nav-item:hover{background:var(--hover);color:var(--head)}
+.settings-nav-item.active{
+  background:var(--hover);color:var(--head);
+  border-left-color:var(--head);
+  font-weight:500;
+}
+.settings-nav-item svg{
+  width:14px;height:14px;flex-shrink:0;color:var(--ink-3);
+  transition:color var(--dur-fast) var(--ease-out);
+}
+.settings-nav-item.active svg{color:var(--head)}
+
+.settings-main{
+  flex:1;overflow-y:auto;
+  background:var(--bg);
+}
+.settings-content{
+  max-width:760px;margin:0 auto;
+  padding:48px 56px 80px;
+}
+@media (max-width: 900px) {
+  .settings-content{padding:32px 28px 64px}
+}
+
+.settings-section-h1{
+  font-family:'Inter Tight', Inter, sans-serif;
+  font-size:24px;font-weight:700;color:var(--head);
+  letter-spacing:-0.025em;margin-bottom:6px;
+}
+.settings-section-sub{
+  font-size:13px;color:var(--ink-2);line-height:1.55;margin-bottom:32px;
+}
+.settings-card{
+  background:var(--card);border:1px solid var(--border);
+  border-radius:12px;overflow:hidden;
+  margin-bottom:18px;
+}
+.settings-card-h{
+  font-size:11px;font-weight:600;color:var(--ink-2);
+  letter-spacing:0.04em;text-transform:uppercase;
+  padding:14px 18px 4px;
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+}
+.settings-row{
+  display:flex;align-items:center;gap:14px;
+  padding:14px 18px;
+  border-top:1px solid var(--border);
+}
+.settings-card > .settings-row:first-child,
+.settings-card > .settings-card-h + .settings-row{border-top:none}
+.settings-row.clickable{cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.settings-row.clickable:hover{background:var(--hover)}
+.settings-row-icon{
+  width:32px;height:32px;border-radius:8px;flex-shrink:0;
+  display:flex;align-items:center;justify-content:center;
+}
+.settings-row-icon svg{width:15px;height:15px}
+.settings-row-icon.blue{background:rgba(70,128,255,.10);color:var(--p)}
+.settings-row-icon.green{background:rgba(44,168,127,.10);color:var(--g)}
+.settings-row-icon.orange{background:rgba(229,138,0,.10);color:#e58a00}
+.settings-row-icon.purple{background:rgba(124,58,237,.10);color:#7c3aed}
+.settings-row-icon.gray{background:var(--panel);color:var(--ink-2)}
+.settings-row-icon.red{background:rgba(220,38,38,.10);color:var(--r)}
+.settings-row-content{flex:1;min-width:0}
+.settings-row-title{
+  font-size:13px;font-weight:500;color:var(--head);line-height:1.35;
+  margin-bottom:2px;
+}
+.settings-row-sub{
+  font-size:11.5px;color:var(--ink-3);line-height:1.45;
+}
+.settings-row-action{flex-shrink:0;display:flex;align-items:center;gap:6px}
+.settings-row-action svg{width:14px;height:14px;color:var(--ink-3)}
+
+.settings-btn{
+  background:transparent;border:1px solid var(--border);
+  color:var(--txt);font-family:inherit;font-size:11.5px;font-weight:500;
+  padding:7px 14px;border-radius:7px;cursor:pointer;
+  display:inline-flex;align-items:center;gap:6px;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);
+}
+.settings-btn:hover{background:var(--hover);color:var(--head);border-color:var(--border-strong)}
+.settings-btn.primary{background:var(--head);color:var(--bg);border-color:var(--head)}
+.settings-btn.primary:hover{opacity:.9;background:var(--head)}
+.settings-btn.danger{color:var(--r);border-color:rgba(220,38,38,.25)}
+.settings-btn.danger:hover{background:rgba(220,38,38,.08);color:var(--r)}
+.settings-btn svg{width:12px;height:12px}
+
+.settings-input{
+  flex:1;height:32px;background:var(--panel);
+  border:1px solid var(--border);border-radius:7px;
+  padding:0 10px;font-size:12px;color:var(--txt);font-family:inherit;
+  outline:none;transition:border-color var(--dur-fast) var(--ease-out);
+}
+.settings-input:focus{border-color:var(--border-strong);background:var(--card)}
+.settings-input::placeholder{color:var(--ink-3)}
+
+.settings-hero{
+  display:flex;align-items:center;gap:16px;margin-bottom:36px;
+}
+.settings-hero-avatar{
+  width:56px;height:56px;border-radius:50%;
+  background:linear-gradient(135deg,#6e9dff,#7c3aed);
+  display:flex;align-items:center;justify-content:center;
+  font-size:18px;font-weight:700;color:#fff;flex-shrink:0;overflow:hidden;
+  font-family:'Inter Tight', Inter, sans-serif;letter-spacing:-0.01em;
+}
+.settings-hero-avatar img{width:100%;height:100%;object-fit:cover}
+.settings-hero-info{flex:1;min-width:0}
+.settings-hero-name{
+  font-family:'Inter Tight', Inter, sans-serif;
+  font-size:17px;font-weight:600;color:var(--head);letter-spacing:-0.015em;
+  margin-bottom:2px;
+}
+.settings-hero-sub{font-size:12px;color:var(--ink-3)}
+.settings-hero-badge{flex-shrink:0}
 .mail-topbar{
   height:48px;border-bottom:1px solid var(--border);
   display:flex;align-items:center;gap:12px;padding:0 16px;flex-shrink:0;
@@ -1705,6 +1972,8 @@ input,textarea,select{user-select:text}
 .pp-foot{padding:14px 28px;border-top:1px solid var(--border);background:var(--panel);display:flex;gap:8px}
 .pp-add{flex:1;height:36px;background:none;border:1.5px dashed var(--border);border-radius:8px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--muted);transition:all .15s;display:flex;align-items:center;justify-content:center;gap:6px}
 .pp-add:hover{border-color:var(--p);color:var(--p);background:rgba(70,128,255,.04)}
+.pp-skip{height:36px;padding:0 14px;background:none;border:none;border-radius:8px;font-size:11px;font-weight:500;cursor:pointer;font-family:inherit;color:var(--muted);transition:color .15s,background .15s;flex-shrink:0}
+.pp-skip:hover{color:var(--head);background:var(--card)}
 /* Create profile form */
 .pp-form{display:none;padding:0 28px 20px}
 .pp-form.open{display:block}
@@ -2898,6 +3167,7 @@ input,textarea,select{user-select:text}
     </div>
     <div class="pp-foot">
       <button class="pp-add" onclick="openPpForm()">+ Lägg till profil</button>
+      <button class="pp-skip" onclick="skipProfileSetup()" title="Använd browsern utan profil — bokmärken och historik sparas lokalt på enheten">Hoppa över</button>
     </div>
   </div>
 </div>
@@ -3137,34 +3407,75 @@ input,textarea,select{user-select:text}
 
         <!-- Home screen overlay (shown when active tab is on seoz://home) -->
         <div id="homeScreen" role="region" aria-label="Startsida">
-          <div class="home-inner">
-            <div class="home-mark" aria-hidden="true">
-              <svg viewBox="0 0 200 200" fill="none">
-                <circle cx="100" cy="100" r="6" fill="currentColor"/>
-                <path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>
-                <path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>
-              </svg>
-            </div>
-            <div class="home-greet" id="homeGreet">God dag</div>
-            <div class="home-sub">Vad vill du göra idag?</div>
+          <!-- Narrow-screen toggle: slides the rail in/out. -->
+          <button class="home-rail-toggle" type="button" onclick="toggleHomeRail()" aria-label="Visa moduler">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg>
+            <span>Moduler</span>
+            <span class="hrt-badge" id="homeRailBadge">3</span>
+          </button>
+          <!-- Backdrop closes the rail on narrow screens. -->
+          <div class="home-rail-backdrop" onclick="toggleHomeRail()"></div>
 
-            <div class="home-input-wrap" style="position:relative">
-              <div class="home-slash-hint" id="homeSlashHint"></div>
-              <textarea id="homeInput" rows="1" placeholder="Fråga, skriv en URL, eller prova /sammanfatta …"
-                        oninput="onHomeInput(event)"
-                        onkeydown="onHomeKey(event)"></textarea>
-              <div class="home-input-foot">
-                <span class="home-hint">Enter = skicka · Shift+Enter = ny rad · / för kommandon</span>
-                <button class="home-submit" onclick="handleHomeSubmit()" aria-label="Skicka">
-                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
-                </button>
+          <div class="home-layout">
+            <div class="home-inner">
+              <div class="home-mark" aria-hidden="true">
+                <svg viewBox="0 0 200 200" fill="none">
+                  <circle cx="100" cy="100" r="6" fill="currentColor"/>
+                  <path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>
+                  <path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="12" stroke-linecap="round"/>
+                </svg>
               </div>
+              <div class="home-greet" id="homeGreet">God dag</div>
+              <div class="home-sub">Vad vill du göra idag?</div>
+
+              <div class="home-input-wrap" style="position:relative">
+                <div class="home-slash-hint" id="homeSlashHint"></div>
+                <textarea id="homeInput" rows="1" placeholder="Fråga, skriv en URL, eller prova /sammanfatta …"
+                          oninput="onHomeInput(event)"
+                          onkeydown="onHomeKey(event)"></textarea>
+                <div class="home-input-foot">
+                  <span class="home-hint">Enter = skicka · Shift+Enter = ny rad · / för kommandon</span>
+                  <button class="home-submit" onclick="handleHomeSubmit()" aria-label="Skicka">
+                    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+                  </button>
+                </div>
+              </div>
+
+              <div class="home-chips" id="homeChips"></div>
             </div>
 
-            <div class="home-mail-results" id="homeMailResults"></div>
-            <div class="home-chips" id="homeChips"></div>
-            <div class="home-recent-title" id="homeRecentTitle" style="display:none">SENAST ÖPPNADE</div>
-            <div class="home-recent" id="homeRecent"></div>
+            <aside class="home-rail" id="homeRail" aria-label="Sidopanel">
+              <button class="home-rail-close" type="button" onclick="toggleHomeRail()" aria-label="Stäng moduler">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+              </button>
+
+              <!-- Inkorg — wraps existing #homeMailResults so JS keeps working unchanged.
+                   Card auto-hides via :has() when the inbox preview is empty. -->
+              <section class="home-rail-card">
+                <div class="home-mail-results" id="homeMailResults"></div>
+              </section>
+
+              <!-- Senast öppnade — wraps #homeRecent. Card auto-hides on empty. -->
+              <section class="home-rail-card">
+                <div class="home-rail-eyebrow">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/></svg>
+                  <span>Senast öppnade</span>
+                </div>
+                <div class="home-recent-title" id="homeRecentTitle" style="display:none">SENAST ÖPPNADE</div>
+                <div class="home-recent" id="homeRecent"></div>
+              </section>
+
+              <!-- Nyheter — placeholder. Wired up to renderHomeNews() in JS;
+                   real RSS/Atom fetching is a follow-up step. -->
+              <section class="home-rail-card">
+                <div class="home-rail-eyebrow">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><line x1="8" y1="9" x2="14" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/></svg>
+                  <span>Nyheter</span>
+                  <button class="hre-action" type="button" onclick="openHomeNewsSettings()">Konfigurera</button>
+                </div>
+                <div class="home-news-list" id="homeNews"></div>
+              </section>
+            </aside>
           </div>
         </div>
 
@@ -3281,6 +3592,21 @@ input,textarea,select{user-select:text}
             </div>
           </div>
         </div>
+
+        <!-- Settings screen overlay — full-tab when active tab URL is seoz://settings.
+             Layout mirrors Strawberry / Chrome: left nav with grouped sections,
+             right panel with the active section's content. Renderer fills it
+             via renderSettingsScreen() based on window._settingsSection. -->
+        <div id="settingsScreen" role="region" aria-label="Inställningar">
+          <aside class="settings-nav" id="settingsNav">
+            <div class="settings-nav-title">Inställningar</div>
+            <!-- Filled by renderSettingsScreen — content depends on connected state -->
+            <div class="settings-nav-list" id="settingsNavList"></div>
+          </aside>
+          <div class="settings-main" id="settingsMain">
+            <div class="settings-content" id="settingsContent"></div>
+          </div>
+        </div>
       </div>
       <!-- Voice button moved to dock sidebar -->
       <!-- SEOZ Inspector drawer -->
@@ -3378,7 +3704,7 @@ input,textarea,select{user-select:text}
         <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         <div class="dtt">Röstsamtal</div>
       </div>
-      <div class="di" id="di-settings" onclick="togglePanel('settings')" style="color:#94a3b8">
+      <div class="di" id="di-settings" onclick="openSettings()" style="color:#94a3b8">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <div class="dtt">Inställningar</div>
       </div>
@@ -4870,11 +5196,13 @@ function _restoreTabs() {
 //  Sentinel URL `seoz://home` is never loaded into a real webview;
 //  presence in tab.url just means "show the home overlay here".
 // ══════════════════════════════════════════════════════
-const HOME_URL = 'seoz://home'
-const MAIL_URL = 'seoz://mail'
-function isHomeUrl(u) { return u === HOME_URL || u === '' || u === 'about:blank' }
-function isMailUrl(u) { return u === MAIL_URL }
-function isOverlayUrl(u) { return isHomeUrl(u) || isMailUrl(u) }
+const HOME_URL     = 'seoz://home'
+const MAIL_URL     = 'seoz://mail'
+const SETTINGS_URL = 'seoz://settings'
+function isHomeUrl(u)     { return u === HOME_URL || u === '' || u === 'about:blank' }
+function isMailUrl(u)     { return u === MAIL_URL }
+function isSettingsUrl(u) { return u === SETTINGS_URL }
+function isOverlayUrl(u)  { return isHomeUrl(u) || isMailUrl(u) || isSettingsUrl(u) }
 
 // Recent-closed ring buffer (persisted). Populated by closeTab().
 let _recentClosed = []
@@ -4949,6 +5277,66 @@ async function renderHomeScreen() {
       recentEl.appendChild(row)
     })
   }
+
+  // Nyheter — placeholder while RSS plumbing lands.
+  renderHomeNews()
+}
+
+// ── Nyheter (sketch) ──────────────────────────────────────────
+// Real impl: pull selected RSS/Atom feeds via main-process net.fetch,
+// cache + dedupe, surface unread count on the dock and rail badge.
+// For the Plan B sketch we render a small static demo set so the
+// layout can be evaluated; user-configurable sources are stubbed
+// behind openHomeNewsSettings().
+const _HOME_NEWS_MOCK = [
+  { source: 'Search Engine Land', time: '14:23',
+    title: 'Google rolls out new helpful-content classifier — what it means for SEO',
+    url: 'https://searchengineland.com/' },
+  { source: 'Dagens Industri',    time: '13:08',
+    title: 'Almega varnar för pressade marginaler i konsultsektorn',
+    url: 'https://di.se/' },
+  { source: 'Search Engine Journal', time: '12:41',
+    title: 'Bing reports 35% jump in AI-powered search referrals',
+    url: 'https://searchenginejournal.com/' },
+  { source: 'Breakit',            time: '11:52',
+    title: 'Svensk SEO-byrå köps upp av amerikansk koncern',
+    url: 'https://breakit.se/' },
+]
+
+function renderHomeNews() {
+  const box = document.getElementById('homeNews')
+  if (!box) return
+  // No sources configured yet → empty state with a CTA.
+  // Toggle the constant below to false to preview the empty state.
+  const HAS_SOURCES = true
+  if (!HAS_SOURCES) {
+    box.innerHTML = `
+      <div class="home-news-empty">
+        Inga källor valda än.
+        <a onclick="openHomeNewsSettings()">Aktivera nyhetskällor</a>
+        för att se rubriker här.
+      </div>`
+    return
+  }
+  box.innerHTML = _HOME_NEWS_MOCK.map(n => `
+    <div class="home-news-item" onclick="doNav('${esc(n.url)}')" title="${esc(n.title)}">
+      <div class="home-news-meta">
+        <span class="hnm-source">${esc(n.source)}</span>
+        <span class="hnm-dot"></span>
+        <span class="hnm-time">${esc(n.time)}</span>
+      </div>
+      <div class="home-news-title">${esc(n.title)}</div>
+    </div>`).join('')
+}
+
+window.openHomeNewsSettings = function() {
+  // TODO: open the news-sources picker. For now just a placeholder.
+  alert('Nyhetskällor — kommer i nästa steg.\n\nHär ska du kunna välja förvalda källor (DN, SvD, SEJ, Search Engine Land …) eller klistra in egna RSS-URLs.')
+}
+
+window.toggleHomeRail = function() {
+  const el = document.getElementById('homeScreen')
+  if (el) el.classList.toggle('show-rail')
 }
 
 function syncHomeVisibility() {
@@ -4961,22 +5349,23 @@ function syncOverlayVisibility() {
   const active = tabs.find(t => t.id === activeId)
   const home = document.getElementById('homeScreen')
   const mailEl = document.getElementById('mailScreen')
-  const onHome = !!(active && isHomeUrl(active.url))
-  const onMail = !!(active && isMailUrl(active.url))
+  const settingsEl = document.getElementById('settingsScreen')
+  const onHome     = !!(active && isHomeUrl(active.url))
+  const onMail     = !!(active && isMailUrl(active.url))
+  const onSettings = !!(active && isSettingsUrl(active.url))
   if (home) home.classList.toggle('show', onHome)
   if (mailEl) mailEl.classList.toggle('show', onMail)
+  if (settingsEl) settingsEl.classList.toggle('show', onSettings)
   // Hide active webview while any overlay owns the tab area.
   const wvEl = _tabWebviews.get(activeId)
-  if (wvEl) wvEl.style.display = (onHome || onMail) ? 'none' : ''
+  if (wvEl) wvEl.style.display = (onHome || onMail || onSettings) ? 'none' : ''
   if (onHome) {
     renderHomeScreen()
-    // Auto-populate the inbox preview so it's always visible on home
-    // (instead of only after the user types a search query).
     if (typeof _homeLoadInboxPreview === 'function') _homeLoadInboxPreview()
-    // Do NOT auto-focus #homeInput — on a new tab the URL bar must own
-    // focus, and on tab-switches users shouldn't have the cursor stolen.
   } else if (onMail) {
     renderMailScreen()
+  } else if (onSettings) {
+    renderSettingsScreen()
   }
 }
 
@@ -9272,6 +9661,474 @@ window._settingsCopyMcp = function(btn) {
   }).catch(() => toast('Kunde inte kopiera', '#dc2626'))
 }
 
+// ══════════════════════════════════════════════════════════════════
+//  SETTINGS PAGE — full-tab Strawberry-style
+//  Replaces the cramped sidebar settings panel. Two-pane layout
+//  (left nav + main content). The active section is held in
+//  window._settingsSection; click handlers in the nav update it
+//  and re-render. State persists across tab switches because it
+//  lives on window.
+// ══════════════════════════════════════════════════════════════════
+
+// openSettings — used by chrome-menu, user-menu, dock. Either
+// switch to an existing settings tab, promote a home tab, or open
+// a fresh tab. Mirrors the mail-tab opening flow.
+function openSettings(section) {
+  if (section) window._settingsSection = section
+  // Existing settings tab? focus it.
+  const existing = tabs.find(t => isSettingsUrl(t.url))
+  if (existing) { switchTab(existing.id); return }
+  // Active tab on home → promote it (saves a tab).
+  const active = tabs.find(t => t.id === activeId)
+  if (active && isHomeUrl(active.url)) {
+    active.url = SETTINGS_URL
+    active.title = 'Inställningar'
+    syncOverlayVisibility()
+    scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+    return
+  }
+  // Otherwise: open a new tab.
+  const id = nextId++
+  tabs.push({ id, title: 'Inställningar', url: SETTINGS_URL, loading:false, favicon:null, _zoom:100 })
+  createWebviewForTab(id, 'about:blank')
+  switchTab(id)
+  _persistTabs && _persistTabs()
+}
+
+const SETTINGS_NAV_ICONS = {
+  konto:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>',
+  profiler:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  utseende:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="currentColor"/><circle cx="17.5" cy="10.5" r=".5" fill="currentColor"/><circle cx="8.5" cy="7.5" r=".5" fill="currentColor"/><circle cx="6.5" cy="12.5" r=".5" fill="currentColor"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.5 0 1-.4 1-1 0-.4-.2-.7-.4-.9-.2-.2-.3-.5-.3-.9 0-.6.4-1 1-1h1.8c2.7 0 4.9-2.2 4.9-4.9C20 5.4 16.4 2 12 2z"/></svg>',
+  shield:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>',
+  permissions:  '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>',
+  ai:           '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="11" width="18" height="10" rx="2"/><circle cx="12" cy="5" r="2"/><path d="M12 7v4"/><line x1="8" y1="16" x2="8" y2="16"/><line x1="16" y1="16" x2="16" y2="16"/></svg>',
+  diagnostik:   '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>',
+  default:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="2" y1="12" x2="22" y2="12"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10A15.3 15.3 0 0 1 8 12a15.3 15.3 0 0 1 4-10z"/></svg>',
+  juridiskt:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
+  system:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.55" y2="4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+}
+
+// Section list — rendered into the left nav. Order matters.
+function _settingsSectionList() {
+  return [
+    { group: 'Konto' },
+    { id: 'konto',       label: 'Konto',                icon: SETTINGS_NAV_ICONS.konto },
+    { id: 'profiler',    label: 'Profiler',             icon: SETTINGS_NAV_ICONS.profiler },
+
+    { group: 'Browser' },
+    { id: 'utseende',    label: 'Utseende',             icon: SETTINGS_NAV_ICONS.utseende },
+    { id: 'shield',      label: 'SEOZ Shield',          icon: SETTINGS_NAV_ICONS.shield },
+    { id: 'permissions', label: 'Webbplatsbehörigheter',icon: SETTINGS_NAV_ICONS.permissions },
+    { id: 'default',     label: 'Standardwebbläsare',   icon: SETTINGS_NAV_ICONS.default },
+
+    { group: 'AI & integrationer' },
+    { id: 'ai',          label: 'AI-nycklar',           icon: SETTINGS_NAV_ICONS.ai },
+
+    { group: 'Diagnostik' },
+    { id: 'diagnostik',  label: 'Kraschrapporter',      icon: SETTINGS_NAV_ICONS.diagnostik },
+
+    { group: 'Om' },
+    { id: 'juridiskt',   label: 'Juridiskt',            icon: SETTINGS_NAV_ICONS.juridiskt },
+    { id: 'system',      label: 'System',               icon: SETTINGS_NAV_ICONS.system },
+  ]
+}
+
+function renderSettingsScreen() {
+  if (!window._settingsSection) window._settingsSection = 'konto'
+  const navList = document.getElementById('settingsNavList')
+  const content = document.getElementById('settingsContent')
+  if (!navList || !content) return
+
+  // ── Render nav ──
+  const items = _settingsSectionList()
+  navList.innerHTML = items.map(it => {
+    if (it.group) return `<div class="settings-nav-group">${esc(it.group)}</div>`
+    const active = it.id === window._settingsSection ? ' active' : ''
+    return `<div class="settings-nav-item${active}" onclick="_settingsSelect('${esc(it.id)}')">${it.icon}<span>${esc(it.label)}</span></div>`
+  }).join('')
+
+  // ── Render content ──
+  const renderer = SETTINGS_RENDERERS[window._settingsSection]
+  content.innerHTML = renderer ? renderer() : `<div class="settings-section-h1">${esc(window._settingsSection)}</div>`
+
+  // Per-section post-render hooks (fill in async data, status badges, etc.)
+  if (window._settingsSection === 'ai')         _settingsPostAi()
+  if (window._settingsSection === 'permissions') renderSitePermissions()
+  if (window._settingsSection === 'diagnostik')  refreshCrashStatus()
+  if (window._settingsSection === 'system')     _settingsPostSystem()
+  if (window._settingsSection === 'default')    _settingsPostDefault()
+}
+
+function _settingsSelect(section) {
+  window._settingsSection = section
+  renderSettingsScreen()
+}
+
+// ── Per-section content renderers ────────────────────────────────────
+const SETTINGS_RENDERERS = {
+  konto:       () => _renderSettingsKonto(),
+  profiler:    () => _renderSettingsProfiler(),
+  utseende:    () => _renderSettingsUtseende(),
+  shield:      () => _renderSettingsShield(),
+  permissions: () => _renderSettingsPermissions(),
+  default:     () => _renderSettingsDefault(),
+  ai:          () => _renderSettingsAi(),
+  diagnostik:  () => _renderSettingsDiagnostik(),
+  juridiskt:   () => _renderSettingsJuridiskt(),
+  system:      () => _renderSettingsSystem(),
+}
+
+function _renderSettingsKonto() {
+  const connected = !!synced.user
+  const profileName = synced.user?.name || synced.user?.email || 'Okänt namn'
+  const email = synced.user?.email || ''
+  const initials = synced.user ? esc(getInitials(profileName)) : '?'
+  const avatarHtml = synced.user?.avatarUrl
+    ? `<img src="${esc(synced.user.avatarUrl)}">`
+    : initials
+  const wsName = synced.workspace?.name || '—'
+  const plan = synced.workspace?.plan || 'SEOZ'
+
+  if (!connected) {
+    return `
+      <div class="settings-section-h1">Konto</div>
+      <div class="settings-section-sub">Browsern fungerar utan SEOZ-konto. Anslut för att låsa upp Klientinsikter, Tasks och synk.</div>
+
+      <div class="settings-card">
+        <div class="settings-row">
+          <div class="settings-hero-avatar" style="width:40px;height:40px;font-size:14px">?</div>
+          <div class="settings-row-content">
+            <div class="settings-row-title">Inte ansluten</div>
+            <div class="settings-row-sub">Du använder SEOZ Browser i standalone-läge</div>
+          </div>
+          <div class="settings-row-action">
+            <span class="set-badge" style="background:var(--panel);color:var(--ink-3);border:1px solid var(--border);padding:3px 9px;border-radius:6px;font-size:10.5px">Lokalt</span>
+          </div>
+        </div>
+        <div class="settings-row" style="border-top:1px solid var(--border)">
+          <div style="flex:1;font-size:11.5px;color:var(--ink-2);line-height:1.5">
+            Anslut ett SEOZ-konto för att synka klientdata, tasks och insikter mellan dina enheter.
+          </div>
+        </div>
+        <div class="settings-row" style="gap:8px;justify-content:flex-end">
+          <button class="settings-btn primary" onclick="showAuthAgain()">Anslut SEOZ-konto</button>
+          <button class="settings-btn" onclick="openApiKeyPage()">Skapa nyckel på seoz.io</button>
+        </div>
+      </div>
+    `
+  }
+
+  return `
+    <div class="settings-section-h1">Konto</div>
+    <div class="settings-section-sub">Du är ansluten till SEOZ-plattformen. Synk sker automatiskt var 30:e sekund.</div>
+
+    <div class="settings-hero">
+      <div class="settings-hero-avatar">${avatarHtml}</div>
+      <div class="settings-hero-info">
+        <div class="settings-hero-name">${esc(profileName)}</div>
+        <div class="settings-hero-sub">${esc(email)}</div>
+      </div>
+      <div class="settings-hero-badge">
+        <span class="set-badge" style="background:rgba(70,128,255,.10);color:var(--p);padding:4px 10px;border-radius:7px;font-size:10.5px;font-weight:600">${esc(plan)}</span>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon purple"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="4" y="2" width="16" height="20" rx="2"/><path d="M9 22v-4h6v4M8 6h.01M16 6h.01M12 6h.01"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Workspace</div>
+          <div class="settings-row-sub">${esc(wsName)}</div>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon green"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Auto-synk</div>
+          <div class="settings-row-sub">Var 30:e sekund</div>
+        </div>
+        <div class="settings-row-action">
+          <label class="set-toggle"><input type="checkbox" id="settingsAutoSyncToggle" onchange="SE.storeSet('autoSync', this.checked).then(()=>toast(this.checked?'Auto-synk på (gäller från nästa start)':'Auto-synk av (gäller från nästa start)','#4680ff'))"><div class="set-toggle-slider"></div></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="gap:8px;justify-content:flex-end">
+        <button class="settings-btn" onclick="syncNow()">Synka nu</button>
+        <button class="settings-btn" onclick="openApiKeyPage()">Hantera API-nyckel</button>
+        <button class="settings-btn danger" onclick="doDisconnect()">Koppla från</button>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsProfiler() {
+  return `
+    <div class="settings-section-h1">Profiler</div>
+    <div class="settings-section-sub">Olika profiler har separata bokmärken, lösenord och inloggningar. Bra för att hålla isär arbete och privat.</div>
+
+    <div class="settings-card">
+      <div class="settings-row clickable" onclick="showProfilePicker()">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.profiler}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Hantera profiler</div>
+          <div class="settings-row-sub">Skapa, byt eller ta bort profiler</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsUtseende() {
+  const cur = (document.documentElement.dataset.theme || 'light')
+  return `
+    <div class="settings-section-h1">Utseende</div>
+    <div class="settings-section-sub">Tema-val sparas per profil och synkas mot SEOZ-plattformen om du är ansluten.</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Tema</div>
+          <div class="settings-row-sub">Ljust eller mörkt läge</div>
+        </div>
+        <div class="settings-row-action">
+          <div style="display:inline-flex;background:var(--panel);border-radius:7px;padding:2px;gap:1px">
+            <button class="settings-btn" style="border:none;background:${cur === 'light' ? 'var(--card)' : 'transparent'};box-shadow:${cur === 'light' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'}" onclick="_settingsSetTheme('light')">Ljust</button>
+            <button class="settings-btn" style="border:none;background:${cur === 'dark' ? 'var(--card)' : 'transparent'};box-shadow:${cur === 'dark' ? '0 1px 2px rgba(0,0,0,.08)' : 'none'}" onclick="_settingsSetTheme('dark')">Mörkt</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  `
+}
+function _settingsSetTheme(t) {
+  document.documentElement.dataset.theme = t
+  SE.setTheme(t)
+  renderSettingsScreen()
+  toast(t === 'dark' ? 'Mörkt läge på' : 'Ljust läge på', '#4680ff')
+}
+
+function _renderSettingsShield() {
+  return `
+    <div class="settings-section-h1">SEOZ Shield</div>
+    <div class="settings-section-sub">Annons- och spårningsblockerare plus automatisk hantering av cookie-banners.</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon green">${SETTINGS_NAV_ICONS.shield}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Innehållsblockering</div>
+          <div class="settings-row-sub">Stoppar reklam-trackers innan de kontaktas</div>
+        </div>
+        <div class="settings-row-action">
+          <label class="set-toggle"><input type="checkbox" id="settingsBlockerToggle" ${blockerOn ? 'checked' : ''} onchange="toggleBlockerEnabled()"><div class="set-toggle-slider"></div></label>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-card-h">Cookie-banners</div>
+      <div class="settings-row">
+        <div style="flex:1;font-size:12px;color:var(--ink-2);line-height:1.5">
+          När en cookie-banner dyker upp på en sajt — vad ska SEOZ Browser göra?
+        </div>
+      </div>
+      <div class="settings-row" style="gap:8px">
+        <div class="cookie-seg" style="display:flex;flex:1;background:var(--panel);border-radius:7px;padding:2px;gap:1px">
+          <button class="cookie-seg-btn ${_cookieMode==='off'?'active':''}" onclick="setCookieMode('off')" style="flex:1">Av</button>
+          <button class="cookie-seg-btn ${_cookieMode==='accept'?'active accept':''}" onclick="setCookieMode('accept')" style="flex:1">Acceptera alla</button>
+          <button class="cookie-seg-btn ${_cookieMode==='reject'?'active reject':''}" onclick="setCookieMode('reject')" style="flex:1">Neka alla</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsPermissions() {
+  return `
+    <div class="settings-section-h1">Webbplatsbehörigheter</div>
+    <div class="settings-section-sub">Sajter du har sagt ja eller nej till för kamera, mikrofon, skärmdelning eller urklipp.</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="padding:0">
+        <div id="settingsPermsList" style="flex:1;padding:14px 18px">Laddar...</div>
+      </div>
+    </div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="gap:8px;justify-content:flex-end">
+        <button class="settings-btn" onclick="renderSitePermissions()">Uppdatera</button>
+        <button class="settings-btn danger" onclick="clearAllSitePermissions()">Rensa alla val</button>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsDefault() {
+  return `
+    <div class="settings-section-h1">Standardwebbläsare</div>
+    <div class="settings-section-sub">Sätt SEOZ Browser som standardwebbläsare på din dator så https-länkar öppnas här.</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.default}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title" id="settingsDefaultBrowser">Kontrollerar...</div>
+          <div class="settings-row-sub">Endast Windows just nu</div>
+        </div>
+        <div class="settings-row-action" id="settingsDefaultBrowserAction"></div>
+      </div>
+    </div>
+  `
+}
+function _settingsPostDefault() {
+  if (SE.isWindows && SE.isDefaultBrowser) {
+    SE.isDefaultBrowser().then(isDefault => {
+      const sub = document.getElementById('settingsDefaultBrowser')
+      const act = document.getElementById('settingsDefaultBrowserAction')
+      if (sub) sub.textContent = isDefault ? 'SEOZ Browser är standard' : 'Inte standardwebbläsare'
+      if (act) {
+        act.innerHTML = isDefault
+          ? '<span class="set-badge set-badge-green" style="background:rgba(44,168,127,.10);color:var(--g);padding:4px 10px;border-radius:7px;font-size:10.5px;font-weight:600">✓ Standard</span>'
+          : '<button class="settings-btn primary" onclick="doSetDefaultBrowser()">Sätt som standard</button>'
+      }
+    })
+  } else {
+    const sub = document.getElementById('settingsDefaultBrowser')
+    if (sub) sub.textContent = 'Endast Windows'
+  }
+}
+
+function _renderSettingsAi() {
+  const apiCard = (label, statusId, inputId, placeholder, saveFn, removeFn, hintURL, hintText, color) => `
+    <div class="settings-card">
+      <div class="settings-card-h">${esc(label)}</div>
+      <div class="settings-row" style="gap:10px">
+        <div class="settings-row-content">
+          <div class="settings-row-sub">${esc(hintText)} · <a onclick="SE.openExternal('${esc(hintURL)}')" style="color:var(--p);cursor:pointer;text-decoration:none">${esc(new URL(hintURL).hostname)}</a></div>
+        </div>
+        <span id="${statusId}" class="set-api-status unset" style="font-size:10px;font-weight:600;padding:3px 9px;border-radius:6px;background:var(--panel);color:var(--ink-3)">Ej konfigurerad</span>
+      </div>
+      <div class="settings-row" style="gap:8px">
+        <input class="settings-input" id="${inputId}" type="password" placeholder="${esc(placeholder)}">
+        <button class="settings-btn primary" onclick="${saveFn}">Spara</button>
+        <button class="settings-btn danger" onclick="${removeFn}" title="Ta bort"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/></svg></button>
+      </div>
+    </div>
+  `
+  return `
+    <div class="settings-section-h1">AI-nycklar</div>
+    <div class="settings-section-sub">Använd dina egna API-nycklar för Claude, OpenAI och ElevenLabs. Nycklarna sparas krypterat lokalt på din dator. Inga avgifter mellan dig och leverantören.</div>
+    ${apiCard('Anthropic (Claude)',  'settingsAnthropicKey',  'anthropicKeyInput',  'sk-ant-...', 'saveAnthropicKey()',  'removeAnthropicKey()',  'https://console.anthropic.com/account/keys',     'Claude-chatt + smart inbox',     'blue')}
+    ${apiCard('OpenAI',              'settingsOpenaiKey',     'openaiKeyInput',     'sk-...',     'saveOpenaiKey()',     'removeOpenaiKey()',     'https://platform.openai.com/api-keys',           'GPT-4o + Whisper röstchatt',     'green')}
+    ${apiCard('ElevenLabs',          'settingsElevenlabsKey', 'elevenlabsKeyInput', 'xi-...',     'saveElevenlabsKey()', 'removeElevenlabsKey()', 'https://elevenlabs.io/app/settings/api-keys',    'TTS-röst (annars browser-TTS)',  'orange')}
+  `
+}
+function _settingsPostAi() {
+  const setStatus = (id, present) => {
+    const el = document.getElementById(id); if (!el) return
+    el.textContent = present ? 'Konfigurerad' : 'Ej konfigurerad'
+    el.style.background = present ? 'rgba(44,168,127,.10)' : 'var(--panel)'
+    el.style.color      = present ? 'var(--g)' : 'var(--ink-3)'
+  }
+  SE.storeGet('anthropicApiKey', '').then(k => setStatus('settingsAnthropicKey', !!k))
+  SE.storeGet('openaiApiKey',    '').then(k => setStatus('settingsOpenaiKey',    !!k))
+  SE.storeGet('elevenlabsApiKey','').then(k => setStatus('settingsElevenlabsKey',!!k))
+}
+
+function _renderSettingsDiagnostik() {
+  return `
+    <div class="settings-section-h1">Diagnostik</div>
+    <div class="settings-section-sub">Kraschrapporter loggas alltid lokalt. Du kan välja att även skicka in dem till SEOZ för att hjälpa oss åtgärda buggar.</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon red">${SETTINGS_NAV_ICONS.diagnostik}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Skicka kraschrapporter till SEOZ</div>
+          <div class="settings-row-sub">Anonym installID + version + stack-trace. Ingen browsing-historik, inga lösenord eller mail.</div>
+        </div>
+        <div class="settings-row-action">
+          <div class="toggle-sw" id="crashOptInToggle" onclick="toggleCrashReporting()"></div>
+        </div>
+      </div>
+      <div class="settings-row clickable" onclick="showCrashLogModal()">
+        <div class="settings-row-icon gray"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Lokala kraschloggar</div>
+          <div class="settings-row-sub" id="crashLogCountText">Inga loggar hittade</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsJuridiskt() {
+  return `
+    <div class="settings-section-h1">Juridiskt</div>
+    <div class="settings-section-sub">Vilka data SEOZ Browser lagrar och vilka villkor som gäller när du använder appen.</div>
+
+    <div class="settings-card">
+      <div class="settings-row clickable" onclick="showLegalDoc('privacy')">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.shield}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Integritetspolicy</div>
+          <div class="settings-row-sub">Vad SEOZ Browser lagrar och hur datan behandlas</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+      <div class="settings-row clickable" onclick="showLegalDoc('terms')">
+        <div class="settings-row-icon purple">${SETTINGS_NAV_ICONS.juridiskt}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Användarvillkor</div>
+          <div class="settings-row-sub">Licens, ansvarsbegränsning och tillämplig lag</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsSystem() {
+  return `
+    <div class="settings-section-h1">System</div>
+    <div class="settings-section-sub">Versionsinformation, uppdateringar och MCP-server.</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon gray">${SETTINGS_NAV_ICONS.system}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Version</div>
+          <div class="settings-row-sub" id="settingsVersion">v—</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn" onclick="SE.updaterCheck();toast('Söker efter uppdateringar...','#4680ff')">Sök uppdateringar</button>
+        </div>
+      </div>
+      <div class="settings-row">
+        <div class="settings-row-icon blue"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">MCP-server (Claude Code)</div>
+          <div class="settings-row-sub" style="font-family:'JetBrains Mono', ui-monospace, monospace">http://127.0.0.1:19532/sse</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn" onclick="_settingsCopyMcp(this)">Kopiera</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+function _settingsPostSystem() {
+  SE.updaterGetVersion().then(v => {
+    const el = document.getElementById('settingsVersion')
+    if (el) el.textContent = 'v' + v
+  })
+}
+
 // ══════════════════════════════════════════════════════
 //  CLIENT SELECTION & DATA FETCHING
 // ══════════════════════════════════════════════════════
@@ -9527,6 +10384,21 @@ async function skipAuth() {
   updateSyncUI()
   toast('Browsern fungerar utan SEOZ-konto. Anslut senare i Inställningar.', '#4680ff')
 }
+
+// Dismiss the profile picker without creating a profile. init() returns
+// early when profiles.length === 0, so this also runs the bootstrap
+// steps (renderTabs + overlay sync) that init() would have done — that
+// way the home overlay actually renders. Auth is auto-skipped too;
+// users can connect later via Inställningar.
+async function skipProfileSetup() {
+  hideProfilePicker()
+  try { await SE.storeSet('skippedAuth', true) } catch (_) {}
+  document.getElementById('auth')?.classList.add('gone')
+  if (typeof renderTabs === 'function') renderTabs()
+  if (typeof syncOverlayVisibility === 'function') syncOverlayVisibility()
+  if (typeof updateSyncUI === 'function') updateSyncUI()
+}
+window.skipProfileSetup = skipProfileSetup
 
 // Re-open the auth screen — used by Settings → "Anslut SEOZ-konto"
 // when the user previously skipped (or disconnected) and now wants in.
@@ -10591,7 +11463,7 @@ function buildChromeMenu() {
     { icon: ico.split,     label: _splitWebviews.has(activeId) ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\', action: () => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() } },
     '---',
     { icon: isDark ? ico.sun : ico.moon, label: isDark ? 'Ljust tema' : 'Mörkt tema', shortcut:'', action: () => toggleTheme() },
-    { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => togglePanel('settings') },
+    { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => openSettings() },
   ]
   // Make the zoom-row icon available to the zoom block below
   items._zoomIcon = ico.zoomIn
@@ -10691,7 +11563,7 @@ async function buildUserMenu() {
     { icon: ico.star,     label: 'Bokmärken',         action: () => toggleBookmark() },
     { icon: ico.clock,    label: 'Historik',          action: () => openHistory() },
     'sep',
-    { icon: ico.settings, label: 'Inställningar',     action: () => togglePanel('settings') },
+    { icon: ico.settings, label: 'Inställningar',     action: () => openSettings() },
   ]
   items.forEach(item => {
     if (item === 'sep') {

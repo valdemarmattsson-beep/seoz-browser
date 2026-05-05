@@ -1401,9 +1401,18 @@ input,textarea,select{user-select:text}
 .client-sel-drop-item.active{color:var(--p);font-weight:600}
 .client-sel-drop-item .client-sel-dot{width:8px;height:8px}
 .client-sel-drop-hdr{
-  padding:6px 12px 4px;font-size:9px;font-weight:700;letter-spacing:.06em;
+  padding:6px 8px 4px 12px;font-size:9px;font-weight:700;letter-spacing:.06em;
   text-transform:uppercase;color:var(--muted);
+  display:flex;align-items:center;gap:4px;
 }
+.client-sel-refresh{
+  width:22px;height:22px;border-radius:5px;border:none;background:transparent;
+  color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;
+  flex-shrink:0;transition:background .12s,color .12s;font-family:inherit;
+}
+.client-sel-refresh svg{width:12px;height:12px}
+.client-sel-refresh:hover{background:var(--panel);color:var(--p)}
+.client-sel-refresh:active svg{animation:orbit-spin .6s linear}
 
 /* Context menu (right-click) */
 .ctx-menu{
@@ -8949,7 +8958,14 @@ function renderClientSelector(bar) {
 
   const drop = document.createElement('div')
   drop.className = 'client-sel-drop'
-  drop.innerHTML = '<div class="client-sel-drop-hdr">Klienter</div>'
+  drop.innerHTML = `
+    <div class="client-sel-drop-hdr">
+      <span style="flex:1">Klienter</span>
+      <button class="client-sel-refresh" type="button" onclick="event.stopPropagation();forceRefreshClients()" title="Tvinga synk från seoz.io">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+      </button>
+    </div>
+  `
 
   if (synced.clients.length) {
     synced.clients.forEach((c, i) => {
@@ -8987,12 +9003,16 @@ function toggleClientDrop(wrap) {
   }
 }
 
-async function refreshClientsKeepDropOpen() {
+async function refreshClientsKeepDropOpen(opts = {}) {
   const key = await SE.getApiKey()
   if (!key) return
   try {
     const res = await SE.triggerSync(key)
-    if (!res || !res.ok) return
+    if (!res || !res.ok) {
+      if (opts.verbose) toast('Synk misslyckades: ' + (res?.error || 'okänt fel'), '#dc2626')
+      return
+    }
+    const beforeCount = synced.clients.length
     synced.user = res.user
     synced.workspace = res.workspace
     synced.clients = res.clients || []
@@ -9006,8 +9026,21 @@ async function refreshClientsKeepDropOpen() {
     const newDrop = document.querySelector('.client-sel-drop')
     if (newDrop) newDrop.classList.add('open')
     if (currentPanel) renderPanelContent(currentPanel)
-  } catch (_) {}
+    if (opts.verbose) {
+      const after = synced.clients.length
+      const delta = after - beforeCount
+      const deltaStr = delta === 0 ? 'oförändrat' : (delta > 0 ? `+${delta} ny` : `${delta} borttagna`)
+      toast(`Synk klar — ${after} klienter (${deltaStr})`, '#2ca87f')
+    }
+  } catch (err) {
+    if (opts.verbose) toast('Synk-fel: ' + (err?.message || 'okänt'), '#dc2626')
+  }
 }
+
+// Manual refresh trigger — bound to the button in the dropdown
+// header so the user can force a fresh fetch without waiting for
+// auto-sync.
+window.forceRefreshClients = () => refreshClientsKeepDropOpen({ verbose: true })
 
 function closeClientDrop() {
   document.querySelectorAll('.client-sel-drop.open').forEach(d => d.classList.remove('open'))

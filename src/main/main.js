@@ -245,40 +245,98 @@ function createWindow() {
     frame: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webviewTag: true,
+      contextIsolation: true,        // page JS can't reach preload internals
+      nodeIntegration: false,        // page JS can't require() Node modules
+      webviewTag: true,              // we use <webview> for tabs
+      // sandbox: false because preload.js does require('electron') for
+      // ipcRenderer + contextBridge. Enabling sandbox would force a preload
+      // rewrite to the limited renderer-process Electron API. Tracked as
+      // hardening task — preload still runs in an isolated world and
+      // contextIsolation is on, so page → preload escape is the only
+      // realistic remaining threat surface.
       sandbox: false,
     },
     show: false,
     icon: APP_ICON,
   })
 
-  // Grant permissions for voice chat, clipboard, notifications, full-
-  // screen, pointer lock etc. The `fullscreen` permission is what
-  // sites use when calling element.requestFullscreen() — without it
-  // in the allowed list any in-page fullscreen button (e.g. SEOZ
-  // portal's expand-chat icon, video players, charts) silently no-
-  // ops. `pointerLock` covers the same flow for some games / canvas
-  // editors. `geolocation` and `midi` stay denied — sites can ask
-  // separately if you ever need them.
-  const ALLOWED_PERMISSIONS = [
-    'media',                          // camera/mic combined
-    'microphone',
-    'audioCapture',
-    'clipboard-read',
+  // ── Permission policy ──────────────────────────────────────────
+  // Three buckets:
+  //
+  //   ALLOW_GLOBAL         Granted on every origin without prompt. These
+  //                        are low-risk capabilities Chromium also lets
+  //                        sites use freely (clipboard-write,
+  //                        notifications, fullscreen, pointer lock).
+  //
+  //   ALLOW_TRUSTED_ONLY   Granted only on origins in TRUSTED_HOSTS.
+  //                        Camera / mic / screen-capture / clipboard-read
+  //                        live here. Other origins get DENIED — until
+  //                        we ship a per-origin user prompt UI we'd
+  //                        rather block than silently let any site
+  //                        access mic, screen, or read clipboard.
+  //
+  //   (everything else)    Denied. geolocation, midi, USB, hid, serial,
+  //                        bluetooth, etc.
+  //
+  // Older releases (≤ v1.10.29) granted ALLOW_TRUSTED_ONLY to every
+  // origin without prompting. Most users never noticed because they
+  // only ever use cam/mic on seoz.io, but on a public release a
+  // malicious page could enumerate getUserMedia / read clipboard
+  // without consent. This is the closest we can ship before building
+  // a real per-origin prompt UI.
+  const ALLOW_GLOBAL = new Set([
     'clipboard-write',
     'clipboard-sanitized-write',
     'notifications',
-    'display-capture',                // getDisplayMedia for screen share
-    'fullscreen',                     // element.requestFullscreen()
-    'pointerLock',                    // canvas / game pointer capture
+    'fullscreen',          // element.requestFullscreen() — used by SEOZ portal
+    'pointerLock',         // canvas/game pointer capture
+  ])
+  const ALLOW_TRUSTED_ONLY = new Set([
+    'media',               // camera + mic combined (Chrome's getUserMedia)
+    'microphone',
+    'audioCapture',
+    'display-capture',     // getDisplayMedia (screen share)
+    'clipboard-read',      // privacy-sensitive: can read OTHER apps' clipboard
+  ])
+  // Hosts where we trust the page enough to grant ALLOW_TRUSTED_ONLY
+  // without a prompt. Subdomains match (foo.seoz.io counts as seoz.io).
+  // Add common voice/video conferencing services so users don't get
+  // mysteriously-broken cam/mic on Meet/Zoom/Teams. Anything outside
+  // this list gets denied.
+  const TRUSTED_HOSTS = [
+    'seoz.io', 'seoz.se',
+    'meet.google.com', 'meet.jit.si',
+    'zoom.us', 'zoom.com',
+    'teams.microsoft.com', 'teams.live.com',
+    'whereby.com', 'daily.co',
+    'webex.com', 'gotomeeting.com',
+    'discord.com', 'discordapp.com',
+    'slack.com',
+    'localhost',
   ]
+  function _hostIsTrusted(url) {
+    try {
+      const u = new URL(url || '')
+      const h = (u.hostname || '').toLowerCase()
+      if (!h) return false
+      return TRUSTED_HOSTS.some(d => h === d || h.endsWith('.' + d))
+    } catch (_) { return false }
+  }
+  function _decidePermission(webContents, permission) {
+    if (ALLOW_GLOBAL.has(permission)) return true
+    if (ALLOW_TRUSTED_ONLY.has(permission)) {
+      const url = (() => {
+        try { return webContents?.getURL?.() || '' } catch (_) { return '' }
+      })()
+      return _hostIsTrusted(url)
+    }
+    return false
+  }
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    callback(ALLOWED_PERMISSIONS.includes(permission))
+    callback(_decidePermission(webContents, permission))
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    return ALLOWED_PERMISSIONS.includes(permission)
+    return _decidePermission(webContents, permission)
   })
 
   // Meeting transcription — grant getDisplayMedia() with system-loopback
@@ -490,30 +548,90 @@ ipcMain.handle('passwords-delete', (_e, id) => {
 })
 
 // ── Master-PIN guard for the password manager ──
-// Stored as { salt, hash } encrypted via safeStorage so even profile-
-// JSON access doesn't reveal the hash. Hash is PBKDF2 / SHA-256 with
-// 100k iterations — overkill for a 4-8 digit PIN but cheap to verify.
-function _pinHash(pin, salt) {
-  return crypto.pbkdf2Sync(String(pin), salt, 100_000, 32, 'sha256').toString('hex')
+// Stored as { salt, hash, v } encrypted via safeStorage so even raw
+// profile-JSON access doesn't reveal the hash.
+//
+// Hash versions:
+//   v=1  PBKDF2-SHA256, 100k iterations  (legacy, pre v1.10.30)
+//   v=2  PBKDF2-SHA256, 600k iterations  (OWASP 2024 minimum)
+//
+// On successful verify against a v=1 record we transparently re-hash
+// with v=2 so existing users get the upgrade the next time they
+// unlock the password manager. No re-prompt, no migration screen.
+const PIN_HASH_V_LATEST = 2
+const PIN_ITERATIONS = { 1: 100_000, 2: 600_000 }
+
+function _pinHash(pin, salt, v = PIN_HASH_V_LATEST) {
+  const iters = PIN_ITERATIONS[v] || PIN_ITERATIONS[PIN_HASH_V_LATEST]
+  return crypto.pbkdf2Sync(String(pin), salt, iters, 32, 'sha256').toString('hex')
+}
+
+// Constant-time comparison so a timing-side-channel can't be used to
+// learn how many leading hash bytes the attacker got right.
+function _ctEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string' || a.length !== b.length) {
+    // Still run a comparison so we don't leak length-mismatch through timing.
+    try { crypto.timingSafeEqual(Buffer.alloc(32), Buffer.alloc(32)) } catch (_) {}
+    return false
+  }
+  try {
+    return crypto.timingSafeEqual(Buffer.from(a, 'hex'), Buffer.from(b, 'hex'))
+  } catch (_) {
+    return false
+  }
+}
+
+// In-memory rate limiter for PIN verify. Resets on app restart, so an
+// attacker would have to relaunch the app between rounds — by which
+// point our exponential lockout has already throttled them well below
+// any practical brute-force speed.
+//
+//   1-4 fails:   no delay
+//   5-9 fails:   30 s lockout per attempt (escalates to 5 min after 10+)
+//   10+ fails:   5 min lockout per attempt
+//
+// PIN verify takes ~250ms with v=2 PBKDF2 (600k iters), so even without
+// the lockout, brute-forcing a 6-digit PIN would take ~70 hours of
+// continuous CPU. With the lockout it's effectively impossible.
+const _pinLimiter = { fails: 0, lockedUntil: 0 }
+function _pinLockoutMs(failCount) {
+  if (failCount < 5) return 0
+  if (failCount < 10) return 30_000
+  return 300_000
 }
 
 ipcMain.handle('passwords-pin-status', () => {
   const enc = PM.profileGet('passwordsPinHashEnc', null)
-  return { hasPin: !!enc }
+  const now = Date.now()
+  const lockedFor = Math.max(0, _pinLimiter.lockedUntil - now)
+  return { hasPin: !!enc, lockedForMs: lockedFor, fails: _pinLimiter.fails }
 })
 
 ipcMain.handle('passwords-pin-set', (_e, pin) => {
   const v = String(pin || '')
   if (v.length < 4) return { ok: false, error: 'PIN måste vara minst 4 tecken' }
   const salt = crypto.randomBytes(16).toString('hex')
-  const hash = _pinHash(v, salt)
-  const enc = _encryptPassword(JSON.stringify({ salt, hash, v: 1 }))
+  const hash = _pinHash(v, salt, PIN_HASH_V_LATEST)
+  const enc = _encryptPassword(JSON.stringify({ salt, hash, v: PIN_HASH_V_LATEST }))
   if (!enc) return { ok: false, error: 'OS-kryptering otillgänglig' }
   PM.profileSet('passwordsPinHashEnc', enc)
+  // Setting/resetting the PIN clears any lockout state.
+  _pinLimiter.fails = 0
+  _pinLimiter.lockedUntil = 0
   return { ok: true }
 })
 
 ipcMain.handle('passwords-pin-verify', (_e, pin) => {
+  const now = Date.now()
+  if (now < _pinLimiter.lockedUntil) {
+    return {
+      ok: false,
+      reason: 'locked',
+      lockedForMs: _pinLimiter.lockedUntil - now,
+      fails: _pinLimiter.fails,
+    }
+  }
+
   const enc = PM.profileGet('passwordsPinHashEnc', null)
   if (!enc) return { ok: false, reason: 'no-pin' }
   const decrypted = _decryptPassword(enc)
@@ -521,12 +639,47 @@ ipcMain.handle('passwords-pin-verify', (_e, pin) => {
   let parsed
   try { parsed = JSON.parse(decrypted) } catch (_) { return { ok: false, reason: 'corrupt' } }
   if (!parsed.salt || !parsed.hash) return { ok: false, reason: 'corrupt' }
-  const computed = _pinHash(String(pin || ''), parsed.salt)
-  return { ok: computed === parsed.hash }
+
+  // Use the version stored with the record so legacy v=1 PINs still verify.
+  const recordV = parsed.v || 1
+  const computed = _pinHash(String(pin || ''), parsed.salt, recordV)
+  const ok = _ctEqual(computed, parsed.hash)
+
+  if (ok) {
+    // Successful unlock — reset the rate limiter.
+    _pinLimiter.fails = 0
+    _pinLimiter.lockedUntil = 0
+
+    // Transparent migration: if the stored record is on an older
+    // hash version, re-hash with the latest and store. User sees
+    // nothing different.
+    if (recordV < PIN_HASH_V_LATEST) {
+      try {
+        const newSalt = crypto.randomBytes(16).toString('hex')
+        const newHash = _pinHash(String(pin || ''), newSalt, PIN_HASH_V_LATEST)
+        const newEnc = _encryptPassword(JSON.stringify({ salt: newSalt, hash: newHash, v: PIN_HASH_V_LATEST }))
+        if (newEnc) PM.profileSet('passwordsPinHashEnc', newEnc)
+      } catch (_) { /* keep verifying — re-hash failure isn't fatal */ }
+    }
+    return { ok: true }
+  }
+
+  // Failed attempt — bump counter and apply (potentially) a new lockout.
+  _pinLimiter.fails += 1
+  const lockMs = _pinLockoutMs(_pinLimiter.fails)
+  if (lockMs > 0) _pinLimiter.lockedUntil = Date.now() + lockMs
+  return {
+    ok: false,
+    reason: 'wrong',
+    fails: _pinLimiter.fails,
+    lockedForMs: lockMs,
+  }
 })
 
 ipcMain.handle('passwords-pin-clear', () => {
   PM.profileDelete('passwordsPinHashEnc')
+  _pinLimiter.fails = 0
+  _pinLimiter.lockedUntil = 0
   return { ok: true }
 })
 
@@ -2212,8 +2365,11 @@ app.on('web-contents-created', (_e, contents) => {
               },
             } : {}),
             webPreferences: {
-              contextIsolation: true,
-              nodeIntegration: false,
+              contextIsolation: true,    // OAuth page JS isolated from preload
+              nodeIntegration: false,    // OAuth page can't reach Node
+              // sandbox: false because webview-preload.js does require('electron')
+              // for ipcRenderer. OAuth popups get the same hardening as regular
+              // tabs — preload is in an isolated world, page can't touch it.
               sandbox: false,
               // Run the same login-form detector as in regular tabs so
               // OAuth popups (Sign in with Google etc.) get autofill
@@ -2278,9 +2434,15 @@ function createSeozPopup(url, features) {
     show: false,
     webPreferences: {
       preload: path.join(__dirname, '../preload/preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      webviewTag: true,
+      contextIsolation: true,        // page JS can't reach preload internals
+      nodeIntegration: false,        // page JS can't require() Node modules
+      webviewTag: true,              // we use <webview> for tabs
+      // sandbox: false because preload.js does require('electron') for
+      // ipcRenderer + contextBridge. Enabling sandbox would force a preload
+      // rewrite to the limited renderer-process Electron API. Tracked as
+      // hardening task — preload still runs in an isolated world and
+      // contextIsolation is on, so page → preload escape is the only
+      // realistic remaining threat surface.
       sandbox: false,
     },
   })

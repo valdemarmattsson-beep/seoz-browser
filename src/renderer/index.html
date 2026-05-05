@@ -10357,8 +10357,37 @@ async function submitPwAuth() {
     const res = await SE.passwordsPinVerify(pin).catch(() => ({ ok: false }))
     if (res.ok) {
       _resolvePwAuth(true)
+    } else if (res.reason === 'locked') {
+      // Server-side rate limiter has us locked out — surface clear copy
+      // and disable input until the lockout expires. Counts down in s.
+      const sec = Math.ceil((res.lockedForMs || 30000) / 1000)
+      errEl.textContent = `För många försök — försök igen om ${sec}s`
+      inp.classList.add('error')
+      inp.value = ''
+      submit.disabled = true
+      inp.disabled = true
+      const tick = () => {
+        const left = Math.max(0, Math.ceil(((Date.now() < window._pwAuthUnlockAt ? window._pwAuthUnlockAt - Date.now() : 0))/1000))
+        if (left > 0) {
+          errEl.textContent = `För många försök — försök igen om ${left}s`
+          window._pwAuthLockoutTimer = setTimeout(tick, 250)
+        } else {
+          submit.disabled = false
+          inp.disabled = false
+          errEl.textContent = ''
+          inp.classList.remove('error')
+          inp.focus()
+        }
+      }
+      window._pwAuthUnlockAt = Date.now() + (res.lockedForMs || 30000)
+      clearTimeout(window._pwAuthLockoutTimer)
+      tick()
     } else {
-      errEl.textContent = 'Fel PIN — försök igen'
+      const fails = res.fails || 0
+      // After 3 fails, hint that there's an escalating lockout coming.
+      errEl.textContent = fails >= 3
+        ? `Fel PIN — ${5 - fails} försök kvar innan paus`
+        : 'Fel PIN — försök igen'
       inp.classList.add('error')
       inp.value = ''
       inp.focus()

@@ -462,6 +462,47 @@ ipcMain.handle('passwords-delete', (_e, id) => {
   return true
 })
 
+// ── Master-PIN guard for the password manager ──
+// Stored as { salt, hash } encrypted via safeStorage so even profile-
+// JSON access doesn't reveal the hash. Hash is PBKDF2 / SHA-256 with
+// 100k iterations — overkill for a 4-8 digit PIN but cheap to verify.
+function _pinHash(pin, salt) {
+  return crypto.pbkdf2Sync(String(pin), salt, 100_000, 32, 'sha256').toString('hex')
+}
+
+ipcMain.handle('passwords-pin-status', () => {
+  const enc = PM.profileGet('passwordsPinHashEnc', null)
+  return { hasPin: !!enc }
+})
+
+ipcMain.handle('passwords-pin-set', (_e, pin) => {
+  const v = String(pin || '')
+  if (v.length < 4) return { ok: false, error: 'PIN måste vara minst 4 tecken' }
+  const salt = crypto.randomBytes(16).toString('hex')
+  const hash = _pinHash(v, salt)
+  const enc = _encryptPassword(JSON.stringify({ salt, hash, v: 1 }))
+  if (!enc) return { ok: false, error: 'OS-kryptering otillgänglig' }
+  PM.profileSet('passwordsPinHashEnc', enc)
+  return { ok: true }
+})
+
+ipcMain.handle('passwords-pin-verify', (_e, pin) => {
+  const enc = PM.profileGet('passwordsPinHashEnc', null)
+  if (!enc) return { ok: false, reason: 'no-pin' }
+  const decrypted = _decryptPassword(enc)
+  if (!decrypted) return { ok: false, reason: 'decrypt-failed' }
+  let parsed
+  try { parsed = JSON.parse(decrypted) } catch (_) { return { ok: false, reason: 'corrupt' } }
+  if (!parsed.salt || !parsed.hash) return { ok: false, reason: 'corrupt' }
+  const computed = _pinHash(String(pin || ''), parsed.salt)
+  return { ok: computed === parsed.hash }
+})
+
+ipcMain.handle('passwords-pin-clear', () => {
+  PM.profileDelete('passwordsPinHashEnc')
+  return { ok: true }
+})
+
 // ── DevTools ──
 ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
 

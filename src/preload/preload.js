@@ -28,6 +28,11 @@ contextBridge.exposeInMainWorld('seoz', {
   passwordsAdd:    (entry)         => ipcRenderer.invoke('passwords-add', entry),
   passwordsUpdate: (id, updates)   => ipcRenderer.invoke('passwords-update', { id, updates }),
   passwordsDelete: (id)            => ipcRenderer.invoke('passwords-delete', id),
+  // Master-PIN guard for the password manager modal
+  passwordsPinStatus: ()    => ipcRenderer.invoke('passwords-pin-status'),
+  passwordsPinSet:    (pin) => ipcRenderer.invoke('passwords-pin-set', pin),
+  passwordsPinVerify: (pin) => ipcRenderer.invoke('passwords-pin-verify', pin),
+  passwordsPinClear:  ()    => ipcRenderer.invoke('passwords-pin-clear'),
 
   // DevTools
   toggleDevTools: () => ipcRenderer.send('toggle-devtools'),

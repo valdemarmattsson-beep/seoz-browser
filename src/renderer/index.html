@@ -1700,6 +1700,159 @@ input,textarea,select{user-select:text}
 .act-btn:hover{background:var(--border)}
 
 /* ══════════════════════════════════════════════════════════════════
+   Tracking panel — Klientinsikter-style overview
+   "How are we doing?" at a glance, not a wall of individual keywords.
+   Mirrors the platform's ClientOverviewDashboard structure but
+   compressed for the 280px sidebar width.
+   ══════════════════════════════════════════════════════════════════ */
+.tr-header{
+  display:flex;justify-content:space-between;align-items:center;
+  margin-bottom:10px;
+}
+.tr-header-title{
+  font-family:'Inter Tight', Inter, sans-serif;
+  font-size:13px;font-weight:600;color:var(--head);letter-spacing:-0.01em;
+}
+.tr-header-sub{font-size:10.5px;color:var(--ink-3);margin-top:1px}
+.tr-period-seg{
+  display:inline-flex;background:var(--panel);border-radius:6px;padding:2px;gap:1px;
+}
+.tr-period-btn{
+  border:none;background:transparent;cursor:pointer;
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;font-weight:600;color:var(--ink-3);
+  padding:4px 9px;border-radius:4px;
+  transition:background var(--dur-fast) var(--ease-out),color var(--dur-fast) var(--ease-out);
+}
+.tr-period-btn:hover{color:var(--ink-1)}
+.tr-period-btn.active{background:var(--card);color:var(--head);box-shadow:0 1px 2px rgba(0,0,0,.06)}
+
+/* KPI grid — 2x2 mini cards */
+.tr-grid{
+  display:grid;grid-template-columns:1fr 1fr;gap:8px;
+  margin-bottom:14px;
+}
+.tr-kpi{
+  background:var(--card);border:1px solid var(--border);border-radius:8px;
+  padding:10px 11px;display:flex;flex-direction:column;gap:3px;
+  transition:border-color var(--dur-fast) var(--ease-out);
+}
+.tr-kpi:hover{border-color:var(--border-strong)}
+.tr-kpi-label{
+  font-size:10px;color:var(--ink-3);font-weight:500;
+  display:flex;align-items:center;gap:5px;letter-spacing:0;
+}
+.tr-kpi-label svg{width:11px;height:11px}
+.tr-kpi-num{
+  font-family:'Inter Tight', Inter, sans-serif;
+  font-size:18px;font-weight:700;color:var(--head);
+  letter-spacing:-0.02em;font-variant-numeric:tabular-nums;
+  line-height:1.1;
+}
+.tr-kpi-num.muted{color:var(--ink-3)}
+.tr-kpi-delta{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;font-weight:600;font-variant-numeric:tabular-nums;
+  display:inline-flex;align-items:center;gap:3px;
+}
+.tr-kpi-delta.up{color:var(--live)}
+.tr-kpi-delta.dn{color:var(--ds-danger)}
+.tr-kpi-delta.flat{color:var(--ink-3)}
+
+/* Section header — softer than the old shouty .sh */
+.tr-section-h{
+  font-size:10.5px;font-weight:600;color:var(--ink-2);
+  letter-spacing:0;text-transform:none;
+  margin:14px 0 8px;display:flex;align-items:center;justify-content:space-between;
+}
+.tr-section-h:first-child{margin-top:0}
+
+/* Mover row — keyword with position-change delta */
+.tr-mover{
+  display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);
+}
+.tr-mover:last-child{border-bottom:none}
+.tr-mover-delta{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:11px;font-weight:700;font-variant-numeric:tabular-nums;
+  width:32px;text-align:right;flex-shrink:0;
+}
+.tr-mover-delta.up{color:var(--live)}
+.tr-mover-delta.dn{color:var(--ds-danger)}
+.tr-mover-kw{flex:1;font-size:11.5px;color:var(--head);min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-mover-pos{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+  flex-shrink:0;
+}
+
+/* Top keyword row — keyword with click count */
+.tr-top{
+  display:flex;align-items:center;gap:8px;padding:7px 0;
+  border-bottom:1px solid var(--border);
+}
+.tr-top:last-child{border-bottom:none}
+.tr-top-rank{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;font-weight:700;font-variant-numeric:tabular-nums;
+  width:24px;text-align:center;flex-shrink:0;
+  padding:2px 0;border-radius:4px;
+  background:var(--panel);color:var(--ink-2);
+}
+.tr-top-rank.top3{background:var(--live-bg);color:var(--live)}
+.tr-top-rank.top10{background:var(--accent-soft);color:var(--accent)}
+.tr-top-kw{flex:1;font-size:11.5px;color:var(--head);min-width:0;
+  white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.tr-top-clicks{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;color:var(--ink-3);font-variant-numeric:tabular-nums;
+  flex-shrink:0;
+}
+
+/* AI visibility row — model name + bar + score */
+.tr-ai-row{
+  display:flex;align-items:center;gap:8px;padding:5px 0;
+  font-size:11px;
+}
+.tr-ai-name{flex:0 0 64px;color:var(--ink-1);font-weight:500;font-size:11px}
+.tr-ai-bar{
+  flex:1;height:4px;background:var(--panel);border-radius:2px;overflow:hidden;
+  position:relative;
+}
+.tr-ai-bar-fill{
+  position:absolute;left:0;top:0;bottom:0;
+  border-radius:2px;
+  transition:width 600ms cubic-bezier(.4,0,.2,1);
+}
+.tr-ai-score{
+  font-family:'JetBrains Mono', ui-monospace, monospace;
+  font-size:10px;color:var(--ink-2);font-variant-numeric:tabular-nums;
+  flex:0 0 30px;text-align:right;
+}
+
+/* CTA — "Open in SEOZ" link */
+.tr-cta{
+  display:flex;align-items:center;justify-content:space-between;gap:8px;
+  margin-top:14px;padding:11px 12px;
+  background:var(--panel);border:1px solid var(--border);border-radius:8px;
+  cursor:pointer;text-decoration:none;color:inherit;
+  transition:border-color var(--dur-fast) var(--ease-out),background var(--dur-fast) var(--ease-out);
+}
+.tr-cta:hover{background:var(--hover);border-color:var(--border-strong)}
+.tr-cta-label{font-size:11.5px;color:var(--head);font-weight:500}
+.tr-cta-sub{font-size:10px;color:var(--ink-3);margin-top:1px}
+.tr-cta-arrow{color:var(--ink-2);flex-shrink:0;display:flex;align-items:center}
+
+/* Empty state */
+.tr-empty{
+  text-align:center;padding:20px 14px;
+  font-size:11.5px;color:var(--ink-3);line-height:1.5;
+}
+.tr-empty-hint{margin-top:6px;font-size:10.5px;color:var(--ink-3)}
+
+/* ══════════════════════════════════════════════════════════════════
    Tasks panel — v2 design system
    - Single priority signal per row: 3px left-edge accent (severity)
    - No tinted badges shouting; metadata is muted and tabular
@@ -2971,7 +3124,7 @@ input,textarea,select{user-select:text}
       </div>
       <div class="di" id="di-tracking" onclick="togglePanel('tracking')" style="color:#2ca87f">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
-        <div class="dtt">Tracking</div>
+        <div class="dtt">Insikter</div>
       </div>
       <div class="di" id="di-agentready" onclick="togglePanel('agentready')" style="color:#7c3aed">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2 12 12"/><path d="m16 6 6-4-2 6"/></svg>
@@ -8115,56 +8268,8 @@ async function renderPanelContent(name) {
     `
     if (cached) renderAgentReadyResult(cached)
   } else if (name === 'tracking') {
-    icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Tracking'
-    if (!window._trackingTab) window._trackingTab = 'keywords'
-    body.innerHTML = `
-      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px">
-        <div class="seo-sub-tab ${window._trackingTab==='keywords'?'active':''}" onclick="window._trackingTab='keywords';renderPanelContent('tracking')">Keywords</div>
-        <div class="seo-sub-tab ${window._trackingTab==='ai'?'active':''}" onclick="window._trackingTab='ai';renderPanelContent('tracking')">AI-synlighet</div>
-      </div>
-      <div id="trackingContent"></div>
-    `
-    const tc = document.getElementById('trackingContent')
-    if (window._trackingTab === 'keywords') {
-      if (synced.keywords && synced.keywords.length) {
-        let html = '<div class="sh">SPÅRADE KEYWORDS</div>'
-        synced.keywords.forEach(k => {
-          const pos = k.position || '—'
-          const cls = pos <= 3 ? 'kpt' : pos <= 10 ? 'kpm' : 'kpl'
-          const trend = k.trend > 0 ? `<span class="kw-d up">▲${k.trend}</span>` : k.trend < 0 ? `<span class="kw-d dn">▼${Math.abs(k.trend)}</span>` : '<span class="kw-d">—</span>'
-          html += `<div class="kw"><div class="kp ${cls}">${pos}</div><span class="kw-w">${esc(k.keyword)}</span><span class="kw-v">${fmtNum(k.clicks)}</span>${trend}</div>`
-        })
-        tc.innerHTML = html
-      } else {
-        tc.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se keywords.</p>'
-      }
-    } else {
-      if (synced.aiVisibility) {
-        const ai = synced.aiVisibility
-        const score = Math.round(ai.overallScore || 0)
-        const col = score >= 70 ? 'var(--g)' : score >= 40 ? 'var(--w)' : 'var(--r)'
-        let html = `
-          <div style="display:flex;align-items:center;gap:12px;margin:8px 0 16px">
-            <div class="score-ring">
-              <svg width="50" height="50"><circle cx="25" cy="25" r="20" fill="none" stroke="var(--border)" stroke-width="4"/><circle cx="25" cy="25" r="20" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.26} 126" stroke-linecap="round"/></svg>
-              <div class="score-num" style="color:${col}">${score}</div>
-            </div>
-            <div><div style="font-size:14px;font-weight:800;color:var(--head)">${score}%</div><div style="font-size:10px;color:var(--muted)">AI-synlighet</div></div>
-          </div>
-        `
-        if (ai.models && ai.models.length) {
-          html += '<div class="sh">PER MODELL</div>'
-          ai.models.forEach(m => {
-            const s = Math.round(m.score || 0)
-            const c = s >= 70 ? 'bg' : s >= 40 ? 'bw' : 'bb'
-            html += `<div class="mr"><span class="mrl"><span class="md db"></span>${esc(m.model)}</span><span class="bdg ${c}">${s}%</span></div>`
-          })
-        }
-        tc.innerHTML = html
-      } else {
-        tc.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient och synka för att se AI-synlighet.</p>'
-      }
-    }
+    icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Klientinsikter'
+    body.innerHTML = _renderTrackingOverview()
   } else if (name === 'tasks') {
     icon.innerHTML = _PANEL_ICONS.checkSq; title.textContent = 'Tasks'
     const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
@@ -11281,6 +11386,173 @@ async function toggleTask(taskId) {
     task.status = newStatus
   }
   renderPanelContent('tasks')
+}
+
+// ══════════════════════════════════════════════════════════════════
+//  Tracking → Klientinsikter renderer
+//  Overview-first view: how is the client doing right now? Mirrors the
+//  platform's ClientOverviewDashboard structure but condensed for the
+//  280px sidebar. Uses existing /keywords + /ai-visibility data —
+//  the platform link at the bottom takes the user to the full view.
+// ══════════════════════════════════════════════════════════════════
+function _renderTrackingOverview() {
+  const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
+  if (!clientObj) {
+    return `<div class="tr-empty">Välj en klient för att se översikten.</div>`
+  }
+
+  const kws = Array.isArray(synced.keywords) ? synced.keywords : []
+  const ai = synced.aiVisibility
+
+  // Derived KPIs from /keywords data (everything the browser already has)
+  const totalKws = kws.length
+  const top3Count = kws.filter(k => k.position && k.position <= 3).length
+  const top10Count = kws.filter(k => k.position && k.position <= 10).length
+  const totalClicks = kws.reduce((s, k) => s + (k.clicks || 0), 0)
+  const positioned = kws.filter(k => k.position && k.position > 0)
+  const avgPos = positioned.length
+    ? positioned.reduce((s, k) => s + k.position, 0) / positioned.length
+    : 0
+  // Aggregate trend: average of per-keyword trend (positive = positions improved)
+  const trended = kws.filter(k => typeof k.trend === 'number' && k.trend !== 0)
+  const trendAvg = trended.length
+    ? Math.round(trended.reduce((s, k) => s + k.trend, 0) / trended.length * 10) / 10
+    : 0
+  const aiScore = ai && ai.overallScore != null ? Math.round(ai.overallScore) : null
+
+  // ── Header ──
+  let html = `<div class="tr-header">
+    <div>
+      <div class="tr-header-title">${esc(clientObj.name)}</div>
+      <div class="tr-header-sub">Översikt · senaste 28 dagarna</div>
+    </div>
+  </div>`
+
+  // ── Empty state ──
+  if (totalKws === 0 && !ai) {
+    html += `<div class="tr-empty">Inga insikter ännu.<div class="tr-empty-hint">Synka klienten eller koppla GSC/GA4 i SEOZ-plattformen.</div></div>`
+    html += _renderTrackingCta(clientObj)
+    return html
+  }
+
+  // ── KPI grid (2x2) ──
+  // Position delta semantic: lower position is BETTER, so a negative
+  // trend (position went down numerically = up in ranking) is good.
+  // We invert the sign on display so users see "+3" when ranking improved.
+  const posDeltaShown = trendAvg !== 0 ? (-trendAvg) : 0
+  const posDeltaCls = posDeltaShown > 0 ? 'up' : posDeltaShown < 0 ? 'dn' : 'flat'
+  const posDeltaStr = posDeltaShown > 0 ? `+${posDeltaShown}` : posDeltaShown < 0 ? `${posDeltaShown}` : '—'
+
+  html += `<div class="tr-grid">
+    <div class="tr-kpi" title="Antal sökord på topp 3-position">
+      <div class="tr-kpi-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9H4.5a2.5 2.5 0 0 1 0-5H6"/><path d="M18 9h1.5a2.5 2.5 0 0 0 0-5H18"/><path d="M4 22h16"/><path d="M10 14.66V17c0 .55-.47.98-.97 1.21C7.85 18.75 7 20.24 7 22"/><path d="M14 14.66V17c0 .55.47.98.97 1.21C16.15 18.75 17 20.24 17 22"/><path d="M18 2H6v7a6 6 0 0 0 12 0V2Z"/></svg>
+        Topp 3
+      </div>
+      <div class="tr-kpi-num${top3Count === 0 ? ' muted' : ''}">${top3Count}</div>
+      <div class="tr-kpi-delta flat">${top10Count} på topp 10</div>
+    </div>
+    <div class="tr-kpi" title="Genomsnittlig sökmotor-position över alla sökord">
+      <div class="tr-kpi-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="20" x2="12" y2="10"/><line x1="18" y1="20" x2="18" y2="4"/><line x1="6" y1="20" x2="6" y2="16"/></svg>
+        Snittpos
+      </div>
+      <div class="tr-kpi-num${avgPos === 0 ? ' muted' : ''}">${avgPos > 0 ? avgPos.toFixed(1) : '—'}</div>
+      <div class="tr-kpi-delta ${posDeltaCls}">${posDeltaStr === '—' ? 'inga ändringar' : posDeltaShown > 0 ? `${posDeltaStr} förbättring` : `${posDeltaStr} sämre`}</div>
+    </div>
+    <div class="tr-kpi" title="Totala klick från alla spårade sökord">
+      <div class="tr-kpi-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11"/></svg>
+        Klick
+      </div>
+      <div class="tr-kpi-num${totalClicks === 0 ? ' muted' : ''}">${totalClicks > 0 ? fmtNum(totalClicks) : '—'}</div>
+      <div class="tr-kpi-delta flat">${totalKws} ${totalKws === 1 ? 'sökord' : 'sökord'}</div>
+    </div>
+    <div class="tr-kpi" title="Synlighet i AI-modeller (ChatGPT, Claude, Gemini m.fl.)">
+      <div class="tr-kpi-label">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v8"/><path d="m4.93 10.93 1.41 1.41"/><path d="M2 18h2"/><path d="M20 18h2"/><path d="m19.07 10.93-1.41 1.41"/><path d="M22 22H2"/><path d="m16 6-4 4-4-4"/><path d="M16 18a4 4 0 0 0-8 0"/></svg>
+        AI-synlighet
+      </div>
+      <div class="tr-kpi-num${aiScore == null ? ' muted' : ''}">${aiScore != null ? aiScore + '%' : '—'}</div>
+      <div class="tr-kpi-delta flat">${ai?.models?.length ? `${ai.models.length} modeller` : 'ej mätt'}</div>
+    </div>
+  </div>`
+
+  // ── Top movers ──
+  if (totalKws > 0) {
+    const movers = [...kws]
+      .filter(k => typeof k.trend === 'number' && k.trend !== 0)
+      .sort((a, b) => Math.abs(b.trend) - Math.abs(a.trend))
+      .slice(0, 4)
+    if (movers.length) {
+      html += `<div class="tr-section-h">Största rörelser</div>`
+      movers.forEach(k => {
+        // Trend > 0 means position number went UP (e.g., 5 → 8) = WORSE.
+        // Display as negative; keep sign convention "+ = better ranking".
+        const display = -k.trend
+        const cls = display > 0 ? 'up' : 'dn'
+        const arrow = display > 0 ? '▲' : '▼'
+        const num = Math.abs(display)
+        html += `<div class="tr-mover">
+          <span class="tr-mover-delta ${cls}">${arrow}${num}</span>
+          <span class="tr-mover-kw" title="${esc(k.keyword)}">${esc(k.keyword)}</span>
+          <span class="tr-mover-pos">pos ${k.position || '—'}</span>
+        </div>`
+      })
+    }
+  }
+
+  // ── Top keywords by clicks ──
+  if (totalKws > 0) {
+    const topKws = [...kws]
+      .filter(k => k.clicks > 0)
+      .sort((a, b) => (b.clicks || 0) - (a.clicks || 0))
+      .slice(0, 5)
+    if (topKws.length) {
+      html += `<div class="tr-section-h">Toppord</div>`
+      topKws.forEach(k => {
+        const pos = k.position || 0
+        const rankCls = pos > 0 && pos <= 3 ? ' top3' : pos > 0 && pos <= 10 ? ' top10' : ''
+        html += `<div class="tr-top">
+          <span class="tr-top-rank${rankCls}">${pos > 0 ? '#' + pos : '—'}</span>
+          <span class="tr-top-kw" title="${esc(k.keyword)}">${esc(k.keyword)}</span>
+          <span class="tr-top-clicks">${fmtNum(k.clicks)} klick</span>
+        </div>`
+      })
+    }
+  }
+
+  // ── AI visibility per model ──
+  if (ai && Array.isArray(ai.models) && ai.models.length) {
+    html += `<div class="tr-section-h">AI-modeller</div>`
+    ai.models.forEach(m => {
+      const s = Math.round(m.score || 0)
+      const fillCol = s >= 70 ? 'var(--live)' : s >= 40 ? 'var(--warn)' : 'var(--ds-danger)'
+      html += `<div class="tr-ai-row">
+        <span class="tr-ai-name">${esc(m.model)}</span>
+        <span class="tr-ai-bar"><span class="tr-ai-bar-fill" style="width:${Math.min(100, s)}%;background:${fillCol}"></span></span>
+        <span class="tr-ai-score">${s}%</span>
+      </div>`
+    })
+  }
+
+  html += _renderTrackingCta(clientObj)
+  return html
+}
+
+function _renderTrackingCta(clientObj) {
+  // Deep-link to the platform's desktop, which will land the user near
+  // the full Klientinsikter window. We don't hard-code a window-open
+  // URL because the platform doesn't currently support that pattern;
+  // the user opens "Klientinsikter" from the desktop themselves.
+  const url = 'https://seoz.io/desktop'
+  return `<a class="tr-cta" href="${url}" onclick="event.preventDefault();wv && wv.loadURL('${url}')">
+    <div>
+      <div class="tr-cta-label">Öppna full Klientinsikter</div>
+      <div class="tr-cta-sub">GA4-trender, GSC-tabeller och målgrupp i SEOZ</div>
+    </div>
+    <span class="tr-cta-arrow"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="7" y1="17" x2="17" y2="7"/><polyline points="7 7 17 7 17 17"/></svg></span>
+  </a>`
 }
 
 // Relative-date formatter for task rows. Returns "Idag", "Igår",

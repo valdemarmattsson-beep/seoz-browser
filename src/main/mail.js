@@ -381,6 +381,21 @@ async function getMessage(cfg, uid, folder = 'INBOX') {
   const msg = await client.fetchOne(uid, { source: true, envelope: true, flags: true }, { uid: true })
   if (!msg) return null
   const parsed = await simpleParser(msg.source)
+
+  // RFC 8058 / RFC 2369 — pull the List-Unsubscribe header so the renderer
+  // can offer one-click unsubscribe. Header value is comma-separated
+  // angle-bracketed URIs, e.g.: `<https://...>, <mailto:...>`. We extract
+  // the first https URL and the first mailto, leaving the renderer to
+  // pick its preferred path.
+  const listUnsub = parsed.headers?.get('list-unsubscribe') || ''
+  const listUnsubPost = parsed.headers?.get('list-unsubscribe-post') || ''
+  const _uris = String(listUnsub).match(/<([^>]+)>/g)?.map(s => s.slice(1, -1)) || []
+  const unsubscribe = _uris.length ? {
+    httpsUrl: _uris.find(u => /^https?:\/\//i.test(u)) || null,
+    mailto:   _uris.find(u => /^mailto:/i.test(u)) || null,
+    oneClick: /list-unsubscribe=one-click/i.test(String(listUnsubPost)),
+  } : null
+
   return {
     uid: msg.uid,
     messageId: parsed.messageId || null,
@@ -393,6 +408,7 @@ async function getMessage(cfg, uid, folder = 'INBOX') {
     date: (parsed.date || new Date()).toISOString(),
     text: parsed.text || '',
     html: parsed.html ? sanitizeHtml(parsed.html, SANITIZE_OPTS) : null,
+    unsubscribe,
     attachments: (parsed.attachments || []).map((a, i) => ({
       index: i,
       filename: a.filename || 'bilaga',

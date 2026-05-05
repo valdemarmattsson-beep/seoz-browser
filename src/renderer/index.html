@@ -4539,11 +4539,80 @@ async function _mailHandleSuggestedAction(actionId, uid, mid) {
       break
     }
     case 'draft-reply': {
-      // Open the existing compose window in reply-mode. The AI-drafted
-      // body will land here in Phase 1B; for now the user gets a blank
-      // canvas pre-addressed to the sender.
-      if (typeof openCompose === 'function') openCompose('reply', { uid, message: m })
-      else toast('Compose-fönstret kunde inte öppnas', '#dc2626')
+      // Phase 1B — AI-drafted reply. Fetch the full message body, ask
+      // Claude for a 2-5 sentence professional reply, then open compose
+      // pre-filled. Falls back to a blank reply when there's no
+      // Anthropic key or Claude errored, so the action is never a dead
+      // end.
+      if (typeof openCompose !== 'function') {
+        toast('Compose-fönstret kunde inte öppnas', '#dc2626')
+        break
+      }
+      toast('AI skriver svar…', '#4680ff')
+
+      // 1. Resolve the full message — list rows only carry stubs.
+      let fullMsg = m
+      try {
+        const res = await SE.mail.get({ accountId: _mailState.accountId, uid, folder: _mailState.folder })
+        if (res && res.ok && res.message) fullMsg = res.message
+      } catch (_) {}
+
+      // 2. User context for the sign-off.
+      let signoffName = ''
+      try {
+        const { profile } = await SE.profileGetActive()
+        signoffName = profile?.name?.split(' ')[0] || ''
+      } catch (_) {}
+
+      // 3. Ask Claude (best-effort — failure just falls through to blank).
+      let draft = ''
+      const apiKey = await SE.storeGet('anthropicApiKey', '')
+      if (apiKey) {
+        const bodyText = (fullMsg.text || (fullMsg.html ? _stripHtmlToText(fullMsg.html) : '') || '').trim()
+        const senderName = fullMsg.from?.[0]?.name || fullMsg.from?.[0]?.address || ''
+        const subject = fullMsg.subject || ''
+        const systemPrompt = [
+          'Du är en assistent som hjälper en yrkesverksam att skriva snabba,',
+          'välformulerade svar på e-post.',
+          '',
+          'Krav:',
+          '- Skriv på samma språk som det inkomna mejlet (oftast svenska)',
+          '- Kort, professionellt, vänligt — 2-5 meningar',
+          '- Inga "Hej, här är ditt svar:"-prefix, ingen ämnesrad',
+          '- Börja med en lämplig hälsning ("Hej " + förnamn om det är känt)',
+          '- Avsluta med en kort signaturlinje, t.ex. "/ ' + (signoffName || 'jag') + '"',
+          '',
+          'Svara enbart med själva svarstexten — ingenting annat.',
+        ].join('\n')
+        const userPrompt = `Mejlet att svara på:\n\nFrån: ${senderName}\nÄmne: ${subject}\n\n${bodyText.slice(0, 4000)}`
+        try {
+          const r = await SE.claudeChat({
+            messages: [{ role: 'user', content: userPrompt }],
+            systemPrompt,
+            apiKey,
+          })
+          if (r?.ok && r.content) draft = String(r.content).trim()
+        } catch (_) {}
+      }
+
+      // 4. Build the compose payload — same shape mailReply uses.
+      const replyTo = (fullMsg.from || []).map(a => a.address).filter(Boolean).join(', ')
+      const subject = /^re:/i.test(fullMsg.subject || '') ? fullMsg.subject : ('Re: ' + (fullMsg.subject || ''))
+      const references = [...(fullMsg.references || []), fullMsg.messageId].filter(Boolean)
+      const quoted = _quoteBody(fullMsg)
+      const composedBody = draft ? draft + '\n\n' + quoted : quoted
+
+      openCompose('reply', {
+        to: replyTo,
+        subject,
+        body: composedBody,
+        inReplyTo: fullMsg.messageId,
+        references,
+      })
+
+      if (draft) toast('AI-utkast klart', '#2ca87f')
+      else if (!apiKey) toast('Tomt utkast — sätt Anthropic-nyckel i Inställningar för AI-svar', '#e58a00')
+      else toast('AI-svar misslyckades — tomt utkast öppnat', '#e58a00')
       break
     }
     case 'snooze-48': {
@@ -4570,9 +4639,31 @@ async function _mailHandleSuggestedAction(actionId, uid, mid) {
       break
     }
     case 'unsubscribe': {
-      // Phase 1B: read List-Unsubscribe header from the message and
-      // open it. For now: just a hint.
-      toast('Avregistrering: kommer i nästa version', '#94a3b8')
+      // Read the message's List-Unsubscribe header (RFC 8058 / 2369).
+      // Prefer the HTTPS URL — opens in a new tab. Fall back to the
+      // mailto: variant by drafting a (mostly empty) compose to the
+      // unsubscribe address. If neither is present the mail isn't a
+      // legit subscription and we tell the user.
+      toast('Hämtar avreg-länk…', '#94a3b8')
+      let info = null
+      try {
+        const res = await SE.mail.get({ accountId: _mailState.accountId, uid, folder: _mailState.folder })
+        if (res?.ok && res.message) info = res.message.unsubscribe
+      } catch (_) {}
+      if (info?.httpsUrl) {
+        newTab(info.httpsUrl)
+        toast('Avreg-sida öppnad', '#2ca87f')
+      } else if (info?.mailto) {
+        const m = info.mailto.match(/^mailto:([^?]+)(?:\?(.*))?$/i)
+        const to = m?.[1] || ''
+        const params = new URLSearchParams(m?.[2] || '')
+        const subject = params.get('subject') || 'Unsubscribe'
+        const body    = params.get('body') || ''
+        if (typeof openCompose === 'function') openCompose('new', { to, subject, body })
+        toast('Avreg-mejl förberett', '#2ca87f')
+      } else {
+        toast('Inget List-Unsubscribe-stöd i det här mejlet', '#e58a00')
+      }
       break
     }
     case 'crm-lead': {

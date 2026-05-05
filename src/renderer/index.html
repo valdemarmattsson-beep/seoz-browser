@@ -528,6 +528,85 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 /* Inbox layout */
 .mail-inbox-pane{width:360px;border-right:1px solid var(--border);overflow-y:auto;flex-shrink:0;background:var(--card)}
 .mail-reader-pane{flex:1;overflow-y:auto;padding:24px 28px;background:var(--bg)}
+/* Reader layout — when a message is open we split into main body
+   (flex 1) + a 260px context sidebar on the right with company info
+   and suggested actions. Stacks below 980px so it stays usable in
+   narrow windows / split-view tabs. */
+.mail-reader-layout{display:flex;gap:20px;align-items:flex-start}
+.mail-reader-main{flex:1;min-width:0}
+.mail-reader-context{
+  width:260px;flex-shrink:0;display:flex;flex-direction:column;gap:10px;
+  position:sticky;top:0;
+}
+@media (max-width: 980px) {
+  .mail-reader-layout{flex-direction:column}
+  .mail-reader-context{width:100%;position:static}
+}
+.mail-ctx-card{
+  background:var(--card);border:1px solid var(--border);border-radius:12px;
+  padding:13px 14px;box-shadow:0 1px 3px rgba(0,0,0,.04);
+}
+.mail-ctx-title{
+  font-size:9px;font-weight:700;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--muted);margin-bottom:10px;
+  display:flex;align-items:center;gap:6px;
+}
+.mail-ctx-title .mail-ctx-tag{
+  background:rgba(44,168,127,.10);color:#2ca87f;
+  padding:1px 6px;border-radius:100px;font-size:9px;font-weight:700;letter-spacing:.04em;
+}
+.mail-ctx-row{
+  display:flex;justify-content:space-between;align-items:flex-start;
+  margin-bottom:7px;gap:8px;
+}
+.mail-ctx-row:last-child{margin-bottom:0}
+.mail-ctx-label{font-size:11px;color:var(--muted);flex-shrink:0}
+.mail-ctx-val{
+  font-size:11px;font-weight:600;color:var(--head);text-align:right;
+  max-width:160px;overflow:hidden;text-overflow:ellipsis;
+  word-break:break-word;line-height:1.4;
+}
+.mail-ctx-val a{color:var(--p);text-decoration:none}
+.mail-ctx-val a:hover{text-decoration:underline}
+.mail-ctx-summary{
+  font-size:11px;color:var(--txt);line-height:1.5;
+  padding:8px 10px;border-radius:7px;background:var(--bg);
+  margin-bottom:8px;
+}
+.mail-ctx-loading{
+  display:flex;align-items:center;gap:8px;
+  font-size:11px;color:var(--muted);padding:6px 0;
+}
+.mail-ctx-loading-spin{
+  width:11px;height:11px;border:1.5px solid var(--border);border-top-color:var(--p);
+  border-radius:50%;animation:orbit-spin .8s linear infinite;flex-shrink:0;
+}
+.mail-ctx-empty{
+  font-size:11px;color:var(--muted);font-style:italic;
+  padding:8px 0;line-height:1.4;
+}
+.mail-ctx-action-btn{
+  width:100%;padding:8px 10px;margin-bottom:5px;border-radius:7px;
+  border:1px solid var(--border);background:var(--card);
+  font-family:inherit;font-size:11px;font-weight:600;color:var(--txt);
+  cursor:pointer;text-align:left;display:flex;align-items:center;gap:8px;
+  transition:background .15s,border-color .15s,color .15s,transform .1s;
+}
+.mail-ctx-action-btn:last-child{margin-bottom:0}
+.mail-ctx-action-btn:hover{border-color:var(--p);color:var(--p);background:rgba(70,128,255,.04)}
+.mail-ctx-action-btn:active{transform:scale(.98)}
+.mail-ctx-action-btn.primary{
+  background:var(--p);color:#fff;border-color:var(--p);
+  box-shadow:0 2px 6px rgba(70,128,255,.25);
+}
+.mail-ctx-action-btn.primary:hover{background:var(--p600);color:#fff}
+.mail-ctx-action-btn.done{
+  background:rgba(44,168,127,.08);color:#2ca87f;border-color:rgba(44,168,127,.3);
+  cursor:default;
+}
+.mail-ctx-action-sub{
+  margin-left:auto;font-size:10px;font-weight:500;opacity:.7;
+}
 .mail-empty-note{color:var(--muted);font-size:11px;padding:24px;text-align:center}
 
 /* Inbox row */
@@ -4519,6 +4598,10 @@ function _mailMarkActionDone(mid, actionId) {
   if (!_mailRowActionsDone.has(mid)) _mailRowActionsDone.set(mid, new Set())
   _mailRowActionsDone.get(mid).add(actionId)
   _renderInboxList()
+  // Reflect the ✓ state in the open detail-view sidebar too.
+  if (_lastOpenedMessage && _lastOpenedMessage.messageId === mid) {
+    _refreshContextSidebar(_lastOpenedMessage)
+  }
 }
 
 async function _mailHandleSuggestedAction(actionId, uid, mid) {
@@ -5405,32 +5488,167 @@ function _renderReader(msg) {
     </div>
   ` : ''
   reader.innerHTML = `
-    <div class="mail-reader-head">
-      <div class="mail-reader-subject">${esc(msg.subject || '(utan ämne)')}</div>
-      <div class="mail-reader-meta">
-        <div><strong>Från:</strong> ${fromLabel}</div>
-        ${toLabel ? `<div><strong>Till:</strong> ${toLabel}</div>` : ''}
-        ${ccLabel ? `<div><strong>Kopia:</strong> ${ccLabel}</div>` : ''}
-        ${dateStr ? `<div><strong>Datum:</strong> ${esc(dateStr)}</div>` : ''}
+    <div class="mail-reader-layout">
+      <div class="mail-reader-main">
+        <div class="mail-reader-head">
+          <div class="mail-reader-subject">${esc(msg.subject || '(utan ämne)')}</div>
+          <div class="mail-reader-meta">
+            <div><strong>Från:</strong> ${fromLabel}</div>
+            ${toLabel ? `<div><strong>Till:</strong> ${toLabel}</div>` : ''}
+            ${ccLabel ? `<div><strong>Kopia:</strong> ${ccLabel}</div>` : ''}
+            ${dateStr ? `<div><strong>Datum:</strong> ${esc(dateStr)}</div>` : ''}
+          </div>
+        </div>
+        <div class="mail-reply-row">
+          <button class="mail-reply-btn" onclick="mailReply(false)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
+            <span>Svara</span>
+          </button>
+          <button class="mail-reply-btn" onclick="mailReply(true)">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/></svg>
+            <span>Svara alla</span>
+          </button>
+          <button class="mail-reply-btn" onclick="mailForward()">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
+            <span>Vidarebefordra</span>
+          </button>
+        </div>
+        ${bodyHtml}
+        ${attHtml}
       </div>
+      <aside class="mail-reader-context" id="mailReaderContext">
+        ${_renderContextSidebar(msg, /*loading*/true)}
+      </aside>
     </div>
-    <div class="mail-reply-row">
-      <button class="mail-reply-btn" onclick="mailReply(false)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 17 4 12 9 7"/><path d="M20 18v-2a4 4 0 0 0-4-4H4"/></svg>
-        <span>Svara</span>
-      </button>
-      <button class="mail-reply-btn" onclick="mailReply(true)">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="7 17 2 12 7 7"/><polyline points="12 17 7 12 12 7"/><path d="M22 18v-2a4 4 0 0 0-4-4H7"/></svg>
-        <span>Svara alla</span>
-      </button>
-      <button class="mail-reply-btn" onclick="mailForward()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="15 17 20 12 15 7"/><path d="M4 18v-2a4 4 0 0 1 4-4h12"/></svg>
-        <span>Vidarebefordra</span>
-      </button>
-    </div>
-    ${bodyHtml}
-    ${attHtml}
   `
+  // Kick off background research — fills the sidebar in-place when done.
+  _mailLoadContext(msg).catch(() => {})
+}
+
+// Context sidebar — synthesises sender / classification / domain-research
+// data into the right-rail card. Renders progressive states: loading
+// while research is in flight, then either the cached/fetched summary
+// or a "no data" notice.
+function _renderContextSidebar(msg, loading) {
+  const fromAddr = msg.from?.[0]?.address || ''
+  const fromName = msg.from?.[0]?.name || fromAddr || '—'
+  const domain = (fromAddr.split('@')[1] || '').toLowerCase().replace(/^www\./, '')
+  const research = domain ? _mailResearchCache[domain] : null
+  const summary = research?.summary || null
+  const meta = research?.meta || null
+  const skipped = research?.skipped
+
+  // Last contact — count messages from this sender in the loaded inbox.
+  let lastContact = '—'
+  let contactCount = 0
+  if (fromAddr && _mailState.messages?.length) {
+    const matches = _mailState.messages
+      .filter(mm => (mm.from?.[0]?.address || '').toLowerCase() === fromAddr.toLowerCase())
+      .sort((a, b) => new Date(b.date || 0) - new Date(a.date || 0))
+    contactCount = matches.length
+    if (matches[1]) {
+      const d = new Date(matches[1].date)
+      if (!isNaN(d)) lastContact = d.toLocaleDateString('sv-SE', { day: 'numeric', month: 'short', year: 'numeric' })
+    } else if (matches[0]) {
+      lastContact = 'Detta är första'
+    }
+  }
+
+  // Classification + suggested actions for the action card.
+  const rawCat = _mailClassifications[msg.messageId]
+  const catCode = rawCat ? (typeof rawCat === 'string' ? rawCat : rawCat.c) : null
+  const suggestions = (catCode && _MAIL_SUGGESTED_ACTIONS[catCode]) || _MAIL_FALLBACK_ACTIONS
+  const doneSet = _mailRowActionsDone.get(msg.messageId) || new Set()
+  const catLabel = _MAIL_CAT_LABELS[catCode] || ''
+
+  const companyName = summary?.name || meta?.ogSiteName || meta?.title?.split(/[|·–-]/)[0]?.trim() || domain || '—'
+  const industry = summary?.industry || '—'
+  const size = summary?.size || '—'
+
+  // Compose card 1 — kontextinfo
+  let infoCard = ''
+  if (skipped) {
+    infoCard = `
+      <div class="mail-ctx-card">
+        <div class="mail-ctx-title">Kontextinfo</div>
+        <div class="mail-ctx-empty">Avsändaren är från en webmail-domän — ingen företagsdata att hämta.</div>
+      </div>
+    `
+  } else {
+    infoCard = `
+      <div class="mail-ctx-card">
+        <div class="mail-ctx-title">Kontextinfo${research ? ` <span class="mail-ctx-tag">AI</span>` : ''}</div>
+        ${summary?.summary ? `<div class="mail-ctx-summary">${esc(summary.summary)}</div>` : ''}
+        ${loading && !research ? `
+          <div class="mail-ctx-loading"><span class="mail-ctx-loading-spin"></span>Hämtar bolagsinfo…</div>
+        ` : `
+          <div class="mail-ctx-row"><span class="mail-ctx-label">Bolag</span><span class="mail-ctx-val">${esc(companyName)}</span></div>
+          <div class="mail-ctx-row"><span class="mail-ctx-label">Bransch</span><span class="mail-ctx-val">${esc(industry)}</span></div>
+          <div class="mail-ctx-row"><span class="mail-ctx-label">Storlek</span><span class="mail-ctx-val">${esc(size)}</span></div>
+          <div class="mail-ctx-row"><span class="mail-ctx-label">Senaste kontakt</span><span class="mail-ctx-val">${esc(lastContact)}</span></div>
+          <div class="mail-ctx-row"><span class="mail-ctx-label">Tråd-historik</span><span class="mail-ctx-val">${contactCount} mejl i inbox</span></div>
+          ${domain ? `<div class="mail-ctx-row"><span class="mail-ctx-label">Domän</span><span class="mail-ctx-val"><a onclick="newTab('https://${esc(domain)}/');event.preventDefault()" style="cursor:pointer">${esc(domain)}</a></span></div>` : ''}
+        `}
+      </div>
+    `
+  }
+
+  // Compose card 2 — föreslagna actions (mirrors the inline pills with
+  // bigger touch targets and category-aware labelling).
+  const actionsHtml = suggestions.map((a, i) => {
+    const done = doneSet.has(a.id)
+    const cls = `mail-ctx-action-btn${a.primary && !done ? ' primary' : ''}${done ? ' done' : ''}`
+    const sub = a.sub || (a.primary ? 'Rekommenderad' : '')
+    return `
+      <button class="${cls}" data-mail-act="${esc(a.id)}" data-mail-uid="${msg.uid}" data-mail-mid="${esc(msg.messageId || '')}"${done ? ' disabled' : ''}>
+        ${done ? '✓ ' : ''}${esc(a.label)}
+        ${sub ? `<span class="mail-ctx-action-sub">${esc(sub)}</span>` : ''}
+      </button>
+    `
+  }).join('')
+  const actionsCard = `
+    <div class="mail-ctx-card">
+      <div class="mail-ctx-title">Föreslagna actions${catCode ? ` <span class="mail-ctx-tag">${esc(catLabel)}</span>` : ''}</div>
+      ${actionsHtml}
+    </div>
+  `
+
+  return infoCard + actionsCard
+}
+
+// Domain research — kicked off after a message is rendered. Result
+// persists in main's electron-store cache (14-day TTL); we mirror to
+// _mailResearchCache so re-renders for the same message during this
+// session are instant.
+const _mailResearchCache = {}
+async function _mailLoadContext(msg) {
+  const fromAddr = msg.from?.[0]?.address || ''
+  const domain = (fromAddr.split('@')[1] || '').toLowerCase().replace(/^www\./, '')
+  if (!domain) return
+  if (_mailResearchCache[domain]) {
+    _refreshContextSidebar(msg)
+    return
+  }
+  try {
+    const res = await SE.mail.researchDomain({ domain })
+    if (res && res.ok) {
+      _mailResearchCache[domain] = res
+      // Only refresh the sidebar if the user is still looking at
+      // this same message (they may have switched in the meantime).
+      if (_lastOpenedMessage && _lastOpenedMessage.uid === msg.uid) {
+        _refreshContextSidebar(msg)
+      }
+    } else {
+      // Mark as resolved-with-no-data so we drop the spinner.
+      _mailResearchCache[domain] = { ok: false }
+      if (_lastOpenedMessage && _lastOpenedMessage.uid === msg.uid) _refreshContextSidebar(msg)
+    }
+  } catch (_) {}
+}
+
+function _refreshContextSidebar(msg) {
+  const el = document.getElementById('mailReaderContext')
+  if (el) el.innerHTML = _renderContextSidebar(msg, /*loading*/false)
 }
 
 function _renderMailSetup(body) {

@@ -1710,6 +1710,135 @@ ipcMain.handle('mail:classify', async (_evt, { items } = {}) => {
   }
 })
 
+// ── Mail context research — Phase 2 ────────────────────────────────
+// Given a sender domain, fetch the company's homepage, extract meta
+// signals, and (if Anthropic key set) ask Claude for a 1-line
+// company summary + size/industry estimate. Cached per domain in
+// electron-store so repeat opens are instant.
+const _researchStore = new Store({
+  name: 'mail-domain-research',
+  defaults: { byDomain: {} },
+  // Bump if we change the schema and want to invalidate everything.
+})
+const RESEARCH_TTL_MS = 14 * 24 * 60 * 60 * 1000  // 14 days
+
+function _researchGetCached(domain) {
+  const all = _researchStore.get('byDomain', {})
+  const e = all[domain]
+  if (!e) return null
+  if (e.fetchedAt && (Date.now() - e.fetchedAt) > RESEARCH_TTL_MS) return null
+  return e
+}
+function _researchSetCached(domain, data) {
+  const all = _researchStore.get('byDomain', {})
+  all[domain] = { ...data, fetchedAt: Date.now() }
+  // Cap at 5000 entries (pathological); keep newest 2500.
+  const keys = Object.keys(all)
+  if (keys.length > 5000) {
+    const trimmed = {}
+    keys.sort((a, b) => (all[b].fetchedAt || 0) - (all[a].fetchedAt || 0))
+    for (const k of keys.slice(0, 2500)) trimmed[k] = all[k]
+    _researchStore.set('byDomain', trimmed)
+  } else {
+    _researchStore.set('byDomain', all)
+  }
+}
+
+function _researchExtractMeta(html) {
+  const out = {}
+  const pick = (re) => { const m = String(html || '').match(re); return m ? m[1].trim() : '' }
+  out.title         = pick(/<title[^>]*>([^<]+)<\/title>/i).slice(0, 200)
+  out.description   = pick(/<meta\s+name=["']description["']\s+content=["']([^"']+)["']/i).slice(0, 400)
+  out.ogSiteName    = pick(/<meta\s+property=["']og:site_name["']\s+content=["']([^"']+)["']/i).slice(0, 100)
+  out.ogTitle       = pick(/<meta\s+property=["']og:title["']\s+content=["']([^"']+)["']/i).slice(0, 200)
+  out.ogDescription = pick(/<meta\s+property=["']og:description["']\s+content=["']([^"']+)["']/i).slice(0, 400)
+  return out
+}
+
+ipcMain.handle('mail:research-domain', async (_evt, { domain, force } = {}) => {
+  const d = String(domain || '').trim().toLowerCase().replace(/^www\./, '')
+  if (!d || !/^[a-z0-9.-]+\.[a-z]{2,}$/i.test(d)) return { ok: false, error: 'Ogiltig domän' }
+
+  // Skip the obvious noreply / mass-mail domains — they aren't companies
+  // worth researching, and we don't want to burn tokens on Zoho noreply
+  // every time the user opens a notification.
+  const SKIP = ['gmail.com','hotmail.com','outlook.com','yahoo.com','icloud.com','live.com','protonmail.com','aol.com','mailgun.org','sendgrid.net','amazonses.com']
+  if (SKIP.includes(d)) return { ok: true, skipped: true, domain: d }
+
+  if (!force) {
+    const cached = _researchGetCached(d)
+    if (cached) return { ok: true, cached: true, ...cached }
+  }
+
+  // 1. Fetch homepage HTML.
+  let meta = {}
+  try {
+    const res = await net.fetch(`https://${d}/`, {
+      method: 'GET',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (compatible; SEOZ-Browser/1.0; +https://seoz.io)',
+        'Accept': 'text/html,application/xhtml+xml',
+      },
+    })
+    if (res.ok) {
+      const buf = await res.arrayBuffer()
+      const html = new TextDecoder('utf-8', { fatal: false }).decode(buf.slice(0, 500_000))
+      meta = _researchExtractMeta(html)
+    }
+  } catch (_) {}
+
+  // 2. Optionally refine via Claude — pulls a structured summary out
+  //    of the noisy meta fields.
+  let summary = null
+  const apiKey = PM.profileGet('anthropicKey', null)
+  if (apiKey && (meta.title || meta.description || meta.ogDescription)) {
+    const system = [
+      'Du sammanfattar ett företag baserat på dess hemside-metadata.',
+      'Svara endast med JSON i exakt det här formatet:',
+      '{"name":"<bolagsnamn>","industry":"<bransch på svenska, max 4 ord>","size":"<storlek-uppskattning t.ex. ~10-50 anställda eller okänt>","summary":"<en mening på svenska som beskriver vad bolaget gör>"}',
+      'Inget annat — ingen markdown, inget prefix.',
+    ].join('\n')
+    const user = [
+      `Domän: ${d}`,
+      meta.title         ? `Titel: ${meta.title}`           : '',
+      meta.ogSiteName    ? `Sitnamn: ${meta.ogSiteName}`    : '',
+      meta.description   ? `Beskrivning: ${meta.description}` : '',
+      meta.ogDescription ? `OG-beskr: ${meta.ogDescription}` : '',
+    ].filter(Boolean).join('\n')
+    try {
+      const res = await net.fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', 'x-api-key': apiKey, 'anthropic-version': '2023-06-01' },
+        body: JSON.stringify({
+          model: 'claude-sonnet-4-20250514',
+          max_tokens: 500,
+          system,
+          messages: [{ role: 'user', content: user }],
+        }),
+      })
+      if (res.ok) {
+        const data = await res.json()
+        const txt = (data?.content?.[0]?.text || '').replace(/^```(?:json)?\s*|\s*```$/g, '').trim()
+        try {
+          const parsed = JSON.parse(txt)
+          if (parsed && typeof parsed === 'object') {
+            summary = {
+              name:     String(parsed.name     || '').slice(0, 80),
+              industry: String(parsed.industry || '').slice(0, 60),
+              size:     String(parsed.size     || '').slice(0, 60),
+              summary:  String(parsed.summary  || '').slice(0, 240),
+            }
+          }
+        } catch (_) {}
+      }
+    } catch (_) {}
+  }
+
+  const data = { domain: d, meta, summary }
+  _researchSetCached(d, data)
+  return { ok: true, cached: false, ...data }
+})
+
 // Make sure we disconnect IMAP cleanly on quit so the server doesn't
 // sit waiting for the idle timeout.
 app.on('before-quit', async () => {

@@ -6876,23 +6876,33 @@ function renderTabs() {
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
       // Edge-detect the tooltip on hover — when the tab sits near
-      // the left/right window edge the centered tooltip would overflow.
-      // Anchor to the corresponding edge instead so the whole card
-      // stays visible.
+      // a window edge the centered tooltip would overflow. We pin
+      // the tooltip's VIEWPORT position (always ≥8px from each
+      // edge) by computing an offset from the tab's own left, since
+      // .tab-tip is absolute-positioned inside .tab. Setting
+      // tip.style.left to e.g. "0" wasn't enough — that puts the
+      // tooltip flush with the tab, but a tab near x=0 still has
+      // its tooltip starting at x=0 (left side clipped).
       el.addEventListener('mouseenter', () => {
         const tip = el.querySelector('.tab-tip')
         if (!tip) return
         const rect = el.getBoundingClientRect()
-        const tipWidth = 300   // matches min-width:240px..max-width:320px window
+        const tipWidth = 300   // approx of min-width:240..max-width:320 card
         const winWidth = window.innerWidth
-        const desiredLeft = rect.left + rect.width / 2 - tipWidth / 2
-        if (desiredLeft < 8) {
-          tip.style.left = '0'
+        const margin = 8       // safety margin from window edges
+
+        const centerLeft  = rect.left + rect.width / 2 - tipWidth / 2
+        const centerRight = centerLeft + tipWidth
+
+        if (centerLeft < margin) {
+          // Pin viewport-left = margin → offset from tab is margin - rect.left
+          tip.style.left = (margin - rect.left) + 'px'
           tip.style.right = 'auto'
           tip.style.transform = 'none'
-        } else if (desiredLeft + tipWidth > winWidth - 8) {
-          tip.style.left = 'auto'
-          tip.style.right = '0'
+        } else if (centerRight > winWidth - margin) {
+          // Pin viewport-right = winWidth - margin
+          tip.style.left = (winWidth - margin - tipWidth - rect.left) + 'px'
+          tip.style.right = 'auto'
           tip.style.transform = 'none'
         } else {
           tip.style.left = '50%'

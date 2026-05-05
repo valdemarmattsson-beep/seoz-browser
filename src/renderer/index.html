@@ -2519,7 +2519,6 @@ input,textarea,select{user-select:text}
       <div id="wvStack" style="flex:1;min-height:0;position:relative">
         <webview id="wv" src="about:blank"
                  useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
-                 partition="persist:default"
                  allowpopups style="position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none">
         </webview>
 
@@ -3154,13 +3153,14 @@ function createWebviewForTab(tabId, url) {
   const el = document.createElement('webview')
   el.setAttribute('useragent', CHROME_UA_WV)
   el.setAttribute('allowpopups', '')
-  // Explicit shared session — every tab (user + MCP / agent) uses the
-  // same persistent partition, so logging in once on linkedin.com /
-  // gmail.com / etc carries over to whatever new tab Claude opens
-  // through MCP. The user can keep using their tabs in parallel; they
-  // share cookies but each webview has its own DOM, scroll state and
-  // input focus, so there's no interference.
-  el.setAttribute('partition', 'persist:default')
+  // Note: do NOT set partition. Without an explicit partition the
+  // webview uses Electron's session.defaultSession — the same one
+  // user tabs have always used. Setting partition='persist:default'
+  // (which I tried in v1.10.15) actually moves the webview to a
+  // separate NAMED partition called "default" — that's why all
+  // logins disappeared and the SEOZ portal chat went blank.
+  // MCP tabs use this same code path so they automatically share
+  // the user's session without needing explicit partition setup.
   // Attach the password autofill / login-form detection script. Must
   // be set BEFORE src so the preload registers before the first
   // navigation. SE.webviewPreloadUrl is provided by preload.js.
@@ -3275,7 +3275,6 @@ function openSplitView(rawUrl) {
   const el = document.createElement('webview')
   el.setAttribute('useragent', CHROME_UA_WV)
   el.setAttribute('allowpopups', '')
-  el.setAttribute('partition', 'persist:default')
   el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
   el.src = url
   _wvStack.appendChild(el)

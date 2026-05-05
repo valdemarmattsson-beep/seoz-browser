@@ -249,14 +249,31 @@ function createWindow() {
     icon: APP_ICON,
   })
 
-  // Grant permissions for voice chat, clipboard, notifications etc.
+  // Grant permissions for voice chat, clipboard, notifications, full-
+  // screen, pointer lock etc. The `fullscreen` permission is what
+  // sites use when calling element.requestFullscreen() — without it
+  // in the allowed list any in-page fullscreen button (e.g. SEOZ
+  // portal's expand-chat icon, video players, charts) silently no-
+  // ops. `pointerLock` covers the same flow for some games / canvas
+  // editors. `geolocation` and `midi` stay denied — sites can ask
+  // separately if you ever need them.
+  const ALLOWED_PERMISSIONS = [
+    'media',                          // camera/mic combined
+    'microphone',
+    'audioCapture',
+    'clipboard-read',
+    'clipboard-write',
+    'clipboard-sanitized-write',
+    'notifications',
+    'display-capture',                // getDisplayMedia for screen share
+    'fullscreen',                     // element.requestFullscreen()
+    'pointerLock',                    // canvas / game pointer capture
+  ]
   win.webContents.session.setPermissionRequestHandler((webContents, permission, callback) => {
-    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications', 'display-capture']
-    callback(allowed.includes(permission))
+    callback(ALLOWED_PERMISSIONS.includes(permission))
   })
   win.webContents.session.setPermissionCheckHandler((webContents, permission) => {
-    const allowed = ['media', 'microphone', 'audioCapture', 'clipboard-read', 'clipboard-write', 'clipboard-sanitized-write', 'notifications', 'display-capture']
-    return allowed.includes(permission)
+    return ALLOWED_PERMISSIONS.includes(permission)
   })
 
   // Meeting transcription — grant getDisplayMedia() with system-loopback

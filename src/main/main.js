@@ -13,7 +13,31 @@ const mail = require('./mail')
 const mailCache = require('./mail-cache')
 const mailScheduler = require('./mail-scheduler')
 const mailClassifier = require('./mail-classifier')
-const news = require('./news')
+// news är en optional module — om filen saknas i build:en (t.ex. en
+// utvecklare har den lokalt men har inte committat in den till git
+// så CI inte ser den), faller vi tillbaka på en no-op stub så main
+// inte kraschar tyst. UI visar då bara en tom news-rail. Felmeddelandet
+// loggas så vi vet att något fattas.
+let news
+try {
+  news = require('./news')
+} catch (err) {
+  console.warn('[seoz] news module unavailable, using stub:', err?.message || err)
+  const _noopEvents = { on: () => {}, off: () => {}, emit: () => {}, removeListener: () => {} }
+  news = {
+    setActiveProfile: () => {},
+    startScheduler:   () => {},
+    getItems:         () => [],
+    refreshAll:       async () => ({ ok: false, error: 'news module not built' }),
+    getSources:       () => [],
+    setSources:       () => [],
+    PRESETS:          [],
+    fetchPreview:     async () => ({ ok: false, error: 'news module not built' }),
+    getThemes:        () => [],
+    setThemes:        () => [],
+    events:           _noopEvents,
+  }
+}
 const PM = require('./profile-manager')
 const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')

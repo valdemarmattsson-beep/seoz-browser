@@ -419,15 +419,20 @@ ipcMain.handle('passwords-list', () => {
 })
 
 ipcMain.handle('passwords-add', (_e, entry) => {
-  if (!entry || !entry.site || !entry.username || !entry.password) {
-    throw new Error('Webbplats, användarnamn och lösenord krävs')
+  // Username is intentionally optional — sites like Facebook's
+  // step-2 password page don't expose the email field on the page
+  // where the password is submitted, so we'd otherwise reject every
+  // legitimate save coming from autofill. The user can still add
+  // a username later via the manager modal's edit flow.
+  if (!entry || !entry.site || !entry.password) {
+    throw new Error('Webbplats och lösenord krävs')
   }
   const list = _pwListEncrypted()
   const now = Date.now()
   const item = {
     id: crypto.randomBytes(8).toString('hex'),
     site: String(entry.site).trim(),
-    username: String(entry.username).trim(),
+    username: String(entry.username || '').trim(),
     passwordEnc: _encryptPassword(String(entry.password)),
     createdAt: now,
     updatedAt: now,

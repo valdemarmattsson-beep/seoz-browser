@@ -304,9 +304,9 @@ ipcMain.handle('permissions-clear', () => {
 //      the random install ID.
 //
 // We don't bundle Sentry — the dependency footprint isn't worth it
-// for a small-team product. The custom POST endpoint on seoz.io is
-// a future task; until it exists, opt-in is essentially a no-op
-// beyond the local log.
+// for a small-team product. The endpoint at seoz.io receives the
+// JSON body shape produced by _crashBuildReport() below, validates
+// it server-side and stores in a 60-day-retention table.
 //
 // Native (Chromium-level) crashes are captured via Electron's built-in
 // crashReporter into <userData>/Crashpad/ — those are .dmp files we
@@ -315,7 +315,7 @@ ipcMain.handle('permissions-clear', () => {
 const CRASH_DIR = path.join(app.getPath('userData'), 'crash-reports')
 const CRASH_OPTIN_KEY = 'crashReportingEnabled'   // false by default
 const CRASH_INSTALL_ID_KEY = 'crashInstallId'      // random per profile, anonymous
-const CRASH_UPLOAD_URL = 'https://seoz.io/api/browser/crash-report'  // endpoint TBD
+const CRASH_UPLOAD_URL = 'https://seoz.io/api/browser/crash-report'
 const CRASH_MAX_LOGS = 50
 const CRASH_DEDUPE_WINDOW_MS = 60_000  // identical msg within 60s = ignored
 

@@ -539,10 +539,19 @@ if (process.platform === 'win32') {
 // Remove the "AutomationControlled" flag that Chromium sets by default when
 // running under CDP / embedded — bot detectors check for this first.
 app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
-// Avoid leaking that we're headless-ish (some heuristics check this).
-app.commandLine.appendSwitch('disable-features', 'IsolateOrigins,site-per-process,Translate')
-// Use a realistic number of cores / RAM when asked via Navigator APIs
-app.commandLine.appendSwitch('enable-features', 'NetworkService,NetworkServiceInProcess')
+
+// Tidigare hade vi också:
+//   disable-features: IsolateOrigins,site-per-process,Translate
+//   enable-features:  NetworkService,NetworkServiceInProcess
+//
+// Dessa togs bort i v1.10.53 efter att vi insåg att de FAKTISKT är
+// bot-tells. Real Chrome har site-per-process ENABLED by default —
+// att stänga av det är en stark headless/embedded-signal. Network-
+// ServiceInProcess är ovanligt utanför testning. Båda hjälpte
+// förmodligen Google identifiera oss.
+//
+// Kvar är bara AutomationControlled-disable som är default Chrome
+// beteende när inte kört med Selenium/Puppeteer.
 // Bump V8 heap from the default 1.4 GB to 4 GB. SEOZ portal (and any
 // other heavy SPA) loads enough JS bundles + Supabase realtime + audio
 // buffers that the default sometimes OOMs the renderer mid-load,

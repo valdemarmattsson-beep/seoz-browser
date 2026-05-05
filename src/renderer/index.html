@@ -3449,6 +3449,7 @@ input,textarea,select{user-select:text}
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(10)" title="Zooma in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="bm-star" id="openExtBtn" onclick="openCurrentInExternal()" title="Öppna i extern webbläsare (Chrome/Edge) — använd om sajten blockerar inbäddade browsers (t.ex. Google-login)" aria-label="Öppna i extern webbläsare"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
         <div class="url-suggest" id="urlSuggest"></div>
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
@@ -11329,8 +11330,28 @@ function updateSyncUI() {
 }
 
 function openApiKeyPage() {
-  wv.loadURL('https://seoz.io/dashboard/verktyg/api')
+  // API-nycklar hanteras i Flow-portalen, inte på huvudsidan seoz.io
+  wv.loadURL('https://flow.seoz.io/dashboard/verktyg/api')
   document.getElementById('auth').classList.add('gone')
+}
+
+// Öppna aktuell flik:s URL i system-browsern (Chrome/Edge/Safari).
+// Används främst för att kringgå Googles "Inloggningen misslyckades"-
+// block — Electron kan inte fejka TLS-fingerprint på samma sätt som
+// Brave/Arc kan eftersom de är riktiga Chromium-forks. För Google-
+// login är detta enda fungerande lösningen idag.
+function openCurrentInExternal() {
+  const url = document.getElementById('urlInput').value.trim()
+  if (!url || !/^https?:\/\//i.test(url)) {
+    toast('Ingen URL att öppna externt', '#dc2626')
+    return
+  }
+  try {
+    SE.openExternal(url)
+    toast('Öppnar i din standard-browser...', '#4680ff')
+  } catch (_) {
+    toast('Kunde inte öppna externt', '#dc2626')
+  }
 }
 
 async function doSetDefaultBrowser() {

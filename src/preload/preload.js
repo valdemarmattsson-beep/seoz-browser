@@ -120,6 +120,19 @@ contextBridge.exposeInMainWorld('seoz', {
     downloadAttachment: (opts) => ipcRenderer.invoke('mail:download-attachment', opts || {}),
   },
 
+  // News (RSS/Atom) — main process owns fetching + parsing; renderer
+  // reads pre-normalized items from cache and listens for refresh events.
+  news: {
+    get:          (opts) => ipcRenderer.invoke('news:get', opts || {}),
+    refresh:      ()     => ipcRenderer.invoke('news:refresh'),
+    getSources:   ()     => ipcRenderer.invoke('news:get-sources'),
+    setSources:   (list) => ipcRenderer.invoke('news:set-sources', list),
+    getPresets:   ()     => ipcRenderer.invoke('news:get-presets'),
+    fetchPreview: (url)  => ipcRenderer.invoke('news:fetch-preview', url),
+    getThemes:    ()     => ipcRenderer.invoke('news:get-themes'),
+    setThemes:    (list) => ipcRenderer.invoke('news:set-themes', list),
+  },
+
   // OS notifications
   notify:      (title, body) => ipcRenderer.send('send-notification', { title, body }),
   setBadgeCount: (n, png)    => ipcRenderer.invoke('app:set-badge-count', { count: n, png }),
@@ -187,7 +200,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save', 'permission-prompt']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save', 'permission-prompt', 'news:items-updated']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

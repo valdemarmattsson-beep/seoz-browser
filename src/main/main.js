@@ -1399,13 +1399,35 @@ ipcMain.handle('fetch-agent-ready', async (_evt, url) => {
 // ══════════════════════════════════════════════════════════════════════════════
 //  AUTO-UPDATER — checks GitHub Releases for new versions
 // ══════════════════════════════════════════════════════════════════════════════
-autoUpdater.autoDownload = true
-autoUpdater.autoInstallOnAppQuit = true
+//
+// On macOS, electron-updater requires the new version to be code-signed
+// (Squirrel.Mac validates the signature before applying the update).
+// Our Mac builds are unsigned today, so the auto-install path will
+// always fail. Rather than surface a broken download flow we surface
+// a "manual download" status on macOS so the renderer can route the
+// user to the GitHub Releases page instead.
+//
+// Windows builds are also unsigned but Squirrel.Windows happily applies
+// unsigned updates — only Mac requires us to gate.
+const MAC_UPDATE_INSTALL_BLOCKED = process.platform === 'darwin'
+const MANUAL_DOWNLOAD_URL = 'https://github.com/valdemarmattsson-beep/seoz-browser/releases/latest'
+
+autoUpdater.autoDownload = !MAC_UPDATE_INSTALL_BLOCKED
+autoUpdater.autoInstallOnAppQuit = !MAC_UPDATE_INSTALL_BLOCKED
 
 autoUpdater.on('checking-for-update', () => {
   win?.webContents.send('updater-status', { status: 'checking' })
 })
 autoUpdater.on('update-available', info => {
+  // On macOS, route to manual download instead of the auto-install flow.
+  if (MAC_UPDATE_INSTALL_BLOCKED) {
+    win?.webContents.send('updater-status', {
+      status: 'manual-download',
+      version: info.version,
+      url: MANUAL_DOWNLOAD_URL,
+    })
+    return
+  }
   win?.webContents.send('updater-status', { status: 'available', version: info.version, releaseNotes: info.releaseNotes })
 })
 autoUpdater.on('update-not-available', () => {
@@ -1425,9 +1447,20 @@ ipcMain.on('updater-check', () => {
   autoUpdater.checkForUpdates().catch(() => {})
 })
 ipcMain.on('updater-download', () => {
+  // Manual-download fallback for unsigned macOS builds — open the
+  // GitHub Releases page in the system browser instead of trying to
+  // run the autoUpdater (which would fail signature validation).
+  if (MAC_UPDATE_INSTALL_BLOCKED) {
+    shell.openExternal(MANUAL_DOWNLOAD_URL)
+    return
+  }
   autoUpdater.downloadUpdate().catch(() => {})
 })
 ipcMain.on('updater-install', () => {
+  if (MAC_UPDATE_INSTALL_BLOCKED) {
+    shell.openExternal(MANUAL_DOWNLOAD_URL)
+    return
+  }
   autoUpdater.quitAndInstall(false, true)
 })
 ipcMain.handle('updater-get-version', () => app.getVersion())

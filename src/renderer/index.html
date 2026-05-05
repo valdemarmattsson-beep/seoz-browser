@@ -12701,7 +12701,7 @@ async function clearCrashLogs() {
 //
 //  When updating: bump LEGAL_VERSION + the date string.
 // ══════════════════════════════════════════════════════════════════
-const LEGAL_VERSION  = '2026-05-05.b'
+const LEGAL_VERSION  = '2026-05-05.c'
 const LEGAL_UPDATED  = '5 maj 2026'
 
 const LEGAL_DOCS = {
@@ -12756,6 +12756,7 @@ const LEGAL_DOCS = {
 
 <h3>Auto-uppdatering</h3>
 <p>Browsern frågar <code>github.com/valdemarmattsson-beep/seoz-browser/releases</code> om det finns nya versioner. Endast version och OS-info skickas — ingen användardata.</p>
+<p><strong>På macOS</strong> är auto-installation inaktiverad i denna early-access-version eftersom binären inte är kodsignerad. Browsern säger till när en ny version finns men du behöver ladda ner den nya <code>.dmg</code>-filen manuellt. Vid signering (planerad) blir flödet automatiskt även på Mac.</p>
 
 <h3>Kraschrapporter (opt-in)</h3>
 <p>Browsern loggar alla krascher lokalt på din enhet (i mappen <code>crash-reports</code> under användardatamappen). Detta sker alltid, men loggen lämnar aldrig din dator om du inte själv slår på "Skicka kraschrapporter" i Inställningar → Diagnostik.</p>
@@ -16167,6 +16168,15 @@ SE.on('updater-status', data => {
   } else if (data.status === 'error') {
     updateState = 'idle'
     // Silent — don't bother user with update errors
+  } else if (data.status === 'manual-download') {
+    // Mac fallback — auto-install can't run on unsigned builds, so we
+    // route the user to GitHub Releases for a manual download.
+    updateState = 'manual-download'
+    msg.textContent = `Version ${data.version} finns tillgänglig — ladda ner manuellt`
+    btn.textContent = 'Hämta från GitHub'
+    btn.style.display = ''
+    progress.style.display = 'none'
+    setUpdateBannerVisible(true)
   }
 })
 
@@ -16175,6 +16185,10 @@ function handleUpdateAction() {
     SE.updaterDownload()
   } else if (updateState === 'ready') {
     SE.updaterInstall()
+  } else if (updateState === 'manual-download') {
+    // Same IPC — main.js routes Mac to shell.openExternal.
+    SE.updaterDownload()
+    setUpdateBannerVisible(false)
   }
 }
 

@@ -33,3 +33,52 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: npx electron-builder --win --x64 --publish always
+
+  # Mac build runs after Windows so the GitHub Release draft already
+  # exists — Mac just appends its .dmg files to the same release. If
+  # we let them race we'd occasionally get two parallel "create draft"
+  # API calls and one would 422 out.
+  #
+  # The build is UNSIGNED. Without a $99/year Apple Developer Program
+  # membership we can't notarize, so:
+  #   • Gatekeeper blocks the .dmg on first launch — users have to
+  #     right-click → Open → "Är du säker?" → Öppna once. After that
+  #     macOS remembers the choice.
+  #   • electron-updater can't apply auto-updates on macOS (it requires
+  #     a signed build to verify the new version). Users will need to
+  #     manually download newer .dmg files until we ship signing.
+  #
+  # Both caveats are documented in the privacy policy / docs. Worth it
+  # to ship on Mac at all rather than not at all.
+  build-mac:
+    needs: build-windows
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: 'npm'
+
+      - name: Set version from tag
+        run: |
+          VERSION="${GITHUB_REF_NAME#v}"
+          npm version "$VERSION" --no-git-tag-version --allow-same-version
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build & Publish (unsigned)
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          # Disable code-signing identity discovery so electron-builder
+          # doesn't try to find a Developer ID we don't have. Skipping
+          # signing entirely produces an unsigned .dmg that Gatekeeper
+          # warns about but still installs.
+          CSC_IDENTITY_AUTO_DISCOVERY: false
+        # No --x64/--arm64 flags here — package.json's build.mac.target
+        # already declares both architectures. electron-builder will
+        # produce two separate .dmg files (one Intel, one Apple Silicon).
+        run: npx electron-builder --mac --publish always

@@ -8023,8 +8023,18 @@ async function renderPanelContent(name) {
     if (!synced.activeClientId) {
       html = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Välj en klient först för att hantera tasks.</p>'
     } else {
-      const allTasks = _sortTasksByCustomOrder(synced.tasks || [])
-      const q = window._taskSearch.toLowerCase().trim()
+      // Defensive: if the custom-sort function or its localStorage
+      // backing throws for any reason, fall back to the raw task
+      // list so the panel still renders. Log to console so we can
+      // diagnose if it ever happens.
+      let allTasks
+      try {
+        allTasks = _sortTasksByCustomOrder(synced.tasks || [])
+      } catch (err) {
+        console.warn('[seoz-tasks] sort failed, falling back:', err)
+        allTasks = synced.tasks || []
+      }
+      const q = (window._taskSearch || '').toLowerCase().trim()
       const matchSearch = (t) => !q ||
         (t.title || '').toLowerCase().includes(q) ||
         (t.description || '').toLowerCase().includes(q) ||

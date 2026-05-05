@@ -6875,6 +6875,31 @@ function renderTabs() {
       xBtn.addEventListener('mousedown', e => e.stopPropagation())
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
+      // Edge-detect the tooltip on hover — when the tab sits near
+      // the left/right window edge the centered tooltip would overflow.
+      // Anchor to the corresponding edge instead so the whole card
+      // stays visible.
+      el.addEventListener('mouseenter', () => {
+        const tip = el.querySelector('.tab-tip')
+        if (!tip) return
+        const rect = el.getBoundingClientRect()
+        const tipWidth = 300   // matches min-width:240px..max-width:320px window
+        const winWidth = window.innerWidth
+        const desiredLeft = rect.left + rect.width / 2 - tipWidth / 2
+        if (desiredLeft < 8) {
+          tip.style.left = '0'
+          tip.style.right = 'auto'
+          tip.style.transform = 'none'
+        } else if (desiredLeft + tipWidth > winWidth - 8) {
+          tip.style.left = 'auto'
+          tip.style.right = '0'
+          tip.style.transform = 'none'
+        } else {
+          tip.style.left = '50%'
+          tip.style.right = 'auto'
+          tip.style.transform = 'translateX(-50%)'
+        }
+      })
       attachTabDnD(el)
       bar.insertBefore(el, ntBtn)
     }

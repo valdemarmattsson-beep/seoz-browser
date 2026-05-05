@@ -2072,11 +2072,41 @@ app.on('web-contents-created', (_e, contents) => {
 
     // 'new-window' = window.open(url, name, features) — true popup (OAuth etc.)
     if (disposition === 'new-window') {
-      // Don't let Electron build a default popup — we make our own
-      // wrapper window with a SEOZ chrome (titlebar + back/fwd/reload).
-      // The wrapper loads popup.html which embeds the target URL in a
-      // <webview>. Deferred via setImmediate so we don't block the
-      // setWindowOpenHandler return.
+      // OAuth-style popups need a real window.opener relationship: the
+      // parent page typically calls popup.location = url after open and
+      // listens for popup.close() / postMessage back. Wrapping the
+      // popup in our own BrowserWindow (popup.html with a <webview>)
+      // breaks that — the parent's reference points at the wrapper, not
+      // the inner guest, so subsequent location-pushes never reach the
+      // page. For those URLs we therefore use action:'allow' with
+      // styling overrides; for everything else we still wrap so the
+      // user gets the SEOZ chrome.
+      if (_isOAuthLikeUrl(url)) {
+        const isDark = PM.profileGet('theme', 'light') === 'dark'
+        return {
+          action: 'allow',
+          overrideBrowserWindowOptions: {
+            icon: APP_ICON,
+            backgroundColor: isDark ? '#131920' : '#f8f9fa',
+            autoHideMenuBar: true,
+            title: 'SEOZ Browser',
+            ...(process.platform === 'win32' ? {
+              titleBarStyle: 'hidden',
+              titleBarOverlay: {
+                color: isDark ? '#131920' : '#ffffff',
+                symbolColor: isDark ? '#ffffff' : '#1f2937',
+                height: 32,
+              },
+            } : {}),
+            webPreferences: {
+              contextIsolation: true,
+              nodeIntegration: false,
+              sandbox: false,
+            },
+          },
+        }
+      }
+      // Non-OAuth: wrap with our SEOZ chrome.
       setImmediate(() => createSeozPopup(url, features))
       return { action: 'deny' }
     }
@@ -2087,6 +2117,27 @@ app.on('web-contents-created', (_e, contents) => {
     return { action: 'deny' }
   })
 })
+
+// Heuristic: does the URL look like an OAuth / SSO / federated-login
+// flow? These need a real window.opener and can't be wrapped without
+// breaking the post-auth navigation. We're intentionally generous —
+// false positives just mean a slightly less SEOZ-styled popup, which
+// is far better than a blank one.
+function _isOAuthLikeUrl(url) {
+  try {
+    const u = new URL(url)
+    const host = u.hostname.toLowerCase()
+    const path = u.pathname.toLowerCase()
+    // Well-known IdPs
+    if (/(^|\.)(accounts\.google\.com|appleid\.apple\.com|login\.microsoftonline\.com|login\.live\.com|github\.com|gitlab\.com|bitbucket\.org|auth0\.com|okta\.com|onelogin\.com|saml\.|sso\.|idp\.|auth\.)/.test(host)) return true
+    // Path / query patterns
+    if (/(^|\/)(oauth2?|openid|sso|saml|auth|authorize|login|signin|sign-in|signup|sign-up|callback|connect|federation)(\/|$)/.test(path)) return true
+    if (/[?&](client_id|response_type|redirect_uri|state|scope|nonce|sso|saml)=/.test(u.search)) return true
+    return false
+  } catch (_) {
+    return false
+  }
+}
 
 // Tracked popup windows so we can clean up properly.
 const _seozPopups = new Set()

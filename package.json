@@ -1,6 +1,6 @@
 {
   "name": "seoz-browser",
-  "version": "1.10.42",
+  "version": "1.10.43",
   "description": "SEOZ Desktop Browser",
   "main": "src/main/main.js",
   "author": "SEOZ <hello@seoz.io>",

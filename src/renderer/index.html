@@ -383,8 +383,12 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-rail{ display:contents; }
 .home-rail-side{
   display:flex; flex-direction:column; gap:14px;
-  /* Each rail scrolls internally so the hero never gets pushed off-center
-     by tall news lists or a full inbox preview. */
+  /* align-self:center brings the rail's card-stack to the vertical
+     middle of its grid row — same midline as the hero — instead of
+     hugging the top. Cards still stack top-down inside the side. */
+  align-self:center;
+  /* Cap height so a long inbox/news list scrolls inside the rail
+     instead of pushing the side off-center. */
   max-height: calc(100vh - 80px); overflow-y:auto;
 }
 .home-rail-side::-webkit-scrollbar{ width:3px }
@@ -439,6 +443,20 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-news-meta .hnm-source{color:var(--p)}
 .home-news-meta .hnm-dot{width:2px;height:2px;border-radius:50%;background:var(--muted);opacity:.6}
 .home-news-meta .hnm-time{font-variant-numeric:tabular-nums;opacity:.85}
+/* Matched-theme chips push to the far right of the meta row. The first
+   chip claims the leftover space via margin-left:auto so any later
+   chips ride along with the natural gap. */
+.home-news-meta .hnm-chip{
+  padding:1px 6px;border-radius:4px;
+  background:var(--accent-soft);color:var(--p);
+  font-size:9px;font-weight:700;letter-spacing:.04em;text-transform:uppercase;
+  white-space:nowrap;
+}
+.home-news-meta .hnm-chip:first-of-type{ margin-left:auto }
+/* Highlight the whole row a touch when it's a theme match, so it
+   reads as boosted at a glance rather than a coincidence. */
+.home-news-item.has-theme{ background:rgba(70,128,255,.04) }
+.home-news-item.has-theme:hover{ background:var(--panel) }
 .home-news-title{
   font-size:11.5px;color:var(--head);font-weight:500;line-height:1.3;
   display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden;
@@ -1868,6 +1886,24 @@ input,textarea,select{user-select:text}
 .ns-add-msg.show{display:block}
 .ns-add-msg.ok{display:block;background:rgba(44,168,127,.08);color:var(--g);border:1px solid rgba(44,168,127,.2)}
 .ns-add-msg.err{display:block;background:rgba(220,38,38,.08);color:var(--r);border:1px solid rgba(220,38,38,.2)}
+/* Themes section — pill-chips with × remove + free-text add field. */
+.ns-section-help{font-size:11px;color:var(--muted);line-height:1.4;margin:-4px 0 10px}
+.ns-themes{display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px;min-height:30px}
+.ns-themes-empty{font-size:11px;color:var(--muted);font-style:italic;padding:4px 0}
+.ns-theme{
+  display:inline-flex;align-items:center;gap:2px;height:26px;
+  padding:0 4px 0 10px;border-radius:100px;
+  background:var(--accent-soft);border:1px solid rgba(70,128,255,.3);
+  font-size:11px;font-weight:600;color:var(--p);
+}
+.ns-theme-x{
+  width:18px;height:18px;border-radius:50%;border:none;cursor:pointer;
+  background:transparent;color:var(--p);opacity:.55;
+  display:inline-flex;align-items:center;justify-content:center;
+  transition:opacity .12s,background .12s;
+}
+.ns-theme-x:hover{opacity:1;background:rgba(70,128,255,.15)}
+.ns-theme-x svg{width:11px;height:11px}
 
 /* ── BODY ROW ── */
 .body-row{flex:1;display:flex;min-height:0;overflow:hidden}
@@ -5502,15 +5538,21 @@ async function renderHomeNews() {
     SE.news.refresh().catch(() => {})
     return
   }
-  box.innerHTML = items.map(n => `
-    <div class="home-news-item" onclick="doNav('${esc(n.link)}')" title="${esc(n.title)}">
+  box.innerHTML = items.map(n => {
+    const matches = Array.isArray(n.matchedThemes) ? n.matchedThemes : []
+    const cls = 'home-news-item' + (matches.length ? ' has-theme' : '')
+    const chips = matches.map(t => `<span class="hnm-chip">${esc(t)}</span>`).join('')
+    return `
+    <div class="${cls}" onclick="doNav('${esc(n.link)}')" title="${esc(n.title)}">
       <div class="home-news-meta">
         <span class="hnm-source">${esc(n.sourceName || '')}</span>
         <span class="hnm-dot"></span>
         <span class="hnm-time">${esc(_formatMailDate(n.date))}</span>
+        ${chips}
       </div>
       <div class="home-news-title">${esc(n.title)}</div>
-    </div>`).join('')
+    </div>`
+  }).join('')
 }
 
 // Re-render whenever main has new items (background refresh, manual
@@ -5536,17 +5578,30 @@ window.closeHomeNewsSettings = function() {
 async function renderNewsSettings() {
   const body = document.getElementById('newsSettingsBody')
   if (!body) return
-  let presets = [], sources = []
+  let presets = [], sources = [], themes = []
   try {
-    const [pr, sr] = await Promise.all([SE.news.getPresets(), SE.news.getSources()])
+    const [pr, sr, tr] = await Promise.all([
+      SE.news.getPresets(),
+      SE.news.getSources(),
+      SE.news.getThemes(),
+    ])
     presets = (pr && pr.presets) || []
     sources = (sr && sr.sources) || []
+    themes  = (tr && tr.themes)  || []
   } catch (_) {}
 
   const enabledByUrl = new Map(sources.map(s => [s.url, s.enabled]))
   const customSources = sources.filter(s => s.custom)
   const seoPresets = presets.filter(p => p.category === 'seo')
   const swePresets = presets.filter(p => p.category === 'sweden')
+
+  const themeChip = (t) => `
+    <span class="ns-theme">
+      <span>${esc(t.label)}</span>
+      <button class="ns-theme-x" onclick="newsRemoveTheme('${esc(t.id)}')" aria-label="Ta bort">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg>
+      </button>
+    </span>`
 
   const presetRow = (p) => {
     const on = enabledByUrl.get(p.url) === true
@@ -5573,6 +5628,20 @@ async function renderNewsSettings() {
 
   body.innerHTML = `
     <div class="ns-section">
+      <div class="ns-section-h">Bevakade ämnen</div>
+      <div class="ns-section-help">Rubriker som innehåller dessa ord boostas till toppen av nyhetslistan. Skriv ett ord eller en fras — exempel: SEO, content marketing, AI overviews.</div>
+      <div class="ns-themes" id="newsThemesList">
+        ${themes.length === 0
+          ? '<div class="ns-themes-empty">Inga ämnen bevakas än.</div>'
+          : themes.map(themeChip).join('')}
+      </div>
+      <div class="ns-add">
+        <input class="ns-add-input" id="newsThemeInput" placeholder="t.ex. SEO, content marketing…"
+               onkeydown="if(event.key==='Enter')newsAddTheme()">
+        <button class="ns-add-btn" onclick="newsAddTheme()">Lägg till</button>
+      </div>
+    </div>
+    <div class="ns-section">
       <div class="ns-section-h">SEO &amp; branchen</div>
       ${seoPresets.map(presetRow).join('')}
     </div>
@@ -5597,6 +5666,38 @@ async function renderNewsSettings() {
 async function _newsLoadSources() {
   const r = await SE.news.getSources()
   return (r && r.sources) || []
+}
+
+async function _newsLoadThemes() {
+  const r = await SE.news.getThemes()
+  return (r && r.themes) || []
+}
+
+window.newsAddTheme = async function() {
+  const inp = document.getElementById('newsThemeInput')
+  if (!inp) return
+  const label = (inp.value || '').trim()
+  if (!label) return
+  const themes = await _newsLoadThemes()
+  // Dedupe case-insensitively — main.js does this too, but doing it
+  // here lets us silently no-op + reselect input instead of flashing.
+  if (themes.some(t => t.label.toLowerCase() === label.toLowerCase())) {
+    inp.select(); return
+  }
+  themes.push({ id: 'theme-' + Date.now().toString(36), label })
+  await SE.news.setThemes(themes)
+  inp.value = ''
+  await renderNewsSettings()
+  // setThemes also emits items-updated in main, but call directly so
+  // the rail re-renders immediately even if the event bridge is slow.
+  renderHomeNews().catch(() => {})
+}
+
+window.newsRemoveTheme = async function(id) {
+  const themes = (await _newsLoadThemes()).filter(t => t.id !== id)
+  await SE.news.setThemes(themes)
+  await renderNewsSettings()
+  renderHomeNews().catch(() => {})
 }
 
 window.newsTogglePreset = async function(id, url, name) {
@@ -11509,6 +11610,7 @@ async function refreshClientsKeepDropOpen(opts = {}) {
       return
     }
     const beforeCount = synced.clients.length
+    const beforeNames = synced.clients.map(c => c.name).sort()
     synced.user = res.user
     synced.workspace = res.workspace
     synced.clients = res.clients || []
@@ -11522,11 +11624,36 @@ async function refreshClientsKeepDropOpen(opts = {}) {
     const newDrop = document.querySelector('.client-sel-drop')
     if (newDrop) newDrop.classList.add('open')
     if (currentPanel) renderPanelContent(currentPanel)
+
     if (opts.verbose) {
+      const afterNames = (res.clients || []).map(c => c.name).sort()
+      const removed = beforeNames.filter(n => !afterNames.includes(n))
+      const added   = afterNames.filter(n => !beforeNames.includes(n))
+
+      // Diagnostik: logga rådata till konsolen så vi faktiskt kan se
+      // vad seoz.io returnerade (id + namn). Hjälper när någon säger
+      // "klienten är borttagen i plattformen men syns ändå här" —
+      // antingen ligger den faktiskt kvar i databasen (hard-delete
+      // failade silent) eller också är det browsern som är ur synk.
+      try {
+        console.group('[seoz-clients] /api/browser/clients response')
+        console.log('count:', res.clients?.length || 0)
+        console.table((res.clients || []).map(c => ({ id: c.id, name: c.name, score: c.seoScore })))
+        if (removed.length) console.warn('removed:', removed)
+        if (added.length)   console.info('added:',   added)
+        console.groupEnd()
+      } catch (_) {}
+
+      // Toast med klientnamnen (trunkerat) så användaren direkt ser
+      // vilka som finns i svaret utan att behöva öppna DevTools.
       const after = synced.clients.length
-      const delta = after - beforeCount
-      const deltaStr = delta === 0 ? 'oförändrat' : (delta > 0 ? `+${delta} ny` : `${delta} borttagna`)
-      toast(`Synk klar — ${after} klienter (${deltaStr})`, '#2ca87f')
+      const namesPreview = afterNames.slice(0, 6).join(', ') + (afterNames.length > 6 ? `, +${afterNames.length - 6}` : '')
+      const summary = removed.length
+        ? `Synk klar — ${after} klienter · ${removed.length} borttagna (${removed.slice(0, 3).join(', ')})`
+        : added.length
+          ? `Synk klar — ${after} klienter · ${added.length} nya (${added.slice(0, 3).join(', ')})`
+          : `Synk klar — ${after} klienter: ${namesPreview}`
+      toast(summary, removed.length ? '#e58a00' : '#2ca87f')
     }
   } catch (err) {
     if (opts.verbose) toast('Synk-fel: ' + (err?.message || 'okänt'), '#dc2626')

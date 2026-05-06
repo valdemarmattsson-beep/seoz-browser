@@ -1168,6 +1168,15 @@ ipcMain.on('tooltip:show', (_e, payload = {}) => {
     if (tt.webContents && !tt.webContents.isDestroyed()) {
       tt.webContents.send('tooltip:update', content)
     }
+    // Always start in forward-only mode (cursor passes through to the
+    // main window; only mousemove is forwarded for hit-testing). The
+    // renderer flips to capture mode on action-button mouseenter, but
+    // if a previous hover left it stuck in capture mode (race with a
+    // missed mouseleave, tab close, focus loss, etc.) the tooltip
+    // would silently block clicks on URL bar / sidebar / page within
+    // its 320×200 rect. Resetting on every show makes that
+    // unrecoverable state recoverable. (v1.10.111 fix.)
+    try { tt.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
     // Show without stealing focus. focusable:false also prevents focus
     // theft if the OS would otherwise activate the window.
     if (!tt.isVisible()) {
@@ -1180,8 +1189,12 @@ ipcMain.on('tooltip:show', (_e, payload = {}) => {
 
 ipcMain.on('tooltip:hide', () => {
   try {
-    if (_tooltipWin && !_tooltipWin.isDestroyed() && _tooltipWin.isVisible()) {
-      _tooltipWin.hide()
+    if (_tooltipWin && !_tooltipWin.isDestroyed()) {
+      // Reset before hiding so the next show starts clean even if we
+      // were in capture mode when hide was triggered (e.g. user
+      // moved cursor off a button + off the card in one motion).
+      try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+      if (_tooltipWin.isVisible()) _tooltipWin.hide()
     }
   } catch (_) {}
 })
@@ -1189,11 +1202,29 @@ ipcMain.on('tooltip:hide', () => {
 // Toggle whether the tooltip window catches clicks (over an action
 // button) or lets them pass through to the parent window. The tooltip
 // renderer flips this on mouseenter/leave of its action buttons.
+//
+// Watchdog: if the renderer ever fails to send the (false) follow-up
+// (rapid hover, tab close while button is hovered, OS focus loss
+// before mouseleave fires, etc.) the window would stay in capture
+// mode and silently block all clicks within its rect — including the
+// URL bar and sidebar if the tooltip happens to overlap them. We
+// therefore auto-revert to forward-only after 3s if not explicitly
+// reset, which makes the worst case "buttons unclickable for a few
+// seconds" instead of "main UI locked until app restart".
+let _tooltipCaptureWatchdog = null
 ipcMain.on('tooltip:set-interactive', (_e, on) => {
   try {
     if (!_tooltipWin || _tooltipWin.isDestroyed()) return
+    clearTimeout(_tooltipCaptureWatchdog)
     if (on) {
       _tooltipWin.setIgnoreMouseEvents(false)
+      _tooltipCaptureWatchdog = setTimeout(() => {
+        try {
+          if (_tooltipWin && !_tooltipWin.isDestroyed()) {
+            _tooltipWin.setIgnoreMouseEvents(true, { forward: true })
+          }
+        } catch (_) {}
+      }, 3000)
     } else {
       _tooltipWin.setIgnoreMouseEvents(true, { forward: true })
     }

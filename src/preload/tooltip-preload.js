@@ -37,5 +37,10 @@ contextBridge.exposeInMainWorld('seoz', {
     setInteractive: (on) => ipcRenderer.send('tooltip:set-interactive', !!on),
     cursorOnCard:   (on) => ipcRenderer.send('tooltip:cursor-on-card', !!on),
     triggerAction:  (action, tabId) => ipcRenderer.send('tooltip:action', { action, tabId }),
+    // Renderer measured its card and asks main to resize the
+    // BrowserWindow accordingly. Without this the action buttons get
+    // clipped when the preview image is present (content tall, window
+    // small). Bound is set in main to avoid silly values.
+    requestResize:  (height) => ipcRenderer.send('tooltip:resize', { height }),
   },
 })

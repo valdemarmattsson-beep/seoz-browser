@@ -133,6 +133,18 @@
 
   let _currentTabId = 0
 
+  // Measure the rendered card and tell main how tall the BrowserWindow
+  // should be. Otherwise action buttons get clipped when the preview
+  // image is present (content tall ~300px, fixed window 200px).
+  function _reportSize() {
+    const card = document.getElementById('card')
+    if (!card || !window.seoz?.tooltip?.requestResize) return
+    const r = card.getBoundingClientRect()
+    // +8px for the .card's outer margin (4px each side, plus a little
+    // breathing room so the box-shadow isn't clipped).
+    window.seoz.tooltip.requestResize(Math.ceil(r.height + 12))
+  }
+
   if (window.seoz && window.seoz.tooltip && window.seoz.tooltip.onUpdate) {
     window.seoz.tooltip.onUpdate((data) => {
       const fav = document.getElementById('fav')
@@ -160,6 +172,15 @@
         preview.removeAttribute('src')
         preview.classList.remove('show')
       }
+
+      // Layout has updated synchronously for everything except the
+      // preview <img>, which loads async. Report now (text-only height)
+      // and again on image load (final height).
+      requestAnimationFrame(_reportSize)
+    })
+    // The preview image loading changes the card height — re-measure.
+    document.getElementById('preview').addEventListener('load', () => {
+      requestAnimationFrame(_reportSize)
     })
   }
 

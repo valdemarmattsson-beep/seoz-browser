@@ -1244,6 +1244,26 @@ ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
   } catch (_) {}
 })
 
+// Resize the tooltip window to fit the card the renderer just laid
+// out. Without this the window is fixed at 200px and the action
+// buttons get clipped when a preview image (140px tall) is present.
+// Bounds are clamped to a sane range so a hostile or buggy renderer
+// can't ask for a 10000px tall window.
+ipcMain.on('tooltip:resize', (_e, payload = {}) => {
+  try {
+    if (!_tooltipWin || _tooltipWin.isDestroyed()) return
+    const want = Math.max(80, Math.min(420, Math.round(payload.height) || 200))
+    const b = _tooltipWin.getBounds()
+    if (b.height === want) return
+    // Re-clamp y so a taller window doesn't escape the screen at the
+    // bottom edge.
+    const display = screen.getDisplayMatching(b)
+    const wa = display.workArea
+    const y = Math.max(wa.y + 4, Math.min(wa.y + wa.height - want - 4, b.y))
+    _tooltipWin.setBounds({ x: b.x, y, width: b.width, height: want })
+  } catch (_) {}
+})
+
 // User clicked Fäst / Splitvy in the tooltip. Forward to the main
 // window's renderer where the existing pin/split logic lives, then
 // hide the tooltip + reset ignoreMouseEvents.

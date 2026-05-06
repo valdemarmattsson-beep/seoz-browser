@@ -1559,21 +1559,41 @@ input,textarea,select{user-select:text}
 }
 .tab:hover .tab-tip{opacity:1;pointer-events:auto}
 .tab-tip:hover{opacity:1;transition-delay:0s}
-/* Clip-from-top: when a tab tooltip is active, shrink the WebContents-
-   View by tooltip-height from the top so a strip of chrome bg is
-   exposed for the tooltip to render into. The placeholder's inline
-   style is `inset:0`, so we override with !important. ResizeObserver
-   in tab-handle.js sees the new rect and calls setBounds, shrinking
-   the native WebContentsView. Page stays visible (just shorter).
-   Trade-off: a brief reflow on YouTube/Twitch when the view resizes,
-   which is acceptable cost for a working tab preview. v1.10.97 tried
-   hiding the view entirely; that caused the screen to go fully black,
-   reverted in v1.10.100. v1.10.101 is the proper clip-from-top fix. */
+/* Clip-from-top: shrink the WebContentsView vertically by N px so the
+   top strip of chrome bg is exposed, where dropdowns / tooltips can
+   render in normal HTML stacking. The placeholder's inline style is
+   `inset:0`, so we override `top` with !important. ResizeObserver in
+   tab-handle.js sees the new rect and calls setBounds, shrinking the
+   native WebContentsView. Page stays visible (just shorter).
+
+   Trade-off: brief reflow on YouTube/Twitch when the view resizes,
+   acceptable cost for working tooltip + URL suggestions.
+
+   History:
+   - v1.10.97: tried hiding WebContentsView entirely → screen went
+     black on hover and on URL-bar typing. Bad UX.
+   - v1.10.100: reverted that for tab tooltip.
+   - v1.10.101: clip-from-top for tab tooltip (280px).
+   - v1.10.102: same mechanism for URL-suggest dropdown (380px to
+     cover the dropdown's max-height of 320 + URL-bar + buffer).
+
+   The two clip values are different because the URL-suggest dropdown
+   anchors below the URL bar (further down the chrome) and can be
+   taller than the tab tooltip card. */
 body.tab-tip-hovering .tab-handle{
   top:280px !important;
   transition:top .12s ease-out;
 }
-body:not(.tab-tip-hovering) .tab-handle{ transition:top .1s ease-in }
+body.url-suggest-clip .tab-handle{
+  top:380px !important;
+  transition:top .12s ease-out;
+}
+/* When BOTH classes are active (rare — tooltip + URL suggest), pick
+   the larger clip so neither overlay is occluded. */
+body.tab-tip-hovering.url-suggest-clip .tab-handle{
+  top:380px !important;
+}
+body:not(.tab-tip-hovering):not(.url-suggest-clip) .tab-handle{ transition:top .1s ease-in }
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -4889,10 +4909,11 @@ const _OVERLAY_OPEN_SELECTOR = [
   '#ppForm.open',
   '#ctxMenu.open',
   '.client-sel-drop.open',
-  // URL-bar suggestions dropdown — without this entry the dropdown
-  // renders behind the WebContentsView (z-index doesn't reach across
-  // the native-view boundary) and is invisible to the user.
-  '#urlSuggest.open',
+  // NB: #urlSuggest.open used to live here (v1.10.97), but the
+  // chrome-overlay-active mechanism hides the WebContentsView
+  // entirely → page goes black while user types in the URL bar.
+  // v1.10.102 moved URL-suggest to the clip-from-top mechanism
+  // (see body.url-suggest-clip rule + _refreshOverlayState below).
   // .show-modifier overlays (visible-state class)
   '.toast.show',
   '.mail-acct-menu.show',
@@ -4938,16 +4959,27 @@ function _isOverlayOpen() {
 
 function _refreshOverlayState() {
   const open = _isOverlayOpen()
-  if (open === _overlayActive) return
-  _overlayActive = open
-  // Toggle a body class. CSS hides tab-handle placeholder divs while
-  // it's set; TabHandle's ResizeObserver picks up the resulting 0×0
-  // computed rect and forwards setVisible(false) to the WebContentsView.
-  // When the class is removed, the placeholder reverts to its previous
-  // display rule (set by showWebview / layoutActiveTab) and visibility
-  // is restored automatically — no explicit "remember and restore"
-  // logic needed.
-  document.body.classList.toggle('chrome-overlay-active', open)
+  if (open !== _overlayActive) {
+    _overlayActive = open
+    // Toggle a body class. CSS hides tab-handle placeholder divs while
+    // it's set; TabHandle's ResizeObserver picks up the resulting 0×0
+    // computed rect and forwards setVisible(false) to the WebContents-
+    // View. When the class is removed, the placeholder reverts to its
+    // previous display rule (set by showWebview / layoutActiveTab) and
+    // visibility is restored automatically — no explicit "remember and
+    // restore" logic needed.
+    document.body.classList.toggle('chrome-overlay-active', open)
+  }
+
+  // URL-suggest uses the lighter "clip-from-top" mechanism instead of
+  // hiding the WebContentsView entirely. Hiding made the page go black
+  // while the user typed in the URL bar; clipping just shrinks the
+  // page so the dropdown can render in the exposed chrome strip.
+  // Same MutationObserver that drives _refreshOverlayState catches the
+  // .open class change on #urlSuggest, so this runs in lockstep.
+  const us = document.getElementById('urlSuggest')
+  const usOpen = !!(us && us.classList.contains('open') && _isElementActuallyVisible(us))
+  document.body.classList.toggle('url-suggest-clip', usOpen)
 }
 
 // MutationObserver fires whenever any class attribute changes in the

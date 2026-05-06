@@ -5056,44 +5056,40 @@ function _isOverlayOpen() {
   } catch (_) { return false }
 }
 
+// v1.10.128 DIAG — counter ensures we see if observer feedback loop
+// is occurring (counter increments rapidly with no exit between).
+let _refreshCount = 0
 function _refreshOverlayState() {
-  const open = _isOverlayOpen()
-  if (open !== _overlayActive) {
-    _overlayActive = open
-    // Toggle a body class. CSS hides tab-handle placeholder divs while
-    // it's set; TabHandle's ResizeObserver picks up the resulting 0×0
-    // computed rect and forwards setVisible(false) to the WebContents-
-    // View. When the class is removed, the placeholder reverts to its
-    // previous display rule (set by showWebview / layoutActiveTab) and
-    // visibility is restored automatically — no explicit "remember and
-    // restore" logic needed.
-    document.body.classList.toggle('chrome-overlay-active', open)
-  }
-
-  // Dynamic clip-from-top for chrome dropdowns / context menus / URL
-  // suggestions. Compute the tallest visible clip-mode overlay and
-  // shrink the WebContentsView just enough to expose it. The page
-  // stays visible (just shorter) instead of going fully black.
-  let maxBottom = 0
+  const c = ++_refreshCount
+  try { console.warn('[DIAG] refreshOverlayState ENTER #' + c) } catch (_) {}
   try {
-    document.querySelectorAll(_CLIP_OPEN_SELECTOR).forEach(el => {
-      if (_isElementActuallyVisible(el)) {
-        const r = el.getBoundingClientRect()
-        if (r.bottom > maxBottom) maxBottom = r.bottom
-      }
-    })
-  } catch (_) {}
-  if (maxBottom > 0) {
-    const wvStack = document.getElementById('wvStack')
-    const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
-    // Clip = how far below #wvStack's top edge the overlay reaches,
-    // plus a small buffer so the overlay's bottom border isn't kissing
-    // the WebContentsView edge.
-    const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
-    document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
-    document.body.classList.add('chrome-clip-active')
-  } else {
-    document.body.classList.remove('chrome-clip-active')
+    const open = _isOverlayOpen()
+    if (open !== _overlayActive) {
+      _overlayActive = open
+      try { console.warn('[DIAG] refreshOverlayState toggle chrome-overlay-active=' + open) } catch (_) {}
+      document.body.classList.toggle('chrome-overlay-active', open)
+    }
+
+    let maxBottom = 0
+    try {
+      document.querySelectorAll(_CLIP_OPEN_SELECTOR).forEach(el => {
+        if (_isElementActuallyVisible(el)) {
+          const r = el.getBoundingClientRect()
+          if (r.bottom > maxBottom) maxBottom = r.bottom
+        }
+      })
+    } catch (_) {}
+    if (maxBottom > 0) {
+      const wvStack = document.getElementById('wvStack')
+      const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
+      const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
+      document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
+      document.body.classList.add('chrome-clip-active')
+    } else {
+      document.body.classList.remove('chrome-clip-active')
+    }
+  } finally {
+    try { console.warn('[DIAG] refreshOverlayState EXIT #' + c) } catch (_) {}
   }
 }
 

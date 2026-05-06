@@ -270,6 +270,11 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   display:flex;flex-direction:column;gap:10px;position:relative;
   overflow:hidden;
 }
+/* Without this, the .home-chat display:flex rule wins over the
+   default [hidden]{display:none} from the user agent, so even an
+   empty conversation kept the shell + "Rensa"-button visible on
+   the home screen. */
+.home-chat[hidden]{display:none}
 .home-chat-list{
   flex:1;min-height:0;overflow-y:auto;
   display:flex;flex-direction:column;gap:10px;padding-right:4px;
@@ -4869,6 +4874,10 @@ const _OVERLAY_OPEN_SELECTOR = [
   '#ppForm.open',
   '#ctxMenu.open',
   '.client-sel-drop.open',
+  // URL-bar suggestions dropdown — without this entry the dropdown
+  // renders behind the WebContentsView (z-index doesn't reach across
+  // the native-view boundary) and is invisible to the user.
+  '#urlSuggest.open',
   // .show-modifier overlays (visible-state class)
   '.toast.show',
   '.mail-acct-menu.show',
@@ -4876,6 +4885,11 @@ const _OVERLAY_OPEN_SELECTOR = [
   '.mail-compose-tpl-menu.show',
   '.mail-schedule-popup.show',
   '.home-mail-results.show',
+  // body class toggled by the tab :hover JS handler (see tab mouseenter
+  // below). Can't query :hover or .tab-tip directly: :hover isn't
+  // reflected in CSS class state, and the tooltip itself only becomes
+  // opacity:1 via :hover rather than via a class flag.
+  'body.tab-tip-hovering',
   // NB: .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
   // included — they're always-visible chrome (favicon, find-bar that
   // overlays the top band) or false-positive triggers (tab-tip-fav
@@ -9005,6 +9019,29 @@ function renderTabs() {
           tip.style.right = 'auto'
           tip.style.transform = 'translateX(-50%)'
         }
+
+        // Tab tooltip lives in DOM but the WebContentsView (active page)
+        // sits on top as a native OS layer, so the tooltip would appear
+        // BEHIND the page. CSS .tab-tip has a 400ms delay before it
+        // becomes visible — match that here so we only hide the page
+        // after a clear "linger to preview" intent. _refreshOverlayState
+        // picks up body.tab-tip-hovering and hides the active tab's
+        // WebContentsView while the tooltip is on screen.
+        clearTimeout(window._tabTipShowTimer)
+        clearTimeout(window._tabTipHideTimer)
+        window._tabTipShowTimer = setTimeout(() => {
+          document.body.classList.add('tab-tip-hovering')
+        }, 420)
+      })
+      el.addEventListener('mouseleave', () => {
+        clearTimeout(window._tabTipShowTimer)
+        clearTimeout(window._tabTipHideTimer)
+        // Small grace period so the cursor can travel from the tab into
+        // the tooltip card itself (which has :hover { opacity:1 } to
+        // keep itself open) without the page flashing back in.
+        window._tabTipHideTimer = setTimeout(() => {
+          document.body.classList.remove('tab-tip-hovering')
+        }, 150)
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {
@@ -12665,12 +12702,11 @@ function renderBmBar() {
   const bar = document.getElementById('bmbar')
   bar.innerHTML = ''
 
-  // If empty, show hint — but DON'T early-return; we still want the
-  // client selector on the far right (it used to disappear when the
-  // bookmark bar was emptied because the early-return skipped past
-  // renderClientSelector).
+  // If empty, render nothing inside the left part of the bar — folks who
+  // know they want to bookmark know how, and the empty hint felt like
+  // clutter. We still need to call renderClientSelector + updateBmStar
+  // so the right-side controls survive the empty state.
   if (!bookmarks.length && !getAllFolders().length) {
-    bar.innerHTML = '<div class="bm-empty">Klicka stjärnan i adressfältet eller högerklicka här</div>'
     renderClientSelector(bar)
     updateBmStar()
     return

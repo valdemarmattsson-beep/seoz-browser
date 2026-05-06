@@ -1559,6 +1559,21 @@ input,textarea,select{user-select:text}
 }
 .tab:hover .tab-tip{opacity:1;pointer-events:auto}
 .tab-tip:hover{opacity:1;transition-delay:0s}
+/* Clip-from-top: when a tab tooltip is active, shrink the WebContents-
+   View by tooltip-height from the top so a strip of chrome bg is
+   exposed for the tooltip to render into. The placeholder's inline
+   style is `inset:0`, so we override with !important. ResizeObserver
+   in tab-handle.js sees the new rect and calls setBounds, shrinking
+   the native WebContentsView. Page stays visible (just shorter).
+   Trade-off: a brief reflow on YouTube/Twitch when the view resizes,
+   which is acceptable cost for a working tab preview. v1.10.97 tried
+   hiding the view entirely; that caused the screen to go fully black,
+   reverted in v1.10.100. v1.10.101 is the proper clip-from-top fix. */
+body.tab-tip-hovering .tab-handle{
+  top:280px !important;
+  transition:top .12s ease-out;
+}
+body:not(.tab-tip-hovering) .tab-handle{ transition:top .1s ease-in }
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -9021,12 +9036,28 @@ function renderTabs() {
           tip.style.right = 'auto'
           tip.style.transform = 'translateX(-50%)'
         }
-        // v1.10.97 also toggled body.tab-tip-hovering here to hide the
-        // WebContentsView so the tooltip could render on top. Reverted
-        // in v1.10.100 because the active tab going black on every
-        // hover-pause was unacceptable UX. Tooltip is now back to its
-        // pre-fix state — partially behind the page on hover, but the
-        // page stays visible. Proper fix is tracked separately.
+
+        // After the same 420ms intent delay the CSS uses for opacity,
+        // toggle body.tab-tip-hovering so the .tab-handle CSS rule
+        // shrinks the WebContentsView from the top by 280px. That
+        // exposes a strip of chrome bg where the tooltip can actually
+        // render — without making the entire page disappear (the
+        // v1.10.97 mistake we reverted in v1.10.100).
+        clearTimeout(window._tabTipShowTimer)
+        clearTimeout(window._tabTipHideTimer)
+        window._tabTipShowTimer = setTimeout(() => {
+          document.body.classList.add('tab-tip-hovering')
+        }, 420)
+      })
+      el.addEventListener('mouseleave', () => {
+        clearTimeout(window._tabTipShowTimer)
+        clearTimeout(window._tabTipHideTimer)
+        // Grace period so the cursor can travel from the tab onto the
+        // tooltip card itself (which has :hover { opacity:1 } to keep
+        // itself open) without the page snapping back.
+        window._tabTipHideTimer = setTimeout(() => {
+          document.body.classList.remove('tab-tip-hovering')
+        }, 150)
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {

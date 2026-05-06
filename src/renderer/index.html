@@ -2097,9 +2097,12 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .dock-sep{width:24px;height:1px;background:var(--border);margin:4px 0;flex-shrink:0}
 .dock-spacer{flex:1}
 /* Tooltip */
-.di .dtt{position:absolute;right:calc(100% + 8px);top:50%;transform:translateY(-50%);background:var(--head);color:var(--bg);font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;white-space:nowrap;pointer-events:none;opacity:0;transition:opacity .15s;z-index:100}
-.di:hover .dtt{opacity:1}
-.dtt::after{content:'';position:absolute;left:100%;top:50%;transform:translateY(-50%);border:4px solid transparent;border-left-color:var(--head)}
+/* v1.10.132: dock-icon hover labels are now rendered via a separate
+   chrome-label WebContentsView (see _wireDockTooltips below) so they
+   z-order above the page WebContentsView. The in-DOM .dtt nodes are
+   kept as a data source — JS reads textContent on hover — but never
+   become visible themselves. */
+.di .dtt { display: none }
 
 /* ── SEOZ PANEL (slide-out from right, between webview and dock) ── */
 .seoz-panel{
@@ -3742,7 +3745,9 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(10)" title="Zooma in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
-        <div class="url-suggest" id="urlSuggest"></div>
+        <!-- URL suggest dropdown is now a sibling WebContentsView
+             (see main.js _ensureUrlSuggestView). It floats above the
+             page WebContentsView instead of competing via clip-from-top. -->
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
@@ -4949,7 +4954,6 @@ const _OVERLAY_OPEN_SELECTOR = [
 // getBoundingClientRect().bottom and shrinks the WebContentsView so
 // the tallest visible overlay sits in exposed chrome bg. v1.10.105.
 const _CLIP_OPEN_SELECTOR = [
-  '#urlSuggest.open',
   '#ctxMenu.open',
   '#chromeDd.open',
   '.bm-drop.open',
@@ -10071,6 +10075,67 @@ function toggleDock() {
   }
 }
 
+// ── Dock-icon hover labels via floating WebContentsView ──────────
+// The in-DOM .dtt tooltips were getting clipped by the page
+// WebContentsView's z-order. We now render them via a single shared
+// chrome-label view (see main.js _ensureChromeLabelView) that sits
+// above the page in the contentView tree. The .dtt nodes still hold
+// the label text — we read textContent on mouseenter and forward it.
+function _wireDockTooltips() {
+  const dock = document.querySelector('.dock')
+  if (!dock || !window.seoz?.chromeLabel) return
+  let _hoverTimer = null
+  let _shown = false
+  const showFor = (di) => {
+    const dtt = di.querySelector('.dtt')
+    if (!dtt) return
+    const text = (dtt.textContent || '').trim()
+    if (!text) return
+    const r = di.getBoundingClientRect()
+    // anchorX = LEFT edge of the dock icon → label sits to its LEFT.
+    // anchorY = vertical centre of the icon.
+    window.seoz.chromeLabel.show(Math.round(r.left), Math.round(r.top + r.height / 2), text, 'left')
+    _shown = true
+  }
+  const hide = () => {
+    if (!_shown) return
+    try { window.seoz.chromeLabel.hide() } catch (_) {}
+    _shown = false
+  }
+  // Event delegation — one set of listeners covers all .di children
+  // (including ones added/removed dynamically e.g. when toggling the
+  // mail icon's badge).
+  dock.addEventListener('mouseover', (e) => {
+    const di = e.target.closest && e.target.closest('.di')
+    if (!di || !dock.contains(di)) return
+    clearTimeout(_hoverTimer)
+    _hoverTimer = setTimeout(() => showFor(di), 80)  // tiny intent delay
+  })
+  dock.addEventListener('mouseout', (e) => {
+    // Only hide when the cursor is actually leaving the dock entirely
+    // OR moving to a non-.di area. relatedTarget can be null (window
+    // boundary) so guard for that.
+    const rel = e.relatedTarget
+    if (rel && dock.contains(rel) && rel.closest('.di')) return
+    clearTimeout(_hoverTimer)
+    hide()
+  })
+  // Hide on dock click (icon was clicked → user got what they wanted)
+  dock.addEventListener('click', () => {
+    clearTimeout(_hoverTimer)
+    hide()
+  })
+  // Window blur / scroll — hide stale label.
+  window.addEventListener('blur', hide)
+}
+// Run after DOM is ready (dock is in the initial HTML so it exists by
+// the time this script runs; the wrapper is defensive).
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', _wireDockTooltips, { once: true })
+} else {
+  _wireDockTooltips()
+}
+
 function togglePanel(name) {
   if (currentPanel === name) { closePanel(); return }
   openPanel(name)
@@ -14700,28 +14765,46 @@ function clearHistory() {
 
 // ══════════════════════════════════════════════════════
 //  URL AUTOCOMPLETE
+//
+//  v1.10.133: dropdown is now rendered by a separate WebContentsView
+//  (see main.js _ensureUrlSuggestView) so it z-orders above the page
+//  WebContentsView. Chrome still owns the source of truth (history
+//  data + match logic + keyboard selection) and pushes the rendered
+//  list into the popup via IPC. Popup emits hover/pick back.
 // ══════════════════════════════════════════════════════
 ;(function(){
   const input = document.getElementById('urlInput')
-  const box = document.getElementById('urlSuggest')
+  const wrap = input?.closest('.url-wrap')
   let selIdx = -1
   let matches = []
-
-  function highlight(text, query) {
-    if (!query) return esc(text)
-    const i = text.toLowerCase().indexOf(query.toLowerCase())
-    if (i === -1) return esc(text)
-    return esc(text.slice(0, i)) + '<span class="url-sg-match">' + esc(text.slice(i, i + query.length)) + '</span>' + esc(text.slice(i + query.length))
-  }
+  let _open = false
+  let _query = ''
 
   function dedupe(arr) {
     const seen = new Set()
     return arr.filter(h => { if (seen.has(h.url)) return false; seen.add(h.url); return true })
   }
 
+  function pushItems() {
+    if (!_open) return
+    if (!window.seoz?.urlSuggest) return
+    if (!wrap) return
+    const r = wrap.getBoundingClientRect()
+    // anchor at the bottom-left of the URL bar wrapper, full width.
+    window.seoz.urlSuggest.show(
+      Math.round(r.left),
+      Math.round(r.bottom + 4),
+      Math.round(r.width),
+      matches,
+      selIdx,
+      _query,
+    )
+  }
+
   function showSuggestions() {
     const q = input.value.trim()
     if (!q) { hideSuggestions(); return }
+    _query = q
     const lower = q.toLowerCase()
     matches = dedupe(browsingHistory.filter(h =>
       (h.url.toLowerCase().includes(lower) || h.title.toLowerCase().includes(lower)) &&
@@ -14742,34 +14825,35 @@ function clearHistory() {
     }).slice(0, 8)
     if (!matches.length) { hideSuggestions(); return }
     selIdx = -1
-    box.innerHTML = matches.map((h, i) =>
-      `<div class="url-sg" data-i="${i}" onmousedown="event.preventDefault();doNav('${esc(h.url)}');document.getElementById('urlSuggest').classList.remove('open')">
-        <img src="${esc(h.favicon)}" onerror="this.style.display='none'">
-        <div class="url-sg-info">
-          <div class="url-sg-title">${highlight(h.title, q)}</div>
-          <div class="url-sg-url">${highlight(h.url, q)}</div>
-        </div>
-      </div>`
-    ).join('')
-    box.classList.add('open')
+    _open = true
+    pushItems()
   }
 
-  function hideSuggestions() { box.classList.remove('open'); selIdx = -1 }
+  function hideSuggestions() {
+    _open = false
+    selIdx = -1
+    matches = []
+    try { window.seoz?.urlSuggest?.hide?.() } catch (_) {}
+  }
 
   function updateSel() {
-    box.querySelectorAll('.url-sg').forEach((el, i) => el.classList.toggle('sel', i === selIdx))
-    if (selIdx >= 0 && matches[selIdx]) {
-      const el = box.querySelectorAll('.url-sg')[selIdx]
-      if (el) el.scrollIntoView({ block: 'nearest' })
-    }
+    try { window.seoz?.urlSuggest?.updateSel?.(selIdx) } catch (_) {}
   }
 
   input.addEventListener('input', showSuggestions)
   input.addEventListener('focus', () => { if (input.value.trim()) showSuggestions() })
+  // Delay hide so a click in the popup (which steals focus from the
+  // URL input → blur fires) can still register before we hide. The
+  // popup's mousedown handler emits 'pick' synchronously so 150ms is
+  // ample headroom.
   input.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
 
+  // Window resize / scroll — reposition. The URL bar's bounds may
+  // change when the user resizes the chrome window.
+  window.addEventListener('resize', () => { if (_open) pushItems() })
+
   input.addEventListener('keydown', e => {
-    if (!box.classList.contains('open') || !matches.length) return
+    if (!_open || !matches.length) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       selIdx = (selIdx + 1) % matches.length
@@ -14780,12 +14864,30 @@ function clearHistory() {
       updateSel()
     } else if (e.key === 'Enter' && selIdx >= 0) {
       e.preventDefault()
+      const url = matches[selIdx].url
       hideSuggestions()
-      doNav(matches[selIdx].url)
+      doNav(url)
     } else if (e.key === 'Escape') {
       hideSuggestions()
     }
   })
+
+  // Wire popup → chrome events.
+  if (window.seoz?.urlSuggest?.onPick) {
+    window.seoz.urlSuggest.onPick((url) => {
+      hideSuggestions()
+      if (url) doNav(url)
+    })
+  }
+  if (window.seoz?.urlSuggest?.onHover) {
+    window.seoz.urlSuggest.onHover((idx) => {
+      if (typeof idx === 'number' && idx >= 0 && idx < matches.length) {
+        selIdx = idx
+        // No need to push back to popup — popup updates its own
+        // highlight on hover. We just record state for keyboard nav.
+      }
+    })
+  }
 })()
 
 // ══════════════════════════════════════════════════════

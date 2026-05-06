@@ -1558,6 +1558,230 @@ ipcMain.on('shield:action', (_e, payload = {}) => {
   } catch (_) {}
 })
 
+// ════════════════════════════════════════════════════════════════════
+//  Generic chrome-label tooltip — sibling WebContentsView
+//
+//  Hover labels on chrome elements (right-sidebar dock icons etc.)
+//  used to render as in-DOM `.dtt` divs but those got clipped by the
+//  page WebContentsView z-order. Same fix as Shield/tab-tooltip:
+//  separate transparent WebContentsView attached to contentView.
+//
+//  Single shared view — repositioned and re-textified per hover.
+//  Width/height resize via 'chrome-label:resize' so the view always
+//  hugs the text exactly (no oversized hit area).
+//
+//  Channels:
+//    chrome-renderer → main:
+//      chrome-label:show {anchorX, anchorY, text, side?}
+//      chrome-label:hide
+//    main → label-renderer:
+//      chrome-label:update (text)
+//    label-renderer → main:
+//      chrome-label:resize {width, height}
+// ════════════════════════════════════════════════════════════════════
+let _chromeLabelView = null
+let _chromeLabelLastAnchor = null  // { anchorX, anchorY, side } — re-applied on resize
+
+function _ensureChromeLabelView() {
+  if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) return _chromeLabelView
+  if (!win || win.isDestroyed()) return null
+
+  _chromeLabelView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/chrome-label-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _chromeLabelView.setBackgroundColor('#00000000') } catch (_) {}
+  _chromeLabelView.setVisible(false)
+  _chromeLabelView.webContents.loadFile(path.join(__dirname, '../renderer/chrome-label.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_chromeLabelView?.webContents && !_chromeLabelView.webContents.isDestroyed()) _chromeLabelView.webContents.close() } catch (_) {}
+      _chromeLabelView = null
+    })
+  }
+  return _chromeLabelView
+}
+
+function _positionChromeLabel(width, height) {
+  if (!_chromeLabelView || !_chromeLabelLastAnchor) return
+  if (!win || win.isDestroyed()) return
+  const cb = win.getContentBounds()
+  const { anchorX = 0, anchorY = 0, side = 'left' } = _chromeLabelLastAnchor
+  // side='left' = label sits to the LEFT of the anchor (anchorX is the
+  //               anchor's left edge; label's right edge ends just before).
+  // side='right' = label sits to the RIGHT (anchorX is anchor's right edge).
+  let x = side === 'right' ? Math.round(anchorX) : Math.round(anchorX - width)
+  let y = Math.round(anchorY - height / 2)
+  x = Math.max(0, Math.min(cb.width - width, x))
+  y = Math.max(0, Math.min(cb.height - height, y))
+  _chromeLabelView.setBounds({ x, y, width, height })
+}
+
+ipcMain.on('chrome-label:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureChromeLabelView()
+    if (!v) return
+    if (!win || win.isDestroyed()) return
+    const { anchorX = 0, anchorY = 0, text = '', side = 'left' } = payload
+    _chromeLabelLastAnchor = { anchorX, anchorY, side }
+    // Push text — renderer will measure and call back via resize.
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('chrome-label:update', text)
+    }
+    // Provisional bounds — resize callback will tighten them. Use a
+    // generous initial size so the renderer can measure without clipping.
+    const b = v.getBounds()
+    _chromeLabelView.setBounds({
+      x: b.x || 0, y: b.y || 0,
+      width: Math.max(b.width || 0, 200),
+      height: Math.max(b.height || 0, 32),
+    })
+    _positionChromeLabel(Math.max(b.width || 0, 200), Math.max(b.height || 0, 32))
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[chrome-label:show] failed:', err)
+  }
+})
+
+ipcMain.on('chrome-label:hide', () => {
+  try {
+    if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) {
+      _chromeLabelView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-label:resize', (_e, payload = {}) => {
+  try {
+    if (!_chromeLabelView || _chromeLabelView.webContents.isDestroyed()) return
+    const w = Math.max(20, Math.min(400, Math.round(payload.width)  || 100))
+    const h = Math.max(16, Math.min(60,  Math.round(payload.height) || 28))
+    _positionChromeLabel(w, h)
+  } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  URL suggest dropdown — sibling WebContentsView
+//
+//  Same pattern as the other floating chrome views. Renderer (chrome)
+//  computes matches against history and pushes the rendered list via
+//  'urlSuggest:show' with the URL bar's bounding rect. The popup view
+//  positions itself relative to that rect, renders the items, and
+//  forwards click / hover events back through main → chrome.
+//
+//  Keyboard navigation stays in chrome (URL input has focus); chrome
+//  pushes new selIdx via 'urlSuggest:update-sel' as the user presses
+//  ArrowUp/Down. Enter submits via the existing input keydown handler,
+//  which calls doNav() and 'urlSuggest:hide'.
+// ════════════════════════════════════════════════════════════════════
+let _urlSuggestView = null
+let _urlSuggestLastBounds = null  // { x, y, width } — re-applied on resize
+
+function _ensureUrlSuggestView() {
+  if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) return _urlSuggestView
+  if (!win || win.isDestroyed()) return null
+
+  _urlSuggestView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/url-suggest-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _urlSuggestView.setBackgroundColor('#00000000') } catch (_) {}
+  _urlSuggestView.setVisible(false)
+  _urlSuggestView.webContents.loadFile(path.join(__dirname, '../renderer/url-suggest.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_urlSuggestView?.webContents && !_urlSuggestView.webContents.isDestroyed()) _urlSuggestView.webContents.close() } catch (_) {}
+      _urlSuggestView = null
+    })
+  }
+  return _urlSuggestView
+}
+
+ipcMain.on('urlSuggest:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureUrlSuggestView()
+    if (!v) return
+    if (!win || win.isDestroyed()) return
+
+    const {
+      anchorX = 0, anchorY = 0, width = 320,
+      items = [], selIdx = -1, query = '',
+    } = payload
+
+    _urlSuggestLastBounds = { x: Math.round(anchorX), y: Math.round(anchorY), width: Math.round(width) }
+    // Push items first so the renderer can measure and request final
+    // height. We seed with a generous initial height; resize callback
+    // will tighten.
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('urlSuggest:set-items', { items, selIdx, query })
+    }
+    const cb = win.getContentBounds()
+    const w = Math.max(120, Math.min(cb.width - 8, _urlSuggestLastBounds.width))
+    const x = Math.max(4, Math.min(cb.width - w - 4, _urlSuggestLastBounds.x))
+    const y = Math.max(4, Math.min(cb.height - 80, _urlSuggestLastBounds.y))
+    v.setBounds({ x, y, width: w, height: 80 })  // provisional
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[urlSuggest:show] failed:', err)
+  }
+})
+
+ipcMain.on('urlSuggest:hide', () => {
+  try {
+    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
+      _urlSuggestView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:update-sel', (_e, idx) => {
+  try {
+    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
+      _urlSuggestView.webContents.send('urlSuggest:set-sel', idx)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:resize', (_e, payload = {}) => {
+  try {
+    if (!_urlSuggestView || _urlSuggestView.webContents.isDestroyed()) return
+    if (!_urlSuggestLastBounds || !win || win.isDestroyed()) return
+    const want = Math.max(40, Math.min(380, Math.round(payload.height) || 80))
+    const cb = win.getContentBounds()
+    const b = _urlSuggestLastBounds
+    const w = Math.max(120, Math.min(cb.width - 8, b.width))
+    const x = Math.max(4, Math.min(cb.width - w - 4, b.x))
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _urlSuggestView.setBounds({ x, y, width: w, height: want })
+  } catch (_) {}
+})
+
+// Popup events flow back through main → chrome renderer where the
+// existing doNav / selection state lives.
+ipcMain.on('urlSuggest:pick', (_e, url) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:pick', url)
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:hover', (_e, idx) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:hover', idx)
+  } catch (_) {}
+})
+
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location
 ipcMain.on('tab-tear-off', (_evt, payload) => {

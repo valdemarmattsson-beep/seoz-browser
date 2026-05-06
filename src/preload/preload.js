@@ -65,6 +65,29 @@ contextBridge.exposeInMainWorld('seoz', {
   // active tab lands on /v3/signin/rejected.
   clearGoogleAuthData: () => ipcRenderer.invoke('seoz-clear-google-auth-data'),
 
+  // Generic chrome-label tooltip — single shared WebContentsView used
+  // for hover labels on dock icons, etc. Floats above the page like
+  // the tab tooltip / Shield popup.
+  chromeLabel: {
+    show: (anchorX, anchorY, text, side) => ipcRenderer.send('chrome-label:show', { anchorX, anchorY, text, side }),
+    hide: ()                              => ipcRenderer.send('chrome-label:hide'),
+  },
+
+  // URL suggest dropdown — sibling WebContentsView. Chrome computes
+  // matches and pushes them; popup renders + emits hover/pick back.
+  urlSuggest: {
+    show:      (anchorX, anchorY, width, items, selIdx, query) =>
+                 ipcRenderer.send('urlSuggest:show', { anchorX, anchorY, width, items, selIdx, query }),
+    hide:      ()    => ipcRenderer.send('urlSuggest:hide'),
+    updateSel: (idx) => ipcRenderer.send('urlSuggest:update-sel', idx),
+    onPick:    (cb)  => ipcRenderer.on('urlSuggest:pick', (_e, url) => {
+      try { cb(url) } catch (err) { console.error('[urlSuggest onPick]', err) }
+    }),
+    onHover:   (cb)  => ipcRenderer.on('urlSuggest:hover', (_e, idx) => {
+      try { cb(idx) } catch (err) { console.error('[urlSuggest onHover]', err) }
+    }),
+  },
+
   // SEOZ Shield popup — sibling WebContentsView that floats above the
   // page (so the page stays visible under the popup, no chrome-clip
   // gymnastics). Master state lives in the chrome renderer; the popup

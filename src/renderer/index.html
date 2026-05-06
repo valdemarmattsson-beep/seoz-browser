@@ -4674,7 +4674,16 @@ function createWebviewForTab(tabId, url) {
     return null
   }
   const handle = new window.TabHandle({ url: url || 'about:blank' })
-  handle.el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none'
+  // NB: inset:0 alone fills the parent — explicit width:100%;height:100%
+  // here was over-constraining the box. The clip-from-top CSS rule
+  // (body.tab-tip-hovering .tab-handle { top: 280px !important }) sets a
+  // new top, but with explicit width/height present the box stays full
+  // size and just overflows the parent — ResizeObserver doesn't fire,
+  // setBounds is never called, and the WebContentsView doesn't actually
+  // shrink. With `inset:0` alone the height is computed as
+  // parent.height - top, which DOES change when top moves, so
+  // ResizeObserver picks it up. (v1.10.103 fix.)
+  handle.el.style.cssText = 'position:absolute;inset:0;border:none;outline:none;display:none'
   _wvStack.appendChild(handle.el)
   _tabWebviews.set(tabId, handle)
   _attachWebviewListeners(handle, tabId)
@@ -4723,7 +4732,9 @@ function layoutActiveTab() {
     split.wv.el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
     _renderSplitToolbars(tabId)
   } else {
-    mainWv.el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none'
+    // inset:0 alone — see createWebviewForTab comment about why explicit
+    // width:100%;height:100% breaks the clip-from-top CSS rule. (v1.10.103)
+    mainWv.el.style.cssText = 'position:absolute;inset:0;border:none;outline:none'
   }
 }
 

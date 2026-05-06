@@ -5566,6 +5566,9 @@ function _attachWebviewListeners(el, tabId) {
     const t = _myTab(); if (t) t.url = e.url
     if (_isActive()) updateURL(e.url)
     _persistTabs()
+    // Invalidate cached tab-tooltip preview (URL changed → screenshot
+    // is stale). v1.10.109.
+    try { _tabPreviewCache?.delete(tabId) } catch (_) {}
   })
 
   // Password autofill IPC — guest webview-preload.js sends these.
@@ -9079,14 +9082,22 @@ function renderTabs() {
           if (!window.seoz?.tooltip) return
           let domain = ''
           try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
+          // First show: render text content immediately + any cached
+          // preview. Don't block on capturePage — that takes 50-200ms
+          // and would make the tooltip feel sluggish.
+          const cached = _tabPreviewCache.get(tab.id)
           window.seoz.tooltip.show(left, rect.bottom + 4, {
             tabId: tab.id,
             title: tab.title || tab.url || '',
             url: tab.url || '',
             domain,
             favicon: tab.favicon || '',
-            preview: '',  // capturePage hookup tracked separately
+            preview: cached || '',
           })
+          // No cache → fire a screenshot in the background. Capture
+          // bookkeeping is per-tab so concurrent hovers on different
+          // tabs don't step on each other.
+          if (!cached) _captureAndUpdateTooltip(tab, { left, top: rect.bottom + 4, domain })
         }, 420)
       })
       el.addEventListener('mouseleave', () => {
@@ -9284,6 +9295,60 @@ async function _refreshPwCacheForTabs() {
   // Re-render the tab strip so newly-added password chips appear in
   // their tabs' tooltips immediately.
   scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+}
+
+// ── Tab preview screenshot cache ────────────────────────────────────
+// dataURL keyed by tabId. Populated lazily from capturePage on first
+// hover, invalidated by the did-navigate listener in
+// _attachWebviewListeners when the tab changes URL. The cache survives
+// the rest of the session — hovering the same tab repeatedly only
+// pays the capture cost once, and the dataURL persists until either
+// the tab navigates or it's closed (no explicit eviction; closed-tab
+// keys leak but are bounded by tab count).
+const _tabPreviewCache = new Map()
+
+// Capture the tab's page and update the tooltip with the preview img.
+// Called in the background after the tooltip is already showing so the
+// initial render doesn't wait on the capture (50–200ms). If the user
+// has hovered another tab or moved away by the time the capture
+// resolves, we skip the update — no point pushing a stale preview.
+async function _captureAndUpdateTooltip(tab, anchor) {
+  if (!tab || !window.seoz?.tooltip) return
+  const handle = _tabWebviews.get(tab.id)
+  if (!handle || typeof handle.capturePage !== 'function') return
+  // Skip overlay tabs (home/mail/settings) — capturing them gives a
+  // black/empty image since the WebContentsView is hidden behind
+  // chrome HTML overlays.
+  if (typeof isOverlayUrl === 'function' && isOverlayUrl(tab.url)) return
+  const startTabId = tab.id
+  let dataURL = ''
+  try {
+    const img = await handle.capturePage()
+    if (img && typeof img.toDataURL === 'function') {
+      const url = img.toDataURL()
+      if (url && url.length > 64) dataURL = url
+    }
+  } catch (_) { /* swallow — capture races with navigations etc */ }
+  if (!dataURL) return
+  // Cache for next hover.
+  _tabPreviewCache.set(startTabId, dataURL)
+  // Push the preview into the tooltip — but only if it's still showing
+  // for THIS tab (not a different one the user moved onto). The hover
+  // intent timer is a coarse proxy: if it's still pending we know the
+  // user has hovered something else but the show hasn't fired yet, so
+  // we skip. If it's null we assume current tooltip is for our tab
+  // (no stronger guarantee without round-tripping through main).
+  if (window._tabTipShowTimer) return
+  let domain = ''
+  try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
+  window.seoz.tooltip.show(anchor.left, anchor.top, {
+    tabId: startTabId,
+    title: tab.title || tab.url || '',
+    url: tab.url || '',
+    domain,
+    favicon: tab.favicon || '',
+    preview: dataURL,
+  })
 }
 
 // ── Floating-window tooltip bridge ──────────────────────────────────

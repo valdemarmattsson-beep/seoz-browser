@@ -10254,6 +10254,19 @@ async function renderPanelContent(name) {
     icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Klientinsikter'
     body.innerHTML = _renderTrackingOverview()
   } else if (name === 'tasks') {
+    // v1.10.126 DIAGNOSTIC: short-circuit tasks panel to confirm it's
+    // the freeze source. User reports clicking di-tasks hangs the
+    // renderer in a hard infinite loop (heartbeat stops within 1s of
+    // click, no LONGTASK terminates → JS task running forever).
+    // If this stub renders without freeze, the bug is in the rest of
+    // the tasks panel code below. We then bisect from there.
+    try { console.warn('[DIAG] tasks-panel ENTER') } catch (_) {}
+    icon.innerHTML = _PANEL_ICONS.checkSq; title.textContent = 'Tasks'
+    body.innerHTML = '<div style="padding:24px 18px;font-size:11.5px;color:var(--muted);text-align:center">Tasks-panelen är temporärt avstängd för att felsöka en frysningsbugg. Återkommer i nästa version.</div>'
+    try { console.warn('[DIAG] tasks-panel EXIT (stub)') } catch (_) {}
+    return
+  } else if (name === '__tasks_disabled') {
+    // unreachable — original tasks branch parked below for diff
     icon.innerHTML = _PANEL_ICONS.checkSq; title.textContent = 'Tasks'
     const clientObj = synced.clients.find(c => c.id === synced.activeClientId)
     const cName = clientObj ? clientObj.name : null

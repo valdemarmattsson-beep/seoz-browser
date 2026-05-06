@@ -37,15 +37,109 @@ const _IN_TAB = (() => {
   return false
 })()
 
-// NOTE: Chrome-shim injection moved to src/main/tab-manager.js as of
-// v1.10.58. Preload only runs once at initial about:blank load — by
-// the time the user navigates to a real page, the page main world has
-// been recycled and any patches we set are gone. Main-process injection
-// on did-start-navigation re-runs on every navigation.
+// ════════════════════════════════════════════════════════════════════
+//  ⚠️  DO NOT ADD MORE STEALTH PATCHES BELOW.
+//
+//  Adding navigator.webdriver / plugins / languages / WebGL spoofs /
+//  window.chrome shims / userAgentData hand-builds has been tried
+//  multiple times and it ALWAYS makes Google sign-in WORSE, not better.
+//  See memory/project_seoz_browser_google_auth.md for the full
+//  forensic write-up — bot-detection is inconsistency-based and every
+//  spoof we add is a new opportunity for our hand-built value to
+//  desynchronise from what Chromium emits internally.
+//
+//  The ONLY stealth code that belongs here is the WebAuthn block —
+//  and only because Chromium-in-Electron pops the Windows passkey
+//  dialog more eagerly than real Chrome does, which is a UX problem,
+//  not a detection problem.
+//
+//  If Google sign-in starts failing again, the diagnostic order is:
+//    1) Clear cookies — see the auto-recovery banner in renderer.
+//    2) Compare fingerprints with Strawberry via the DevTools snippet
+//       in the memory doc.
+//    3) Only after BOTH of those rule-out: consider adding code here.
+// ════════════════════════════════════════════════════════════════════
 
-// Keep webFrame imported so other code that uses it (autofill scripting)
-// still works.
-void webFrame
+// ════════════════════════════════════════════════════════════════════
+//  STEALTH — Strawberry-minimal approach (v1.10.132)
+//
+//  Lesson learned from inspecting Strawberry's app.asar: the LESS we
+//  override, the better. Their entire stealth strategy is:
+//
+//    1) Strip "Electron/x.y.z" + app-name suffix from the User-Agent
+//       header (set at session level). That's it. They DO NOT touch
+//       Sec-CH-UA or any client-hints headers — Chromium emits those
+//       natively from its own internals, and those internals reflect
+//       the real Chromium version that's running.
+//    2) ZERO JS-level patches. No navigator.webdriver, no plugins
+//       spoofing, no UA-data shimming. They trust Chromium-under-the-
+//       hood to emit authentic-Chrome signals because it IS Chromium.
+//
+//  Our previous approach of patching navigator.userAgentData,
+//  navigator.plugins, WebGL, etc. introduced subtle inconsistencies
+//  Google's bot-detector flags. Example: our hand-built Sec-CH-UA had
+//  brand "Not.A/Brand" while Chromium's native emit may use "Not_A
+//  Brand" — one mismatch is enough.
+//
+//  This block now only blocks WebAuthn (to stop the Windows passkey
+//  popup that the user sees on Google sign-in pages). Everything else
+//  is left native.
+// ════════════════════════════════════════════════════════════════════
+;(function applyStealth() {
+  const STEALTH_PATCHES = String.raw`(function() {
+    try {
+      if (window.__seozMW) return;
+      window.__seozMW = true;
+
+      // WebAuthn / passkey block — only thing we still need to patch.
+      // Without this, accounts.google.com pops the Windows "Välj en
+      // nyckel" dialog before the user even tries to sign in. Real
+      // Chrome doesn't pop it unless the user has actually registered
+      // a passkey, but Chromium-in-Electron is more eager. Reporting
+      // "no platform authenticator + no conditional UI" makes Google
+      // skip the passkey assertion entirely and just show the password
+      // form.
+      try {
+        if (typeof window.PublicKeyCredential !== 'undefined') {
+          var _falseAsync = function () { return Promise.resolve(false); };
+          try { delete PublicKeyCredential.isUserVerifyingPlatformAuthenticatorAvailable; } catch (_) {}
+          try { Object.defineProperty(PublicKeyCredential, 'isUserVerifyingPlatformAuthenticatorAvailable', { value: _falseAsync, writable: true, configurable: true }); } catch (_) {}
+          try { delete PublicKeyCredential.isConditionalMediationAvailable; } catch (_) {}
+          try { Object.defineProperty(PublicKeyCredential, 'isConditionalMediationAvailable', { value: _falseAsync, writable: true, configurable: true }); } catch (_) {}
+        }
+      } catch (_) {}
+      try {
+        if (navigator.credentials) {
+          var _origGet    = navigator.credentials.get    && navigator.credentials.get.bind(navigator.credentials);
+          var _origCreate = navigator.credentials.create && navigator.credentials.create.bind(navigator.credentials);
+          var _denied = function () {
+            return Promise.reject(new DOMException('The operation either timed out or was not allowed.', 'NotAllowedError'));
+          };
+          if (_origGet) {
+            navigator.credentials.get = function (opts) {
+              if (opts && (opts.publicKey || opts.mediation === 'conditional')) return _denied();
+              return _origGet(opts);
+            };
+          }
+          if (_origCreate) {
+            navigator.credentials.create = function (opts) {
+              if (opts && opts.publicKey) return _denied();
+              return _origCreate(opts);
+            };
+          }
+        }
+      } catch (_) {}
+
+      try { document.documentElement.setAttribute('data-seoz-mw', 'v1.10.132-minimal'); } catch (_) {}
+    } catch (e) {
+      // Silent — page must continue regardless of patch failures.
+    }
+  })();`
+
+  try {
+    webFrame.executeJavaScript(STEALTH_PATCHES, false).catch(() => {})
+  } catch (_) {}
+})()
 
 
 function _send(channel, payload) {

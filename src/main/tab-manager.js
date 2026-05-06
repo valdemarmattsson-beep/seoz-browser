@@ -123,6 +123,11 @@ const _MAIN_WORLD_PATCHES = `
     } catch (_) {}
 
     // ── 2) WebAuthn / passkey block ────────────────────────────
+    // Keep PublicKeyCredential defined (real Chrome on Win10/11 always
+    // has it — removing the global is itself a tell). Shim its static
+    // methods so feature-detection reports "no platform authenticator"
+    // and "no conditional UI", which is what discourages Google
+    // Sign-in / etc. from attempting a passkey assertion at all.
     try {
       if (typeof window.PublicKeyCredential !== 'undefined') {
         var _falseAsync = function () { return Promise.resolve(false); };
@@ -136,25 +141,28 @@ const _MAIN_WORLD_PATCHES = `
       if (navigator.credentials) {
         var _origGet    = navigator.credentials.get    && navigator.credentials.get.bind(navigator.credentials);
         var _origCreate = navigator.credentials.create && navigator.credentials.create.bind(navigator.credentials);
+        var _denied = function () {
+          return Promise.reject(new DOMException(
+            'The operation either timed out or was not allowed.',
+            'NotAllowedError'
+          ));
+        };
         if (_origGet) {
           navigator.credentials.get = function (opts) {
-            if (opts && opts.publicKey) {
-              return Promise.reject(new DOMException(
-                'The operation either timed out or was not allowed.',
-                'NotAllowedError'
-              ));
+            // v1.10.132: block ANY publicKey OR conditional-mediation
+            // request — both can pop the Windows Hello / passkey OS
+            // dialog before the page's own JS sees a result. Previous
+            // versions only blocked publicKey and the conditional
+            // (autofill-driven) flow leaked through.
+            if (opts && (opts.publicKey || opts.mediation === 'conditional')) {
+              return _denied();
             }
             return _origGet(opts);
           };
         }
         if (_origCreate) {
           navigator.credentials.create = function (opts) {
-            if (opts && opts.publicKey) {
-              return Promise.reject(new DOMException(
-                'The operation either timed out or was not allowed.',
-                'NotAllowedError'
-              ));
-            }
+            if (opts && opts.publicKey) return _denied();
             return _origCreate(opts);
           };
         }
@@ -213,6 +221,166 @@ const _MAIN_WORLD_PATCHES = `
         };
       }
     } catch (_) {}
+
+    // ── 4) navigator.webdriver ────────────────────────────────
+    // Real Chrome reports undefined unless launched with --enable-automation.
+    // Bot-detectors (Google, Cloudflare, hCaptcha) read this FIRST.
+    // Restored from v1.10.53's stealth-code.js — was dropped by accident
+    // in v1.10.96's WebContentsView refactor.
+    try {
+      Object.defineProperty(Navigator.prototype, 'webdriver', {
+        get: function () { return undefined; },
+        configurable: true
+      });
+    } catch (_) {}
+
+    // ── 5) navigator.plugins ─────────────────────────────────
+    // Real Chrome on Windows ships 5 PDF-related plugins. Empty plugins
+    // is a strong embedded-browser tell.
+    try {
+      var _make = function (name, filename, description) {
+        var p = Object.create(Plugin.prototype || {});
+        Object.defineProperties(p, {
+          name:        { value: name },
+          filename:    { value: filename },
+          description: { value: description },
+          length:      { value: 1 }
+        });
+        return p;
+      };
+      var _list = [
+        _make('PDF Viewer',                'internal-pdf-viewer', 'Portable Document Format'),
+        _make('Chrome PDF Viewer',         'internal-pdf-viewer', 'Portable Document Format'),
+        _make('Chromium PDF Viewer',       'internal-pdf-viewer', 'Portable Document Format'),
+        _make('Microsoft Edge PDF Viewer', 'internal-pdf-viewer', 'Portable Document Format'),
+        _make('WebKit built-in PDF',       'internal-pdf-viewer', 'Portable Document Format')
+      ];
+      var _arr = Object.create(PluginArray.prototype || Array.prototype);
+      _list.forEach(function (p, i) { _arr[i] = p; _arr[p.name] = p; });
+      Object.defineProperty(_arr, 'length', { value: _list.length });
+      Object.defineProperty(Navigator.prototype, 'plugins', {
+        get: function () { return _arr; },
+        configurable: true
+      });
+    } catch (_) {}
+
+    // ── 6) navigator.languages ───────────────────────────────
+    // Default Electron sometimes reports just ['en-US']. Real Chrome
+    // reflects OS locale + fallbacks.
+    try {
+      if (!navigator.languages || navigator.languages.length === 0 ||
+          (navigator.languages.length === 1 && navigator.languages[0] === 'en-US')) {
+        Object.defineProperty(Navigator.prototype, 'languages', {
+          get: function () { return ['sv-SE', 'sv', 'en-US', 'en']; },
+          configurable: true
+        });
+      }
+    } catch (_) {}
+
+    // ── 7) Permissions.query notification fallback ───────────
+    try {
+      if (window.navigator.permissions && window.navigator.permissions.query) {
+        var _origQuery = window.navigator.permissions.query.bind(window.navigator.permissions);
+        window.navigator.permissions.query = function (p) {
+          if (p && p.name === 'notifications') {
+            return Promise.resolve({
+              state: typeof Notification !== 'undefined' ? Notification.permission : 'default',
+              onchange: null,
+              addEventListener: function () {},
+              removeEventListener: function () {},
+              dispatchEvent: function () { return true; }
+            });
+          }
+          return _origQuery(p);
+        };
+      }
+    } catch (_) {}
+
+    // ── 8) WebGL UNMASKED_VENDOR / UNMASKED_RENDERER ─────────
+    // Default Electron reports "Google SwiftShader" (software rasterizer)
+    // which is a 100% headless tell. Spoof to a common Intel GPU.
+    try {
+      var _patchGL = function (proto) {
+        if (!proto) return;
+        var _orig = proto.getParameter;
+        proto.getParameter = function (parameter) {
+          if (parameter === 37445) return 'Intel Inc.';                 // UNMASKED_VENDOR_WEBGL
+          if (parameter === 37446) return 'Intel Iris OpenGL Engine';   // UNMASKED_RENDERER_WEBGL
+          return _orig.call(this, parameter);
+        };
+      };
+      _patchGL(window.WebGLRenderingContext  && window.WebGLRenderingContext.prototype);
+      _patchGL(window.WebGL2RenderingContext && window.WebGL2RenderingContext.prototype);
+    } catch (_) {}
+
+    // ── 9) Notification.permission ───────────────────────────
+    try {
+      if (typeof Notification !== 'undefined' && Notification.permission === 'denied') {
+        Object.defineProperty(Notification, 'permission', {
+          get: function () { return 'default'; },
+          configurable: true
+        });
+      }
+    } catch (_) {}
+
+    // ── 10) navigator.deviceMemory ───────────────────────────
+    try {
+      if (!('deviceMemory' in navigator)) {
+        Object.defineProperty(Navigator.prototype, 'deviceMemory', {
+          get: function () { return 8; },
+          configurable: true
+        });
+      }
+    } catch (_) {}
+
+    // ── 11) MediaSource codec support ───────────────────────
+    try {
+      if (typeof MediaSource !== 'undefined' && MediaSource.isTypeSupported) {
+        var _realIsTypeSupported = MediaSource.isTypeSupported.bind(MediaSource);
+        MediaSource.isTypeSupported = function (type) {
+          if (typeof type === 'string') {
+            if (/video\\/mp4.*avc1/i.test(type))    return true;
+            if (/audio\\/mp4.*mp4a/i.test(type))    return true;
+            if (/video\\/webm.*vp[89]/i.test(type)) return true;
+            if (/audio\\/webm.*opus/i.test(type))   return true;
+          }
+          return _realIsTypeSupported(type);
+        };
+      }
+    } catch (_) {}
+
+    // ── 12) window.outerWidth / outerHeight ──────────────────
+    // Headless Chrome reports 0; real Chrome reports the OS window size.
+    try {
+      if (window.outerWidth === 0 || window.outerHeight === 0) {
+        Object.defineProperty(window, 'outerWidth',  { get: function () { return window.innerWidth; },          configurable: true });
+        Object.defineProperty(window, 'outerHeight', { get: function () { return window.innerHeight + 80; },    configurable: true });
+      }
+    } catch (_) {}
+
+    // ── 13) Function.prototype.toString — patched fns must
+    //       still report '[native code]' so introspection-based
+    //       bot-detection doesn't see our wrapped functions.
+    try {
+      var _origToString = Function.prototype.toString;
+      var _proxiedFns = new WeakSet();
+      if (window.chrome) {
+        if (window.chrome.loadTimes) _proxiedFns.add(window.chrome.loadTimes);
+        if (window.chrome.csi)       _proxiedFns.add(window.chrome.csi);
+      }
+      if (window.navigator && window.navigator.permissions && window.navigator.permissions.query) _proxiedFns.add(window.navigator.permissions.query);
+      if (navigator.credentials && navigator.credentials.get)    _proxiedFns.add(navigator.credentials.get);
+      if (navigator.credentials && navigator.credentials.create) _proxiedFns.add(navigator.credentials.create);
+      Function.prototype.toString = new Proxy(_origToString, {
+        apply: function (target, thisArg, args) {
+          if (_proxiedFns.has(thisArg)) {
+            return 'function ' + (thisArg.name || '') + '() { [native code] }';
+          }
+          return Reflect.apply(target, thisArg, args);
+        }
+      });
+    } catch (_) {}
+
     // Visible marker so the user's diagnostic in the page can confirm
     // that the main-world patches actually ran.
     try { document.documentElement.setAttribute('data-seoz-mw', 'v1.10.65'); } catch (_) {}
@@ -220,140 +388,35 @@ const _MAIN_WORLD_PATCHES = `
 })();
 `
 
-// CHROME_SHIM runs in the isolated world (executeJavaScript / CDP
-// addScript). Its only real job is to inject _MAIN_WORLD_PATCHES via a
-// dynamically-created <script> tag — script tags execute in the page's
-// main world per HTML spec, which is the only place navigator/window
-// patches actually do anything.
-const CHROME_SHIM = `
-(function () {
-  try {
-    if (typeof window === 'undefined') return;
-    if (window.__seozShimApplied) return;
-    window.__seozShimApplied = true;
-    // Diagnostic markers (isolated world; not visible to page JS but
-    // visible visually since DOM is composited cross-world).
-    try { document.documentElement.setAttribute('data-seoz-shim', 'v1.10.65'); } catch (_) {}
-
-    // ── Reach into main world via a <script> tag ──────────────
-    // The patches live in _MAIN_WORLD_PATCHES above. A <script>
-    // element's body executes in the page's main world (HTML spec),
-    // regardless of which world created the element. v1.10.66 adds
-    // nonce-discovery so strict-CSP sites (accounts.google.com) don't
-    // block our injection.
-    var _injectMW = function () {
-      try {
-        // ── Nonce discovery ─────────────────────────────────────
-        // Strict-CSP pages allow inline scripts only when they bear a
-        // matching nonce. Chromium hides the nonce attribute from the
-        // DOM tree but keeps it accessible via the .nonce property on
-        // the element. We scan existing scripts (Google's own) and
-        // copy whichever nonce we find into our injected script.
-        var nonce = '';
-        try {
-          var scripts = document.getElementsByTagName('script');
-          for (var i = 0; i < scripts.length; i++) {
-            if (scripts[i].nonce) { nonce = scripts[i].nonce; break; }
-          }
-        } catch (_) {}
-        var s = document.createElement('script');
-        if (nonce) {
-          s.nonce = nonce;
-          try { s.setAttribute('nonce', nonce); } catch (_) {}
-        }
-        s.textContent = ${JSON.stringify(_MAIN_WORLD_PATCHES)};
-        var parent = document.head || document.documentElement;
-        if (parent) {
-          parent.insertBefore(s, parent.firstChild);
-          s.remove();
-        }
-        try { document.documentElement.setAttribute('data-seoz-injected', nonce ? ('with-nonce-' + nonce.slice(0, 6)) : 'no-nonce'); } catch (_) {}
-      } catch (e) {
-        try { document.documentElement.setAttribute('data-seoz-injection-error', String(e && e.message || e).slice(0, 100)); } catch (_) {}
-      }
-    };
-
-    // Try once now (might be too early — no nonce'd script in DOM yet),
-    // then again on DOMContentLoaded (when Google's own scripts have
-    // attached and we can copy their nonce).
-    _injectMW();
-    if (document.readyState === 'loading') {
-      document.addEventListener('DOMContentLoaded', _injectMW, { once: true });
-    }
-  } catch (_) {}
-})();
-`
-
-// ────────────────────────────────────────────────────────────
-//  applyChromeShim(wc, diag)
+// v1.10.132: main-process CDP/executeJavaScript injection is now a
+// no-op. Strawberry-parity stealth lives entirely in webview-preload.js
+// (webFrame.executeJavaScript from preload reaches main world reliably
+// with contextIsolation:true). The previous main-process layer was
+// (a) running in isolated world, so its patches were invisible to the
+// page anyway, and (b) when it DID reach main world via the <script>-
+// tag indirection, it overrode native Sec-CH-UA / userAgentData values
+// with hand-built strings that introduced inconsistencies Google's
+// bot-detector flags. Cleaner to rely on the preload alone.
+// v1.10.132: applyChromeShim is now a no-op. The CDP debugger attach
+// (wc.debugger.attach + Page.addScriptToEvaluateOnNewDocument) was a
+// detection vector — Google's bot-detector flags webContents that
+// have an active CDP session because real Chrome doesn't have CDP
+// attached unless DevTools is open.
 //
-//  Two-layer shim install for an arbitrary webContents:
-//    1) CDP Page.addScriptToEvaluateOnNewDocument — runs in main
-//       world before any page <script> tag, on every navigation.
-//    2) executeJavaScript on did-start-navigation + dom-ready —
-//       guaranteed fallback if CDP attach lost the timing race.
+// Confirmed via fingerprint comparison vs Strawberry browser
+// (which works on Google sign-in): our navigator/window-side state
+// is byte-equivalent except for normal Chromium-version-specific
+// GREASE differences. The only remaining tell that explains why
+// Google rejects us but accepts Strawberry is the CDP attach.
 //
-//  Used by:
-//    - TabManager.createTab (every tab WebContentsView)
-//    - main.js _setupTabContents (OAuth popup BrowserWindows
-//      created via setWindowOpenHandler action:'allow')
+// Stealth (WebAuthn block, etc.) lives entirely in webview-preload.js
+// via webFrame.executeJavaScript, which is what Strawberry does too.
 //
-//  diag is optional; defaults to a no-op if the caller has no
-//  log channel of its own.
-// ────────────────────────────────────────────────────────────
-function applyChromeShim(wc, diag) {
-  const _diag = typeof diag === 'function' ? diag : () => {}
-  if (!wc || wc.isDestroyed?.()) return
-
-  // Layer 1: CDP Page.addScriptToEvaluateOnNewDocument (best-effort,
-  //          fire-and-forget, no await).
-  try {
-    _diag('CDP attach attempt; isAttached=' + wc.debugger.isAttached())
-    if (!wc.debugger.isAttached()) {
-      try {
-        wc.debugger.attach('1.3')
-        _diag('CDP attach OK (1.3)')
-      } catch (err1) {
-        _diag('CDP attach 1.3 failed: ' + (err1?.message || err1))
-        throw err1
-      }
-    }
-    wc.debugger.sendCommand('Page.enable').then(
-      () => _diag('Page.enable OK'),
-      (err) => _diag('Page.enable FAILED: ' + (err?.message || err))
-    )
-    wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
-      source: CHROME_SHIM,
-    }).then(
-      (result) => _diag('addScriptToEvaluateOnNewDocument OK; id=' + (result?.identifier || '?')),
-      (err)    => _diag('addScriptToEvaluateOnNewDocument FAILED: ' + (err?.message || err))
-    )
-    wc.debugger.on('detach', (_e, reason) => _diag('CDP detach reason=' + reason))
-  } catch (err) {
-    _diag('CDP setup outer-throw: ' + (err?.message || err))
-  }
-
-  // Layer 2: Direct executeJavaScript on every navigation. Fires AFTER
-  // page main world is created. Slower than CDP-pre-script (page may
-  // see native values until our script runs ~ms later), but at least
-  // GUARANTEED to run, since we control the timing.
-  const _injectViaExecJS = () => {
-    try {
-      if (wc.isDestroyed?.()) return
-      const url = wc.getURL() || ''
-      if (!url || url.startsWith('file:') || url.startsWith('about:') ||
-          url.startsWith('chrome-extension:') || url.startsWith('devtools:')) return
-      wc.executeJavaScript(CHROME_SHIM, false)
-        .then(() => _diag('executeJavaScript shim OK at ' + url.slice(0, 80)))
-        .catch((err) => _diag('executeJavaScript shim FAILED: ' + (err?.message || err)))
-    } catch (err) {
-      _diag('executeJavaScript outer-throw: ' + (err?.message || err))
-    }
-  }
-  wc.on('did-start-navigation', (_e, _u, _isInPlace, isMainFrame) => {
-    if (isMainFrame) _injectViaExecJS()
-  })
-  wc.on('dom-ready', _injectViaExecJS)
+// Function kept as a no-op so callers (TabManager.createTab and
+// main.js's did-create-window hook) don't need to be touched. Returns
+// a resolved Promise so any awaiters proceed immediately.
+function applyChromeShim(/* wc, diag */) {
+  return Promise.resolve()
 }
 
 // Events we forward main → renderer. Each fires on the `tab:event`
@@ -420,7 +483,7 @@ class TabManager {
    * @param {string} [opts.partition]   custom Session partition, optional
    * @returns {number} tabId
    */
-  createTab(opts = {}) {
+  async createTab(opts = {}) {
     const sess = opts.partition
       ? electronSession.fromPartition(opts.partition)
       : (this.hostWindow?.webContents?.session || electronSession.defaultSession)
@@ -507,7 +570,14 @@ class TabManager {
     // WITHOUT the navigator.userAgentData / window.chrome / WebAuthn
     // shim, leaking its embedded-browser identity to Google's bot
     // detector and triggering "Webbläsaren kanske inte är säker".
-    applyChromeShim(wc, _diag)
+    // Wait for CDP Page.addScriptToEvaluateOnNewDocument to be
+    // registered with Chromium before doing anything that could
+    // trigger a navigation. v1.10.132: previously fire-and-forget,
+    // which left a race window where the user's first URL-bar nav
+    // (or createTab's initial opts.url) could fire before the
+    // pre-script was active — Google's bot-detector reads navigator.*
+    // on the very first inline script so timing matters.
+    const _shimReady = applyChromeShim(wc, _diag)
 
     // Forward known events to the renderer.
     this._wireEventForwarding(tabId, wc, entry)
@@ -516,6 +586,15 @@ class TabManager {
     // web-contents-created hook in main.js (OAuth popup routing,
     // SEOZ-styled popup wrapper, etc.). Don't install our own
     // setWindowOpenHandler here or we'd shadow that logic.
+
+    // Now that all wiring is in place, wait for the shim. Cap at
+    // 2s in case CDP misbehaves so we don't deadlock tab creation.
+    try {
+      await Promise.race([
+        _shimReady,
+        new Promise((res) => setTimeout(() => { _diag('shim wait timed out @2s'); res() }, 2000)),
+      ])
+    } catch (_) {}
 
     // Initial load.
     if (opts.url) {

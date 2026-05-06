@@ -59,6 +59,28 @@ contextBridge.exposeInMainWorld('seoz', {
     // is occluded. No explicit cleanup needed.
   },
 
+  // Auto-recovery from Google "Inloggningen misslyckades" — clears
+  // cookies + storage for google.com hosts so the next sign-in gets
+  // a clean session. Triggered by the renderer's banner when the
+  // active tab lands on /v3/signin/rejected.
+  clearGoogleAuthData: () => ipcRenderer.invoke('seoz-clear-google-auth-data'),
+
+  // SEOZ Shield popup — sibling WebContentsView that floats above the
+  // page (so the page stays visible under the popup, no chrome-clip
+  // gymnastics). Master state lives in the chrome renderer; the popup
+  // is purely a view + click event source.
+  shieldPopup: {
+    show:        (anchorX, anchorY, state) => ipcRenderer.send('shield-popup:show', { anchorX, anchorY, state }),
+    hide:        ()      => ipcRenderer.send('shield-popup:hide'),
+    updateState: (state) => ipcRenderer.send('shield-popup:update-state', { state }),
+    onCursorOnCard: (cb) => ipcRenderer.on('shield-popup:cursor-on-card', (_e, on) => {
+      try { cb(!!on) } catch (err) { console.error('[shieldPopup onCursorOnCard]', err) }
+    }),
+    onAction: (cb) => ipcRenderer.on('shield-popup:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[shieldPopup onAction]', err) }
+    }),
+  },
+
   // Password manager (per-profile, encrypted via OS-level safeStorage)
   passwordsList:   ()              => ipcRenderer.invoke('passwords-list'),
   passwordsAdd:    (entry)         => ipcRenderer.invoke('passwords-add', entry),

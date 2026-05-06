@@ -1,0 +1,174 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>SEOZ Shield popup</title>
+<style>
+  /* Transparent root — the WebContentsView itself is positioned and
+     sized by main; only the .card below paints visible chrome. Same
+     pattern as tooltip.html. Inline dark-theme values because this
+     HTML loads in its own renderer without the design-system tokens. */
+  html, body {
+    margin: 0; padding: 0; background: transparent; overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    color: #f8f8f8;
+  }
+
+  .card {
+    background: #1a1d23;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 12px;
+    margin: 4px;
+    overflow: hidden;
+  }
+
+  .title {
+    font-size: 12px; font-weight: 700; color: #f8f8f8;
+    margin-bottom: 8px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .stat-num { font-size: 20px; font-weight: 800; color: #4680FF; margin: 6px 0 }
+  .stat-label { font-size: 10px; color: rgba(255,255,255,.55) }
+
+  .toggle-row {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 8px 0;
+    border-top: 1px solid rgba(255,255,255,.08);
+    margin-top: 8px;
+  }
+  .toggle-row label { font-size: 11px; color: #d0d0d0; cursor: pointer }
+  .toggle-sw {
+    width: 36px; height: 20px; border-radius: 10px; background: rgba(255,255,255,.12);
+    cursor: pointer; position: relative; transition: background .2s; flex-shrink: 0;
+  }
+  .toggle-sw.on { background: #2ca87f }
+  .toggle-sw::after {
+    content: ''; position: absolute; top: 2px; left: 2px; width: 16px; height: 16px;
+    border-radius: 50%; background: #fff; transition: transform .2s;
+    box-shadow: 0 1px 3px rgba(0,0,0,.3);
+  }
+  .toggle-sw.on::after { transform: translateX(16px) }
+
+  .cookie-section {
+    border-top: 1px solid rgba(255,255,255,.08);
+    margin-top: 10px; padding-top: 10px;
+  }
+  .cookie-section-title {
+    font-size: 11px; font-weight: 600; color: #f8f8f8;
+    margin-bottom: 2px;
+    display: flex; align-items: center; gap: 6px;
+  }
+  .cookie-section-sub {
+    font-size: 10px; color: rgba(255,255,255,.5);
+    margin-bottom: 8px; line-height: 1.35;
+  }
+  .cookie-seg {
+    display: flex; background: rgba(255,255,255,.08);
+    border-radius: 7px; padding: 2px; gap: 2px;
+  }
+  .cookie-seg-btn {
+    flex: 1; border: none; background: transparent; cursor: pointer;
+    padding: 5px 4px; border-radius: 5px; font-size: 10px; font-weight: 600;
+    color: rgba(255,255,255,.55);
+    transition: all .15s; font-family: inherit;
+  }
+  .cookie-seg-btn:hover { color: #d0d0d0 }
+  .cookie-seg-btn.active { background: #1a1d23; color: #f8f8f8; box-shadow: 0 1px 2px rgba(0,0,0,.3) }
+  .cookie-seg-btn.active.accept { color: #2ca87f }
+  .cookie-seg-btn.active.reject { color: #dc3545 }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="title">
+    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+    SEOZ Shield
+  </div>
+  <div class="stat-num" id="statNum">0</div>
+  <div class="stat-label">annonser &amp; trackers blockerade denna session</div>
+
+  <div class="toggle-row">
+    <label id="toggleLabel">Aktiverad</label>
+    <div class="toggle-sw on" id="enabledToggle"></div>
+  </div>
+
+  <div class="cookie-section">
+    <div class="cookie-section-title">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="0.5" fill="currentColor"/><circle cx="15" cy="11" r="0.5" fill="currentColor"/><circle cx="11" cy="14" r="0.5" fill="currentColor"/><circle cx="15" cy="16" r="0.5" fill="currentColor"/></svg>
+      Cookie-banners
+    </div>
+    <div class="cookie-section-sub">Hantera cookies automatiskt på alla sajter.</div>
+    <div class="cookie-seg" id="cookieSeg" role="tablist">
+      <button class="cookie-seg-btn" data-mode="off">Av</button>
+      <button class="cookie-seg-btn" data-mode="accept">Acceptera</button>
+      <button class="cookie-seg-btn" data-mode="reject">Neka</button>
+    </div>
+  </div>
+</div>
+<script>
+  // ──────────────────────────────────────────────────────────────────
+  //  Shield popup renderer — three jobs:
+  //  1) Render the current state pushed from main (count, enabled, cookieMode)
+  //  2) Forward toggle/cookie-mode clicks back to main
+  //  3) Tell main when the cursor leaves the card so it can hide
+  //
+  //  The host (main browser) renderer keeps the master state; this
+  //  popup is purely a view + event source. Same pattern as tooltip.html.
+  // ──────────────────────────────────────────────────────────────────
+  const $ = (id) => document.getElementById(id)
+  const card = $('card')
+  const statNum = $('statNum')
+  const enabledToggle = $('enabledToggle')
+  const cookieSeg = $('cookieSeg')
+
+  function applyState(state) {
+    if (!state) return
+    statNum.textContent = String(state.count || 0)
+    enabledToggle.classList.toggle('on', state.enabled !== false)
+    if (cookieSeg) {
+      const mode = state.cookieMode || 'off'
+      for (const btn of cookieSeg.querySelectorAll('.cookie-seg-btn')) {
+        const m = btn.dataset.mode
+        const active = m === mode
+        btn.classList.toggle('active', active)
+        btn.classList.toggle('accept', active && m === 'accept')
+        btn.classList.toggle('reject', active && m === 'reject')
+      }
+    }
+    // Re-measure card height and tell main so the WebContentsView resizes.
+    requestAnimationFrame(() => {
+      const r = card.getBoundingClientRect()
+      if (window.seoz?.shield?.requestResize) {
+        window.seoz.shield.requestResize(Math.ceil(r.height + 12))
+      }
+    })
+  }
+
+  // Bind action handlers — fire-and-forget IPC; main routes the event
+  // to the chrome renderer where the master state mutates and an
+  // updated state is pushed back via 'shield:state'.
+  enabledToggle.addEventListener('click', () => {
+    if (window.seoz?.shield?.action) window.seoz.shield.action('toggle-enabled')
+  })
+  cookieSeg.querySelectorAll('.cookie-seg-btn').forEach(btn => {
+    btn.addEventListener('click', () => {
+      if (window.seoz?.shield?.action) {
+        window.seoz.shield.action('set-cookie-mode', btn.dataset.mode)
+      }
+    })
+  })
+
+  // Cursor-on-card hover state — main uses this to keep popup open
+  // while the user moves between trigger and popup.
+  card.addEventListener('mouseenter', () => window.seoz?.shield?.cursorOnCard?.(true))
+  card.addEventListener('mouseleave', () => window.seoz?.shield?.cursorOnCard?.(false))
+
+  if (window.seoz?.shield?.onState) {
+    window.seoz.shield.onState(applyState)
+  }
+</script>
+</body>
+</html>

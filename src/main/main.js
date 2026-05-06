@@ -700,6 +700,36 @@ app.on('child-process-gone', (_e, details) => {
   } catch (_) {}
 })
 
+// ── v1.10.132: silence OS-level credential dialogs ──────────────
+// Three Electron events trigger native Windows dialogs without
+// JavaScript on the page calling anything — they fire from
+// Chromium's own networking / TLS layer. The "Windows-säkerhetsruta
+// poppar upp hela tiden" symptom is one of these. We deny each one
+// by default (preventDefault + empty callback). Sites that *need*
+// these (corporate SSO with client certs, etc.) can be re-enabled
+// later behind an explicit setting.
+
+// Client-certificate picker — Windows pops a cert-selector dialog
+// when a TLS handshake requests a client certificate. We pick "no
+// certificate" automatically so the page proceeds (or fails gracefully).
+app.on('select-client-certificate', (event, _wc, _url, _list, callback) => {
+  event.preventDefault()
+  try { callback(null) } catch (_) {}
+})
+
+// HTTP Basic / Digest auth prompt — Windows pops a credential
+// dialog. Decline silently; the request fails with 401, which is
+// what most users expect anyway.
+app.on('login', (event, _wc, _request, _challenge, callback) => {
+  event.preventDefault()
+  try { callback() } catch (_) {}
+})
+
+// Untrusted certificate prompt — Chromium would ask the user; we
+// just trust nothing extra so it falls back to the standard error
+// page (which the user can override per-site if needed).
+// (Deliberately NOT preventDefault'd — that would trust everything.)
+
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {
   // The URL is typically the last argument
@@ -800,21 +830,25 @@ function isDomainBlocked(hostname) {
 // "Webbläsaren kanske inte är säker" rejection.
 const CHROMIUM_VERSION = process.versions.chrome || '138.0.0.0'
 const CHROMIUM_MAJOR   = String(CHROMIUM_VERSION.split('.')[0] || '138')
-const CHROME_UA        = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_VERSION} Safari/537.36`
 
 function setupContentBlocker() {
   // Intercept requests in the webview's partition
   // Webviews use the default session unless a partition is set
   const ses = session.defaultSession
 
-  // Override User-Agent at session level (removes "Electron/..." from UA).
-  // We deliberately do NOT override Sec-CH-UA here — Chromium synthesises
-  // it from its built-in branding which on Electron 41 already reports
-  // ("Chromium", "Not.A/Brand", "Google Chrome") with no "Electron" brand.
-  // Strawberry confirmed this: their `intercept-rules.ts` rewrites only
-  // user-agent and lets Chromium emit Sec-CH-UA natively, and Google
-  // login works for them.
-  ses.setUserAgent(CHROME_UA)
+  // v1.10.132 — Strawberry-style User-Agent: take whatever Chromium
+  // emits natively for this session and strip the "Electron/x.y.z"
+  // segment. Constructing a UA from scratch (as we did before) caused
+  // Chromium's internally-emitted Sec-CH-UA values to desynchronise
+  // from what the UA string claims, which Google's bot-detector flags
+  // as inconsistent. Letting Chromium build its own UA and then
+  // surgically removing Electron is exactly what Strawberry does in
+  // their src/main/utils/user-agent2.ts.
+  const nativeUA = ses.getUserAgent() || ''
+  const cleanedUA = nativeUA.replace(/\sElectron\/\S+/, '')
+  if (cleanedUA && cleanedUA !== nativeUA) {
+    ses.setUserAgent(cleanedUA)
+  }
 
   // Normalize all UA + Client-Hint headers. We override only headers
   // that Chromium would send anyway (no header injection from scratch),
@@ -849,38 +883,20 @@ function setupContentBlocker() {
     types: ['mainFrame', 'subFrame', 'xhr', 'webSocket', 'script', 'cspReport'],
   }
 
+  // v1.10.132: Strawberry-style minimal header rewrite. The previous
+  // approach hand-rewrote every Sec-CH-UA header, which introduced
+  // subtle inconsistencies vs what Chromium emits natively (e.g.
+  // "Not.A/Brand" vs Chromium's actual GREASE value). Google's
+  // bot-detector compares all of these and flags any mismatch.
+  //
+  // Strawberry's approach (verified by reading their app.asar): leave
+  // Sec-CH-UA-* alone so Chromium emits them natively and authentically.
+  // The User-Agent at session level (already set above) is sufficient
+  // — it strips "Electron/" and reports "Chrome/138" which matches
+  // the real Chromium version under the hood.
   ses.webRequest.onBeforeSendHeaders(FP_FILTER, (details, callback) => {
     const h = details.requestHeaders
     delete h['Electron']
-
-    // Header keys may arrive in any case. Build a lowercased index so
-    // we can find existing keys and override them in place (preserving
-    // original casing).
-    const lower = {}
-    for (const k of Object.keys(h)) lower[k.toLowerCase()] = k
-
-    const setIf = (lkey, value) => {
-      const orig = lower[lkey]
-      if (orig) h[orig] = value
-    }
-
-    // User-Agent — we always force this; same as session.setUserAgent
-    // but redundant in case some intermediate code re-attaches the
-    // original Electron UA on a per-request basis.
-    h['User-Agent'] = CHROME_UA
-
-    // Client Hints. Only override what Chromium decided to send.
-    setIf('sec-ch-ua',                  CH_UA)
-    setIf('sec-ch-ua-mobile',           '?0')
-    setIf('sec-ch-ua-platform',         '"Windows"')
-    setIf('sec-ch-ua-platform-version', '"15.0.0"')
-    setIf('sec-ch-ua-arch',             '"x86"')
-    setIf('sec-ch-ua-bitness',          '"64"')
-    setIf('sec-ch-ua-model',            '""')
-    setIf('sec-ch-ua-wow64',            '?0')
-    setIf('sec-ch-ua-full-version',     `"${CHROMIUM_VERSION}"`)
-    setIf('sec-ch-ua-full-version-list', CH_UA_FULL_LIST)
-
     callback({ requestHeaders: h })
   })
 
@@ -904,11 +920,28 @@ function setupContentBlocker() {
   // breaks again, the next iteration will re-enable it but scoped to
   // a small explicit allowlist (accounts.google.com, login.live.com,
   // etc.) instead of every navigation.
-  /* DISABLED — see comment above
+  // v1.10.132: re-enabled selectively. Tab-shim.log on the user's
+  // machine showed CHROME_SHIM running but the page still detecting
+  // Electron — meaning the shim is in the isolated world and the
+  // <script>-tag-injection trick (which moves patches into main
+  // world) is being blocked by accounts.google.com's strict CSP
+  // before we can find a nonce to copy. Stripping CSP only for the
+  // narrow set of auth/SSO hosts where we need the shim is the
+  // pragmatic win — CSP still protects every other site.
+  const CSP_STRIP_HOSTS = [
+    'accounts.google.com',
+    'login.microsoftonline.com',
+    'login.live.com',
+    'appleid.apple.com',
+  ]
   ses.webRequest.onHeadersReceived((details, callback) => {
     if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
       callback({}); return
     }
+    let host = ''
+    try { host = new URL(details.url).hostname.toLowerCase() } catch (_) {}
+    const strip = CSP_STRIP_HOSTS.some(h => host === h || host.endsWith('.' + h))
+    if (!strip) { callback({}); return }
     const headers = { ...details.responseHeaders }
     for (const k of Object.keys(headers)) {
       const lk = k.toLowerCase()
@@ -921,7 +954,6 @@ function setupContentBlocker() {
     }
     callback({ responseHeaders: headers })
   })
-  */
 
   // Never block these domains
   const whitelist = ['seoz.io', 'flow.seoz.io', 'api.seoz.io']
@@ -1148,10 +1180,11 @@ function createWindow() {
       tabManager = new TabManager({
         hostWindow: win,
         preloadPath: path.join(__dirname, '..', 'preload', 'webview-preload.js'),
-        // Same Chrome UA we set on the default session, derived from the
-        // real Chromium version (process.versions.chrome). Keeps each
-        // tab's UA in lockstep with what navigator.userAgentData reports.
-        defaultUserAgent: CHROME_UA,
+        // No defaultUserAgent — TabManager would call wc.setUserAgent
+        // per tab and that re-introduces the same Chromium-vs-string
+        // desync as a from-scratch UA. The session-level setUserAgent
+        // above (Electron-stripped native UA) covers all tabs.
+        defaultUserAgent: undefined,
         // Wire keyboard shortcuts, native context menu, fullscreen
         // forwarding, and OAuth window-open routing. Electron 41's
         // app.on('web-contents-created') event doesn't fire for
@@ -1385,6 +1418,146 @@ ipcMain.on('tooltip:action', (_e, payload = {}) => {
 //     automatically not visible when the parent window is occluded.
 //     No ghost over other apps. No state to clean up.
 
+// ════════════════════════════════════════════════════════════════════
+//  SEOZ Shield popup — sibling WebContentsView
+//
+//  Same architecture as the tab tooltip: a transparent WebContentsView
+//  attached to the main window's contentView, which z-orders correctly
+//  above tab WebContentsViews so the page stays visible underneath the
+//  popup. The previous in-DOM `<div id="blockerPopup">` had to fight
+//  the chrome-clip-active mechanism (clip-from-top shrunk the page to
+//  expose the popup), which produced the "dark void below popup" look.
+//
+//  Master state (count, enabled, cookieMode) lives in the chrome
+//  renderer; this view is purely a presentation surface.
+//
+//  Channels (mirror tooltip pattern):
+//    chrome-renderer → main:
+//      shield-popup:show {anchorX, anchorY, state}
+//      shield-popup:hide
+//      shield-popup:update-state {state}   — push state without showing
+//    main → popup-renderer:
+//      shield:state {state}
+//    popup-renderer → main:
+//      shield:cursor-on-card (bool)
+//      shield:action {action, value?}
+//      shield:resize {height}
+//    main → chrome-renderer:
+//      shield-popup:cursor-on-card (bool)
+//      shield-popup:action {action, value?}
+// ════════════════════════════════════════════════════════════════════
+let _shieldView = null
+let _shieldLastState = { count: 0, enabled: true, cookieMode: 'off' }
+
+function _ensureShieldView() {
+  if (_shieldView && _shieldView.webContents && !_shieldView.webContents.isDestroyed()) return _shieldView
+  if (!win || win.isDestroyed()) return null
+
+  _shieldView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/blocker-popup-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _shieldView.setBackgroundColor('#00000000') } catch (_) {}
+  _shieldView.setVisible(false)
+  _shieldView.webContents.loadFile(path.join(__dirname, '../renderer/blocker-popup.html'))
+
+  // Push initial state once the popup's renderer is ready.
+  _shieldView.webContents.once('did-finish-load', () => {
+    try {
+      if (_shieldView?.webContents && !_shieldView.webContents.isDestroyed()) {
+        _shieldView.webContents.send('shield:state', _shieldLastState)
+      }
+    } catch (_) {}
+  })
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_shieldView?.webContents && !_shieldView.webContents.isDestroyed()) _shieldView.webContents.close() } catch (_) {}
+      _shieldView = null
+    })
+  }
+  return _shieldView
+}
+
+ipcMain.on('shield-popup:show', (_e, payload = {}) => {
+  try {
+    const sv = _ensureShieldView()
+    if (!sv) return
+    if (!win || win.isDestroyed()) return
+
+    const { anchorX = 0, anchorY = 0, state = null } = payload
+    if (state) {
+      _shieldLastState = { ..._shieldLastState, ...state }
+      try { sv.webContents.send('shield:state', _shieldLastState) } catch (_) {}
+    }
+
+    const cb = win.getContentBounds()
+    const w = 264   // popup card width 240 + 24px breathing for shadow
+    const h = (sv.getBounds().height) || 320
+    // Right-anchor by default (Shield button is in URL bar's right area):
+    // anchorX is the BUTTON's right-edge x; we right-align the popup to it.
+    let x = Math.round(anchorX - w + 24)  // tiny shift right to align under button
+    let y = Math.round(anchorY)
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
+    sv.setBounds({ x, y, width: w, height: h })
+
+    // Re-add to bump z-order above any newly-attached tab views.
+    try { win.contentView.addChildView(sv) } catch (_) {}
+    sv.setVisible(true)
+  } catch (err) {
+    console.error('[shield-popup:show] failed:', err)
+  }
+})
+
+ipcMain.on('shield-popup:hide', () => {
+  try {
+    if (_shieldView && _shieldView.webContents && !_shieldView.webContents.isDestroyed()) {
+      _shieldView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('shield-popup:update-state', (_e, payload = {}) => {
+  try {
+    if (payload && payload.state) {
+      _shieldLastState = { ..._shieldLastState, ...payload.state }
+      if (_shieldView?.webContents && !_shieldView.webContents.isDestroyed()) {
+        _shieldView.webContents.send('shield:state', _shieldLastState)
+      }
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('shield:resize', (_e, payload = {}) => {
+  try {
+    if (!_shieldView || _shieldView.webContents.isDestroyed()) return
+    const want = Math.max(120, Math.min(520, Math.round(payload.height) || 320))
+    const b = _shieldView.getBounds()
+    if (b.height === want) return
+    if (!win || win.isDestroyed()) return
+    const cb = win.getContentBounds()
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _shieldView.setBounds({ x: b.x, y, width: b.width, height: want })
+  } catch (_) {}
+})
+
+ipcMain.on('shield:cursor-on-card', (_e, on) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('shield-popup:cursor-on-card', !!on)
+  } catch (_) {}
+})
+
+ipcMain.on('shield:action', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('shield-popup:action', payload)
+  } catch (_) {}
+})
+
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location
 ipcMain.on('tab-tear-off', (_evt, payload) => {
@@ -1486,6 +1659,58 @@ function _pwHydrate(entry) {
     updatedAt: entry.updatedAt,
   }
 }
+
+// ── Google sign-in auto-recovery ─────────────────────────────────
+// When accounts.google.com flags our session ("Inloggningen
+// misslyckades"), the rejection sticks to the cookies — even after
+// any underlying detection bug is fixed, future visits get redirected
+// straight to /v3/signin/rejected because Google reads a marker
+// cookie and short-circuits. The renderer detects the rejected URL
+// in tab navigation events and prompts the user to clear sign-in
+// data; this handler does the actual clearing.
+//
+// Scope: cookies + localStorage + IndexedDB for google.com hosts only.
+// Does NOT touch other sites' state.
+//
+// See memory/project_seoz_browser_google_auth.md for the full story.
+ipcMain.handle('seoz-clear-google-auth-data', async () => {
+  const sess = session.defaultSession
+  // Google's auth cookies straddle accounts.google.com, www.google.com,
+  // mail.google.com (for Gmail OAuth), youtube.com (sometimes), and the
+  // bare google.com — clearing all of them is the only reliable reset.
+  const origins = [
+    'https://accounts.google.com',
+    'https://www.google.com',
+    'https://google.com',
+    'https://mail.google.com',
+    'https://myaccount.google.com',
+    'https://oauth.googleusercontent.com',
+  ]
+  const result = { ok: true, cleared: [] }
+  for (const origin of origins) {
+    try {
+      await sess.clearStorageData({
+        origin,
+        storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage'],
+      })
+      result.cleared.push(origin)
+    } catch (err) {
+      result.ok = false
+      result.error = err?.message || String(err)
+    }
+  }
+  // Also nuke any standalone cookies for *.google.com that didn't
+  // match the origin list (e.g. accounts.youtube.com path entries).
+  try {
+    const all = await sess.cookies.get({ domain: '.google.com' })
+    for (const c of all) {
+      try {
+        await sess.cookies.remove(`https://${c.domain.replace(/^\./, '')}${c.path || '/'}`, c.name)
+      } catch (_) {}
+    }
+  } catch (_) {}
+  return result
+})
 
 ipcMain.handle('passwords-list', () => {
   return _pwListEncrypted().map(_pwHydrate).filter(Boolean)

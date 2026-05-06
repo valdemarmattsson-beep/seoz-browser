@@ -3554,6 +3554,16 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .update-progress{height:3px;background:var(--border);border-radius:2px;overflow:hidden;flex:1;max-width:120px}
 .update-progress-fill{height:100%;background:var(--p);border-radius:2px;transition:width .3s}
 
+/* Google sign-in rejection banner — same chrome as update-banner but
+   warning-coloured so it reads as "something needs attention". */
+.update-banner.google-rej-banner{
+  background:rgba(245,158,11,.12);
+  border-bottom-color:rgba(245,158,11,.35);
+  color:#b45309;
+}
+.update-banner.google-rej-banner .ub-btn.primary{background:#f59e0b;color:#1f2937}
+.update-banner.google-rej-banner .ub-btn.primary:hover{background:#d97706;color:#fff}
+
 /* ── TOAST ── */
 #toast{position:fixed;bottom:20px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:11px;font-weight:600;color:var(--head);box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:7px;z-index:1000;transform:translateY(40px);opacity:0;transition:all .25s ease;pointer-events:none}
 #toast.on{transform:translateY(0);opacity:1}
@@ -3593,80 +3603,6 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
      WebContentsView in main. Loaded BEFORE the inline app script so
      window.TabHandle is available when the renderer initialises. -->
 <script src="tab-handle.js"></script>
-<script>
-// ── v1.10.124 RENDERER DIAGNOSTICS ──────────────────────────────
-// Main process heartbeat (1.10.123) confirmed main is alive during
-// freezes — so the hang is in this renderer. Pipe a renderer
-// heartbeat + click-trace back to main via console.warn('[DIAG]')
-// which main appends to startup.log.
-;(function _diag124() {
-  function _log(msg) { try { console.warn('[DIAG] ' + msg) } catch (_) {} }
-  _log('renderer instrumented')
-
-  // Heartbeat — when renderer's event loop hangs, this stops.
-  setInterval(() => _log('RENDERER-ALIVE'), 1000)
-
-  // Click capture — logs target + closest actionable ancestor (id/
-  // onclick handler) so we know which dock icon / button was clicked
-  // even when the immediate target was a child <svg> / <span>.
-  document.addEventListener('click', (e) => {
-    try {
-      const t = e.target
-      const targetDesc = (t.tagName || 'unknown') +
-        (t.id ? '#' + t.id : '') +
-        (t.className && typeof t.className === 'string'
-          ? '.' + String(t.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.')
-          : '')
-      // Walk up to find the actual interactive ancestor.
-      let actor = t
-      let chain = []
-      for (let i = 0; i < 6 && actor && actor !== document.body; i++) {
-        const tag = actor.tagName || ''
-        const id = actor.id || ''
-        const cls = (actor.className && typeof actor.className === 'string')
-          ? actor.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')
-          : ''
-        const onclick = actor.getAttribute && actor.getAttribute('onclick')
-        chain.push(
-          tag +
-          (id ? '#' + id : '') +
-          (cls ? '.' + cls : '') +
-          (onclick ? ' onclick="' + onclick.slice(0, 60) + '"' : '')
-        )
-        if (id || onclick) break  // stop at first identifiable ancestor
-        actor = actor.parentElement
-      }
-      _log('CLICK target=' + targetDesc + ' chain=' + chain.join(' < '))
-    } catch (_) { _log('CLICK <err>') }
-  }, { capture: true })
-
-  // Long-task observer — fires for any JS task that blocks the main
-  // thread for >50ms. The hang we're chasing is a single sync task
-  // running forever, so we'll see "LONGTASK dur=Xms" with X near the
-  // hang duration right before heartbeat stops.
-  try {
-    if (typeof PerformanceObserver !== 'undefined') {
-      const lt = new PerformanceObserver((list) => {
-        for (const e of list.getEntries()) {
-          _log('LONGTASK dur=' + Math.round(e.duration) + 'ms start=' + Math.round(e.startTime) + 'ms')
-        }
-      })
-      lt.observe({ type: 'longtask', buffered: true })
-    }
-  } catch (_) {}
-
-  // Catch unhandled errors + promise rejections — these often
-  // precede a freeze (an exception kills a critical event listener).
-  window.addEventListener('error', (e) => {
-    _log('WIN-ERR msg=' + (e.message || '') + ' src=' + (e.filename || '') + ':' + (e.lineno || ''))
-  })
-  window.addEventListener('unhandledrejection', (e) => {
-    const r = e.reason
-    _log('PROMISE-REJ ' + (r && r.message ? r.message : String(r)).slice(0, 200))
-  })
-})()
-</script>
-
 <!-- PROFILE PICKER -->
 <div id="profilePicker" class="gone">
   <div class="pp-card">
@@ -3811,27 +3747,9 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
         <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering" aria-label="Innehållsblockering"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="blocker-badge" id="blockerBadge"></span></button>
-        <div class="blocker-popup" id="blockerPopup">
-          <div class="blocker-popup-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:5px"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>SEOZ Shield</div>
-          <div class="blocker-stat" id="blockerStatNum">0</div>
-          <div class="blocker-stat-label">annonser & trackers blockerade denna session</div>
-          <div class="blocker-toggle">
-            <label>Aktiverad</label>
-            <div class="toggle-sw on" id="blockerToggle" onclick="toggleBlockerEnabled()"></div>
-          </div>
-          <div class="cookie-section">
-            <div class="cookie-section-title">
-              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="0.5" fill="currentColor"/><circle cx="15" cy="11" r="0.5" fill="currentColor"/><circle cx="11" cy="14" r="0.5" fill="currentColor"/><circle cx="15" cy="16" r="0.5" fill="currentColor"/></svg>
-              Cookie-banners
-            </div>
-            <div class="cookie-section-sub">Hantera cookies automatiskt på alla sajter.</div>
-            <div class="cookie-seg" id="cookieSeg" role="tablist">
-              <button class="cookie-seg-btn" data-mode="off" onclick="setCookieMode('off')">Av</button>
-              <button class="cookie-seg-btn" data-mode="accept" onclick="setCookieMode('accept')">Acceptera</button>
-              <button class="cookie-seg-btn" data-mode="reject" onclick="setCookieMode('reject')">Neka</button>
-            </div>
-          </div>
-        </div>
+        <!-- Popup is now a sibling WebContentsView (see main.js
+             _ensureShieldView). It floats above the page WebContentsView
+             instead of competing with it via chrome-clip-active CSS. -->
       </div>
       <div class="seoz-pill" id="seozPill" onclick="onSeozPillClick()">
         <div class="sdot" id="seozDot"></div>
@@ -3864,6 +3782,16 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
       <div class="update-progress" id="updateProgress" style="display:none"><div class="update-progress-fill" id="updateProgressFill" style="width:0%"></div></div>
       <button class="ub-btn primary" id="updateBtn" onclick="handleUpdateAction()">Ladda ner</button>
       <button class="ub-btn secondary" onclick="setUpdateBannerVisible(false)">Senare</button>
+    </div>
+
+    <!-- Google sign-in auto-recovery banner.
+         Shown when the active tab navigates to accounts.google.com/.../signin/rejected.
+         One-click clears Google cookies + storage so the next attempt
+         gets a clean session. See memory/project_seoz_browser_google_auth.md. -->
+    <div class="update-banner google-rej-banner" id="googleRejBanner">
+      <span class="ub-msg">Google blockerade inloggningen — vanligtvis gammal session-data. Rensa Google-cookies och försök igen?</span>
+      <button class="ub-btn primary" id="googleRejBtn" onclick="handleGoogleRejectionRecovery()">Rensa &amp; försök igen</button>
+      <button class="ub-btn secondary" onclick="setGoogleRejBannerVisible(false)">Stäng</button>
     </div>
 
     <!-- Bookmark bar -->
@@ -5024,7 +4952,6 @@ const _CLIP_OPEN_SELECTOR = [
   '#urlSuggest.open',
   '#ctxMenu.open',
   '#chromeDd.open',
-  '#blockerPopup.open',
   '.bm-drop.open',
   '.client-sel-drop.open',
   '.mail-acct-menu.show',
@@ -5056,40 +4983,30 @@ function _isOverlayOpen() {
   } catch (_) { return false }
 }
 
-// v1.10.128 DIAG — counter ensures we see if observer feedback loop
-// is occurring (counter increments rapidly with no exit between).
-let _refreshCount = 0
 function _refreshOverlayState() {
-  const c = ++_refreshCount
-  try { console.warn('[DIAG] refreshOverlayState ENTER #' + c) } catch (_) {}
-  try {
-    const open = _isOverlayOpen()
-    if (open !== _overlayActive) {
-      _overlayActive = open
-      try { console.warn('[DIAG] refreshOverlayState toggle chrome-overlay-active=' + open) } catch (_) {}
-      document.body.classList.toggle('chrome-overlay-active', open)
-    }
+  const open = _isOverlayOpen()
+  if (open !== _overlayActive) {
+    _overlayActive = open
+    document.body.classList.toggle('chrome-overlay-active', open)
+  }
 
-    let maxBottom = 0
-    try {
-      document.querySelectorAll(_CLIP_OPEN_SELECTOR).forEach(el => {
-        if (_isElementActuallyVisible(el)) {
-          const r = el.getBoundingClientRect()
-          if (r.bottom > maxBottom) maxBottom = r.bottom
-        }
-      })
-    } catch (_) {}
-    if (maxBottom > 0) {
-      const wvStack = document.getElementById('wvStack')
-      const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
-      const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
-      document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
-      document.body.classList.add('chrome-clip-active')
-    } else {
-      document.body.classList.remove('chrome-clip-active')
-    }
-  } finally {
-    try { console.warn('[DIAG] refreshOverlayState EXIT #' + c) } catch (_) {}
+  let maxBottom = 0
+  try {
+    document.querySelectorAll(_CLIP_OPEN_SELECTOR).forEach(el => {
+      if (_isElementActuallyVisible(el)) {
+        const r = el.getBoundingClientRect()
+        if (r.bottom > maxBottom) maxBottom = r.bottom
+      }
+    })
+  } catch (_) {}
+  if (maxBottom > 0) {
+    const wvStack = document.getElementById('wvStack')
+    const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
+    const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
+    document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
+    document.body.classList.add('chrome-clip-active')
+  } else {
+    document.body.classList.remove('chrome-clip-active')
   }
 }
 
@@ -5102,21 +5019,7 @@ function _refreshOverlayState() {
 ;(function _watchOverlays() {
   try {
     let _refreshScheduled = false
-    const _onMut = (records) => {
-      // Log the very first mutation target so we can identify what's
-      // re-triggering us. Only log occasionally to avoid spamming.
-      if (records && records.length && _refreshCount % 100 === 0) {
-        try {
-          const r = records[0]
-          const t = r.target
-          const desc = (t.tagName || '?') +
-            (t.id ? '#' + t.id : '') +
-            (t.className && typeof t.className === 'string'
-              ? '.' + String(t.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.')
-              : '')
-          console.warn('[DIAG] MutObs target=' + desc + ' attr=' + r.attributeName)
-        } catch (_) {}
-      }
+    const _onMut = () => {
       if (_refreshScheduled) return
       _refreshScheduled = true
       requestAnimationFrame(() => {
@@ -5663,6 +5566,12 @@ function _attachWebviewListeners(el, tabId) {
     // Invalidate cached tab-tooltip preview (URL changed → screenshot
     // is stale). v1.10.109.
     try { _tabPreviewCache?.delete(tabId) } catch (_) {}
+    // Auto-recovery: detect Google's "Inloggningen misslyckades" page
+    // and offer one-click cookie clear. The active tab's navigation
+    // is what the user sees, so only show the banner for the active
+    // tab — background tabs hitting this URL are typically OAuth
+    // redirects we don't want to interrupt.
+    if (_isActive()) _maybeShowGoogleRejectionBanner(e.url)
   })
 
   // Password autofill IPC — guest webview-preload.js sends these.
@@ -13668,27 +13577,89 @@ async function initBlocker() {
 }
 
 function updateBlockerUI() {
+  // Trigger button + badge live in chrome HTML — those still update.
   const shield = document.getElementById('blockerShield')
   const badge = document.getElementById('blockerBadge')
-  const toggle = document.getElementById('blockerToggle')
-  const stat = document.getElementById('blockerStatNum')
-
   shield.classList.toggle('off', !blockerOn)
   badge.textContent = blockerCount > 0 ? (blockerCount > 999 ? '999+' : blockerCount) : ''
-  if (toggle) toggle.classList.toggle('on', blockerOn)
-  if (stat) stat.textContent = blockerCount
+  // Push state to the popup WebContentsView so its toggle/count
+  // reflect changes whether or not the popup is currently visible.
+  try {
+    if (window.seoz?.shieldPopup?.updateState) {
+      window.seoz.shieldPopup.updateState({
+        count: blockerCount,
+        enabled: blockerOn,
+        cookieMode: _cookieMode,
+      })
+    }
+  } catch (_) {}
 }
 
+// Popup is a sibling WebContentsView floating above the page (managed
+// by main.js _ensureShieldView). Show/hide via IPC; main positions it
+// relative to the trigger button's bounding rect.
+let _shieldPopupOpen = false
 function toggleBlockerPopup() {
-  const popup = document.getElementById('blockerPopup')
-  popup.classList.toggle('open')
+  if (_shieldPopupOpen) {
+    _hideShieldPopup()
+    return
+  }
+  const btn = document.getElementById('blockerShield')
+  if (!btn) return
+  const r = btn.getBoundingClientRect()
+  const state = { count: blockerCount, enabled: blockerOn, cookieMode: _cookieMode }
+  try {
+    if (window.seoz?.shieldPopup?.show) {
+      // anchorX = right edge of button (popup will right-align to it)
+      // anchorY = below the button with a 6px gap
+      window.seoz.shieldPopup.show(Math.round(r.right), Math.round(r.bottom + 6), state)
+      _shieldPopupOpen = true
+    }
+  } catch (_) {}
 }
+function _hideShieldPopup() {
+  if (!_shieldPopupOpen) return
+  try { window.seoz?.shieldPopup?.hide?.() } catch (_) {}
+  _shieldPopupOpen = false
+}
+
+// Outside-click → close the popup. We can't intercept clicks on the
+// popup itself (it's a separate WebContentsView, mouse events route
+// there naturally) — but any click in OUR chrome should close.
+// Skipped while cursor is reported as on the popup card to avoid a
+// race where a mouseleave-then-click closes mid-interaction.
+let _shieldCursorOnCard = false
+if (window.seoz?.shieldPopup?.onCursorOnCard) {
+  window.seoz.shieldPopup.onCursorOnCard((on) => { _shieldCursorOnCard = on })
+}
+document.addEventListener('mousedown', (e) => {
+  if (!_shieldPopupOpen) return
+  if (_shieldCursorOnCard) return
+  // Don't close when clicking the trigger — toggleBlockerPopup handles it.
+  const wrap = document.getElementById('blockerWrap')
+  if (wrap && wrap.contains(e.target)) return
+  _hideShieldPopup()
+}, true)
 
 async function toggleBlockerEnabled() {
   blockerOn = !blockerOn
   await SE.blockerSetEnabled(blockerOn)
   updateBlockerUI()
   toast(blockerOn ? 'Shield aktiverad' : 'Shield avstängd', blockerOn ? '#2ca87f' : '#e58a00')
+}
+
+// Wire popup actions back to the chrome's master state. The popup
+// just emits intent ('toggle-enabled', 'set-cookie-mode'); we apply
+// the change here, which in turn pushes new state back to the popup
+// via updateBlockerUI / updateCookieSegUI.
+if (window.seoz?.shieldPopup?.onAction) {
+  window.seoz.shieldPopup.onAction(({ action, value }) => {
+    if (action === 'toggle-enabled') {
+      toggleBlockerEnabled()
+    } else if (action === 'set-cookie-mode' && typeof value === 'string') {
+      setCookieMode(value)
+    }
+  })
 }
 
 // ── Cookie-banner auto-handler (Shield → Cookies) ──
@@ -13704,15 +13675,18 @@ async function initCookieMode() {
 }
 
 function updateCookieSegUI() {
-  const seg = document.getElementById('cookieSeg')
-  if (!seg) return
-  for (const btn of seg.querySelectorAll('.cookie-seg-btn')) {
-    const m = btn.dataset.mode
-    const active = m === _cookieMode
-    btn.classList.toggle('active', active)
-    btn.classList.toggle('accept', active && m === 'accept')
-    btn.classList.toggle('reject', active && m === 'reject')
-  }
+  // The cookie segmented control lives inside the Shield popup (now
+  // a separate WebContentsView). Push the new mode there. No HTML
+  // counterpart to update in the chrome.
+  try {
+    if (window.seoz?.shieldPopup?.updateState) {
+      window.seoz.shieldPopup.updateState({
+        count: blockerCount,
+        enabled: blockerOn,
+        cookieMode: _cookieMode,
+      })
+    }
+  } catch (_) {}
 }
 
 async function setCookieMode(mode) {
@@ -19535,6 +19509,74 @@ function handleUpdateAction() {
 SE.updaterGetVersion().then(v => {
   document.getElementById('sbVersion').textContent = 'v' + v
 })
+
+// ══════════════════════════════════════════════════════
+//  Google sign-in auto-recovery
+//
+//  Bot-detection markers from earlier failed sign-in attempts get
+//  cached in cookies on accounts.google.com. Once Google decides a
+//  session is "unsafe", every subsequent visit redirects to
+//  /v3/signin/rejected without giving the user a chance to even
+//  type their email — the URL has `idnf=<email-from-cookie>` and
+//  the rejection page is served on the FIRST request.
+//
+//  We can't prevent this server-side, but we can detect it client-
+//  side and offer one-click recovery: clear cookies + storage for
+//  google.com hosts, then reload. Strawberry doesn't need this
+//  because their userData dir is separate so they get a fresh state
+//  per install — but for our users on a single SEOZ profile, this
+//  recovery is the difference between "browser is broken" and
+//  "click the button, sign in normally".
+//
+//  See memory/project_seoz_browser_google_auth.md for the full story.
+// ══════════════════════════════════════════════════════
+function setGoogleRejBannerVisible(visible) {
+  const banner = document.getElementById('googleRejBanner')
+  if (!banner) return
+  if (visible) banner.classList.add('show')
+  else         banner.classList.remove('show')
+}
+
+// Pattern matches both /v3/signin/rejected (current Google flow) and
+// any future variant with "rejected" in the path. Restricted to
+// accounts.google.com — other rejection-page paths on different hosts
+// shouldn't trigger our banner.
+const _GOOGLE_REJECT_RE = /^https:\/\/accounts\.google\.com\/[^?#]*signin\/rejected(?:[/?#]|$)/i
+
+function _maybeShowGoogleRejectionBanner(url) {
+  if (!url || typeof url !== 'string') return
+  if (_GOOGLE_REJECT_RE.test(url)) {
+    setGoogleRejBannerVisible(true)
+  }
+}
+
+let _googleRejInFlight = false
+async function handleGoogleRejectionRecovery() {
+  if (_googleRejInFlight) return
+  _googleRejInFlight = true
+  const btn = document.getElementById('googleRejBtn')
+  const origText = btn?.textContent
+  if (btn) { btn.textContent = 'Rensar…'; btn.disabled = true }
+  try {
+    if (window.seoz?.clearGoogleAuthData) {
+      await window.seoz.clearGoogleAuthData()
+    }
+    setGoogleRejBannerVisible(false)
+    // Reload the active tab to a fresh accounts.google.com — by now
+    // cookies are gone, so Google will serve the clean sign-in form
+    // instead of /signin/rejected.
+    try {
+      const handle = _tabWebviews.get(activeId)
+      if (handle?.loadURL) handle.loadURL('https://accounts.google.com/')
+      else if (handle?.src !== undefined) handle.src = 'https://accounts.google.com/'
+    } catch (_) {}
+  } catch (err) {
+    console.warn('[google-rej] recovery failed:', err?.message || err)
+  } finally {
+    _googleRejInFlight = false
+    if (btn) { btn.textContent = origText || 'Rensa & försök igen'; btn.disabled = false }
+  }
+}
 
 init()
 loadBookmarks()

@@ -13209,39 +13209,47 @@ function closeAllDrops() { document.querySelectorAll('.bm-drop').forEach(d => d.
 // ── Context menu ──
 function showCtx(e, items) {
   closeAllDrops()
-  // Hide the floating tab tooltip BEFORE rendering the ctx menu.
-  // hideSync blocks the renderer until main has actually called
-  // hide() on the BrowserWindow — without this the IPC takes 1-2
-  // frames and the tooltip (alwaysOnTop:'pop-up-menu') visually
-  // occludes the ctx menu. With sync, the menu paints into the
-  // already-empty space. (v1.10.113.)
+  // Hide the floating tab tooltip first. v1.10.113 used sendSync to
+  // guarantee the tooltip was gone before the ctx menu rendered, but
+  // BrowserWindow.hide() on Windows can occasionally block on the
+  // window-message pump flush — and a blocked main process means the
+  // sync IPC hangs the renderer. Whole app froze on right-click.
+  // (v1.10.115 fix.)
+  //
+  // Now: fire-and-forget hide(), then defer the menu render by one
+  // animation frame. That ~16ms gives main plenty of time to process
+  // the hide IPC + actually hide the BrowserWindow, with zero risk
+  // of a renderer-side deadlock. The tooltip's pop-up-menu z-level
+  // would otherwise visually occlude the menu for that brief window.
   try {
     clearTimeout(window._tabTipShowTimer)
     clearTimeout(window._tabTipHideTimer)
-    if (window.seoz?.tooltip?.hideSync) window.seoz.tooltip.hideSync()
-    else if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
+    if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
   } catch (_) {}
-  const menu = document.getElementById('ctxMenu')
-  menu.innerHTML = ''
-  items.forEach(item => {
-    if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
-    const el = document.createElement('div')
-    el.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '')
-    // Support an optional `icon` (raw Lucide SVG string) rendered before
-    // the escaped label. Falls back to plain textContent when not provided.
-    if (item.icon) {
-      const safe = String(item.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-      el.innerHTML = '<span class="ctx-ico">' + item.icon + '</span><span>' + safe + '</span>'
-    } else {
-      el.textContent = item.label
-    }
-    if (!item.disabled) el.onclick = () => { hideCtx(); item.action() }
-    menu.appendChild(el)
+
+  // Snapshot the click coords — the MouseEvent itself is fine to
+  // close over, but pulling the numbers out is clearer about intent.
+  const cx = e.clientX, cy = e.clientY
+  requestAnimationFrame(() => {
+    const menu = document.getElementById('ctxMenu')
+    menu.innerHTML = ''
+    items.forEach(item => {
+      if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
+      const el = document.createElement('div')
+      el.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '')
+      if (item.icon) {
+        const safe = String(item.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        el.innerHTML = '<span class="ctx-ico">' + item.icon + '</span><span>' + safe + '</span>'
+      } else {
+        el.textContent = item.label
+      }
+      if (!item.disabled) el.onclick = () => { hideCtx(); item.action() }
+      menu.appendChild(el)
+    })
+    menu.style.left = Math.min(cx, window.innerWidth - 200) + 'px'
+    menu.style.top = Math.min(cy, window.innerHeight - items.length * 30) + 'px'
+    menu.classList.add('open')
   })
-  // Position
-  menu.style.left = Math.min(e.clientX, window.innerWidth - 200) + 'px'
-  menu.style.top = Math.min(e.clientY, window.innerHeight - items.length * 30) + 'px'
-  menu.classList.add('open')
 }
 function hideCtx() { document.getElementById('ctxMenu').classList.remove('open') }
 

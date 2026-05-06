@@ -1557,12 +1557,19 @@ input,textarea,select{user-select:text}
      (which clips overflow on the tab list itself). The JS handler on
      mouseenter sets top/left based on the tab's getBoundingClientRect.
      Without this, the tooltip card was clipped at the bottom edge of
-     .tabs-scroll (~30px tall) and rendered nothing visible. (v1.10.104) */
+     .tabs-scroll (~30px tall) and rendered nothing visible. (v1.10.104)
+
+     pointer-events:none ALWAYS — with position:fixed the tooltip
+     visually overlaps the URL bar. If the tooltip caught events, the
+     URL bar became unclickable while a tooltip was visible (the
+     "frozen URL bar" bug in v1.10.105). Trade-off: the pin/split
+     action buttons inside the tooltip are no longer clickable. We
+     accept that — most users hover tabs to PEEK, not interact. (v1.10.106) */
   position:fixed;z-index:150;
   padding-top:6px;min-width:240px;max-width:320px;
-  pointer-events:none;opacity:0;transition:opacity .2s .4s;
+  pointer-events:none !important;opacity:0;transition:opacity .2s .4s;
 }
-.tab:hover .tab-tip{opacity:1;pointer-events:auto}
+.tab:hover .tab-tip{opacity:1}
 .tab-tip:hover{opacity:1;transition-delay:0s}
 /* Clip-from-top: shrink the WebContentsView vertically by N px so the
    top strip of chrome bg is exposed, where dropdowns / tooltips can
@@ -9114,12 +9121,14 @@ function renderTabs() {
       el.addEventListener('mouseleave', () => {
         clearTimeout(window._tabTipShowTimer)
         clearTimeout(window._tabTipHideTimer)
-        // Grace period so the cursor can travel from the tab onto the
-        // tooltip card itself (which has :hover { opacity:1 } to keep
-        // itself open) without the page snapping back.
+        // Grace period so the user gets a brief moment to read the
+        // tooltip after moving the cursor off the tab. With v1.10.106
+        // pointer-events:none, the tooltip can no longer "catch" the
+        // cursor (the hover bridge is gone), so we lean on a slightly
+        // longer grace (300ms) for comfort.
         window._tabTipHideTimer = setTimeout(() => {
           document.body.classList.remove('tab-tip-hovering')
-        }, 150)
+        }, 300)
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {

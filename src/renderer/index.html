@@ -1553,7 +1553,12 @@ input,textarea,select{user-select:text}
    pointer-events:auto on the tooltip keeps it open while the user is
    interacting with it. */
 .tab-tip{
-  position:absolute;left:50%;top:100%;transform:translateX(-50%);z-index:150;
+  /* position:fixed so the tooltip escapes .tabs-scroll's overflow:hidden
+     (which clips overflow on the tab list itself). The JS handler on
+     mouseenter sets top/left based on the tab's getBoundingClientRect.
+     Without this, the tooltip card was clipped at the bottom edge of
+     .tabs-scroll (~30px tall) and rendered nothing visible. (v1.10.104) */
+  position:fixed;z-index:150;
   padding-top:6px;min-width:240px;max-width:320px;
   pointer-events:none;opacity:0;transition:opacity .2s .4s;
 }
@@ -9045,14 +9050,11 @@ function renderTabs() {
       xBtn.addEventListener('mousedown', e => e.stopPropagation())
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
-      // Edge-detect the tooltip on hover — when the tab sits near
-      // a window edge the centered tooltip would overflow. We pin
-      // the tooltip's VIEWPORT position (always ≥8px from each
-      // edge) by computing an offset from the tab's own left, since
-      // .tab-tip is absolute-positioned inside .tab. Setting
-      // tip.style.left to e.g. "0" wasn't enough — that puts the
-      // tooltip flush with the tab, but a tab near x=0 still has
-      // its tooltip starting at x=0 (left side clipped).
+      // Tooltip uses position:fixed (v1.10.104) so it escapes the
+      // .tabs-scroll overflow:hidden clip. We compute viewport-relative
+      // top + left from the tab's getBoundingClientRect on every hover
+      // — necessary because fixed-positioned elements don't follow
+      // their DOM ancestor's flow.
       el.addEventListener('mouseenter', () => {
         const tip = el.querySelector('.tab-tip')
         if (!tip) return
@@ -9061,24 +9063,16 @@ function renderTabs() {
         const winWidth = window.innerWidth
         const margin = 8       // safety margin from window edges
 
-        const centerLeft  = rect.left + rect.width / 2 - tipWidth / 2
-        const centerRight = centerLeft + tipWidth
+        // Top: just below the tab in viewport coords.
+        tip.style.top = rect.bottom + 'px'
 
-        if (centerLeft < margin) {
-          // Pin viewport-left = margin → offset from tab is margin - rect.left
-          tip.style.left = (margin - rect.left) + 'px'
-          tip.style.right = 'auto'
-          tip.style.transform = 'none'
-        } else if (centerRight > winWidth - margin) {
-          // Pin viewport-right = winWidth - margin
-          tip.style.left = (winWidth - margin - tipWidth - rect.left) + 'px'
-          tip.style.right = 'auto'
-          tip.style.transform = 'none'
-        } else {
-          tip.style.left = '50%'
-          tip.style.right = 'auto'
-          tip.style.transform = 'translateX(-50%)'
-        }
+        // Left: try to center under the tab, clamp to viewport edges.
+        let left = rect.left + rect.width / 2 - tipWidth / 2
+        if (left < margin) left = margin
+        else if (left + tipWidth > winWidth - margin) left = winWidth - margin - tipWidth
+        tip.style.left = left + 'px'
+        tip.style.right = 'auto'
+        tip.style.transform = 'none'
 
         // After the same 420ms intent delay the CSS uses for opacity,
         // toggle body.tab-tip-hovering so the .tab-handle CSS rule

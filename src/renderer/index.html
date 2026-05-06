@@ -9057,12 +9057,15 @@ function renderTabs() {
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
 
-      // Tab preview tooltip — backed by a separate transparent
-      // BrowserWindow in main (since v1.10.107). HTML z-index can't
-      // reach across the WebContentsView native-view boundary, so the
-      // tooltip lives in its own OS window that floats over the main
-      // one. main converts our viewport coords → screen coords.
+      // Tab preview tooltip — DIAGNOSTIC v1.10.117: tooltip-show
+      // disabled to isolate whether the tooltip is what's freezing
+      // the app on right-click. If right-click still hangs with this
+      // disabled, the cause is elsewhere (chrome-clip-active CSS
+      // mechanism, MutationObserver loop, ctx menu render, etc).
+      // Re-enable in next version once root cause is found.
+      el.title = (tab.title || '') + (tab.url ? '\n' + tab.url : '')
       el.addEventListener('mouseenter', () => {
+        if (true) return  // ← v1.10.117 diagnostic: skip tooltip entirely
         const rect = el.getBoundingClientRect()
         const tipWidth = 320
         const winWidth = window.innerWidth

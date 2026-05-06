@@ -9116,18 +9116,20 @@ function renderTabs() {
           if (window.seoz?.tooltip) window.seoz.tooltip.hide()
         }, 180)
       })
-      // Right-click → tab context menu (Chrome / Arc / Strawberry style).
-      // Hide the floating tooltip first — its BrowserWindow has
-      // alwaysOnTop:'pop-up-menu' which would otherwise paint over the
-      // ctx menu. Cancel any pending show timer too so a slow hover
-      // doesn't pop the tooltip up while the menu is open.
+      // DIAGNOSTIC v1.10.118: minimal contextmenu handler.
+      // Tooltip is already disabled (v1.10.117). Now we also short-
+      // circuit the showCtx flow + tooltip.hide IPC. If right-click
+      // STILL freezes the app with this minimal handler, the cause
+      // is outside our renderer code entirely (native Chromium
+      // behavior, OS-level, GPU process, etc).
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         e.stopPropagation()
-        clearTimeout(window._tabTipShowTimer)
-        clearTimeout(window._tabTipHideTimer)
-        if (window.seoz?.tooltip) window.seoz.tooltip.hide()
-        showCtx(e, tabCtxItems(tab.id))
+        // Replaced with native Menu.popup() via IPC — bypasses HTML
+        // ctx menu + chrome-clip-active mechanism entirely.
+        if (window.seoz?.showTabMenu) {
+          window.seoz.showTabMenu(tab.id)
+        }
       })
       attachTabDnD(el)
       // Insert relative to ntBtn's actual parent — v1.10.84 wrapped
@@ -9410,6 +9412,46 @@ async function _captureAndUpdateTooltip(tab, anchor) {
   // pending timers are bounded by 420ms / 180ms so even if they do
   // fire after blur, the IPC just calls show() on a hidden view
   // that's still child-of-occluded-parent. Harmless.
+
+  // v1.10.118: native tab context menu — main calls Menu.popup()
+  // and sends back the chosen action via IPC. Each action maps to
+  // an existing function (newTab, switchTab, openSplitView, etc).
+  // No HTML showCtx, no chrome-clip-active — just like the page
+  // right-click that already works fine via Menu.popup().
+  if (typeof window.seoz?.onTabMenuAction === 'function') {
+    window.seoz.onTabMenuAction(({ tabId, action }) => {
+      tabId = Number(tabId) || 0
+      if (!tabId) return
+      const tab = tabs.find(t => t.id === tabId)
+      if (!tab) return
+      const url = tab.url || ''
+      const isReal = url && !isOverlayUrl(url) && url !== 'about:blank'
+      switch (action) {
+        case 'newtab':     newTab(); break
+        case 'reload':     try { _tabWebviews.get(tabId)?.reload() } catch (_) {}; break
+        case 'duplicate':  isReal ? newTab(url) : newTab(); break
+        case 'split':
+          if (activeId !== tabId) switchTab(tabId)
+          if (typeof openSplitView === 'function' && !_splitWebviews.has(tabId)) openSplitView()
+          else if (typeof closeSplitView === 'function' && _splitWebviews.has(tabId)) closeSplitView(tabId)
+          break
+        case 'bookmark':
+          if (isReal && typeof addBookmark === 'function') addBookmark({ url, title: tab.title || url })
+          break
+        case 'copy-url':
+          if (url) try { navigator.clipboard.writeText(url) } catch (_) {}
+          break
+        case 'close':       closeTab({ stopPropagation: () => {} }, tabId); break
+        case 'close-others':
+          tabs.filter(t => t.id !== tabId).slice().reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
+          break
+        case 'close-right':
+          const idx = tabs.findIndex(t => t.id === tabId)
+          if (idx >= 0) tabs.slice(idx + 1).reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
+          break
+      }
+    })
+  }
 })()
 
 // ── Tab drag & drop (Chrome-style reorder + tear-off) ───────────────

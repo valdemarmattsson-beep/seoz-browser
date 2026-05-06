@@ -23,6 +23,14 @@ contextBridge.exposeInMainWorld('seoz', {
   winDragMove:  (dx, dy)   => ipcRenderer.send('win-drag-move', dx, dy),
   winDragEnd:   ()         => ipcRenderer.send('win-drag-end'),
 
+  // Native context menu for tab right-click. v1.10.118 switched away
+  // from HTML showCtx to bypass the chrome-clip-active mechanism that
+  // was suspected of freezing the app on right-click.
+  showTabMenu: (tabId) => ipcRenderer.send('tab:show-menu', { tabId }),
+  onTabMenuAction: (cb) => ipcRenderer.on('tab:menu-action', (_e, payload) => {
+    try { cb(payload || {}) } catch (err) { console.error('[onTabMenuAction]', err) }
+  }),
+
   // Tab-preview tooltip — backed by a separate transparent
   // BrowserWindow in main. This is the only way to render a tooltip
   // OVER a WebContentsView (the page); HTML z-index can't reach

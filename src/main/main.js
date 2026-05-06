@@ -1072,6 +1072,43 @@ function createWindow() {
   })
 }
 
+// ── Native tab context menu ─────────────────────────────────────────
+// v1.10.118: switched from HTML showCtx (which triggered the
+// chrome-clip-active mechanism, suspected of freezing the app on
+// right-click) to a native Electron Menu.popup(). Renders at the
+// OS level — no HTML, no z-order battles, no WebContentsView
+// resize on open. The renderer sends the tabId, main builds the
+// menu from the same logic the HTML one used and either runs the
+// action directly or sends it back to the renderer for execution.
+ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
+  try {
+    if (!win || win.isDestroyed()) return
+    if (!tabId) return
+    // Ask the renderer for the current tab list + state so we can
+    // build the menu items. The renderer has all the per-tab state
+    // (split-view, recent-closed, isReal, etc). For the diagnostic,
+    // build a minimal menu first; if right-click is no longer
+    // freezing with this, we can move the rich items over.
+    const template = [
+      { label: 'Ny flik',          click: () => win.webContents.send('tab:menu-action', { tabId, action: 'newtab' }) },
+      { label: 'Ladda om',         click: () => win.webContents.send('tab:menu-action', { tabId, action: 'reload' }) },
+      { label: 'Duplicera flik',   click: () => win.webContents.send('tab:menu-action', { tabId, action: 'duplicate' }) },
+      { type: 'separator' },
+      { label: 'Öppna i splitvy',  click: () => win.webContents.send('tab:menu-action', { tabId, action: 'split' }) },
+      { label: 'Bokmärk denna sida', click: () => win.webContents.send('tab:menu-action', { tabId, action: 'bookmark' }) },
+      { label: 'Kopiera URL',      click: () => win.webContents.send('tab:menu-action', { tabId, action: 'copy-url' }) },
+      { type: 'separator' },
+      { label: 'Stäng flik',       click: () => win.webContents.send('tab:menu-action', { tabId, action: 'close' }) },
+      { label: 'Stäng övriga',     click: () => win.webContents.send('tab:menu-action', { tabId, action: 'close-others' }) },
+      { label: 'Stäng till höger', click: () => win.webContents.send('tab:menu-action', { tabId, action: 'close-right' }) },
+    ]
+    const m = Menu.buildFromTemplate(template)
+    m.popup({ window: win })
+  } catch (err) {
+    console.error('[tab:show-menu] failed:', err)
+  }
+})
+
 // ── Tab tooltip — sibling WebContentsView (Strawberry-style) ────────
 //
 // v1.10.107-1.10.115 used a separate transparent BrowserWindow with

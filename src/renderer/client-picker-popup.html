@@ -1,0 +1,224 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data:; script-src 'self' 'unsafe-inline'">
+<title>SEOZ Client Picker</title>
+<style>
+  /* Hardcoded tokens kept in lockstep with index.html dark/light vars.
+     Popup is a separate document so it can't reach the chrome
+     renderer's :root variables — the isDark flag from main flips
+     between the two blocks below. */
+  :root {
+    --card: #20242c;
+    --panel: #1a1d24;
+    --border: rgba(255,255,255,.08);
+    --txt: rgba(255,255,255,.88);
+    --head: rgba(255,255,255,.98);
+    --muted: rgba(255,255,255,.42);
+    --ink-2: rgba(255,255,255,.62);
+    --hover: rgba(255,255,255,.06);
+    --p: #5b8dff;
+    --r: #ff453a;
+  }
+  [data-theme="light"] {
+    --card: #ffffff;
+    --panel: #f5f5f3;
+    --border: rgba(0,0,0,.08);
+    --txt: #1a1a1a;
+    --head: #0a0a0a;
+    --muted: #8a8a85;
+    --ink-2: #585854;
+    --hover: rgba(0,0,0,.04);
+    --p: #3b6fe0;
+    --r: #dc2626;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px; color: var(--txt);
+    overflow: hidden; user-select: none;
+  }
+  /* Body has no padding — earlier 4px pad created a transparent halo
+     around the card that bled in whatever was under the WebContentsView
+     (page background, dock rows, etc.). View bounds now match the card
+     exactly; only the rounded-corner triangles remain transparent. */
+
+  .drop {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 8px 0;
+    /* No box-shadow — would be clipped at view bounds since the body
+       has no padding to give it room. Border + card-vs-page contrast
+       is enough separation. */
+    min-width: 240px;
+    width: max-content;
+  }
+
+  .hdr {
+    display: flex; align-items: center; gap: 6px;
+    padding: 4px 14px;
+    font-size: 9px; font-weight: 700; text-transform: uppercase;
+    letter-spacing: .06em; color: var(--muted);
+  }
+  .hdr .refresh-btn {
+    width: 22px; height: 22px; border-radius: 5px; border: none;
+    background: transparent; color: var(--muted); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    transition: background .12s, color .12s;
+  }
+  .hdr .refresh-btn:hover { background: var(--hover); color: var(--txt); }
+  .hdr .refresh-btn svg { width: 12px; height: 12px; }
+
+  .item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 14px; cursor: pointer;
+    font-size: 11px; color: var(--txt);
+    transition: background .12s;
+  }
+  .item:hover { background: var(--hover); }
+  .item.active { color: var(--p); font-weight: 600; }
+  .item .dot {
+    width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0;
+  }
+  .item .name { flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+  .item .score { font-size: 10px; font-weight: 700; }
+
+  .item .row-menu-btn {
+    width: 22px; height: 22px; border-radius: 5px; border: none;
+    background: transparent; color: var(--muted); cursor: pointer;
+    display: inline-flex; align-items: center; justify-content: center;
+    margin-left: auto; transition: background .12s, color .12s;
+  }
+  .item .row-menu-btn:hover { background: var(--hover); color: var(--txt); }
+  .item .row-menu-btn svg { width: 13px; height: 13px; }
+
+  .empty {
+    padding: 6px 14px;
+    font-size: 10px; color: var(--muted); font-style: italic;
+  }
+
+  .cta {
+    padding: 8px 14px; cursor: pointer;
+    font-size: 11px; font-weight: 600; color: var(--p);
+    text-align: center;
+    transition: background .12s;
+  }
+  .cta:hover { background: var(--hover); }
+</style>
+</head>
+<body>
+  <div class="drop" id="drop"></div>
+  <script>
+    'use strict'
+
+    const root = document.getElementById('drop')
+    let _state = { clients: [], projects: [], activeClientId: null, activeProjectId: null }
+
+    const COLORS = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
+
+    const ICON_REFRESH = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>'
+    const ICON_DOTS = '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg>'
+
+    function escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+    }
+
+    function render() {
+      const { clients, projects, activeClientId, activeProjectId } = _state
+
+      // Klienter — header with refresh + list (or empty state).
+      let html = ''
+      html += '<div class="hdr"><span style="flex:1">Klienter</span>'
+      html += '<button class="refresh-btn" data-action="refresh" title="Tvinga synk från seoz.io" aria-label="Synka klienter">' + ICON_REFRESH + '</button></div>'
+
+      if (clients.length === 0) {
+        html += '<div class="empty">Inga klienter — synka ditt konto</div>'
+      } else {
+        for (let i = 0; i < clients.length; i++) {
+          const c = clients[i]
+          const col = COLORS[i % COLORS.length]
+          const score = c.seoScore != null ? Math.round(c.seoScore) : '—'
+          const cls = 'item' + (c.id === activeClientId ? ' active' : '')
+          html += '<div class="' + cls + '" data-action="client:' + escHtml(c.id) + '">'
+          html +=   '<span class="dot" style="background:' + col + '"></span>'
+          html +=   '<span class="name">' + escHtml(c.name) + '</span>'
+          html +=   '<span class="score" style="color:' + col + '">' + escHtml(score) + '</span>'
+          html += '</div>'
+        }
+      }
+
+      // Projekt — header + list + create CTA.
+      html += '<div class="hdr" style="margin-top:6px"><span style="flex:1">Projekt</span></div>'
+
+      for (const p of projects) {
+        const cls = 'item' + (p.id === activeProjectId ? ' active' : '')
+        html += '<div class="' + cls + '" data-action="project:' + escHtml(p.id) + '">'
+        html +=   '<span class="dot" style="background:' + escHtml(p.color || '#888') + '"></span>'
+        html +=   '<span class="name">' + escHtml(p.name) + '</span>'
+        html +=   '<button class="row-menu-btn" data-action="project-menu:' + escHtml(p.id) + '" data-bubble="0" title="Hantera projekt" aria-label="Hantera projekt">' + ICON_DOTS + '</button>'
+        html += '</div>'
+      }
+
+      html += '<div class="cta" data-action="create-project">+ Skapa projekt</div>'
+
+      root.innerHTML = html
+      // Body has no padding — view bounds match the card exactly so
+      // there's no transparent halo around the rounded corners.
+      requestAnimationFrame(() => {
+        const w = root.offsetWidth
+        const h = root.offsetHeight
+        try { window.seoz?.clientPicker?.resize(w, h) } catch (_) {}
+      })
+    }
+
+    document.addEventListener('click', (e) => {
+      // The per-project ⋮ button must NOT bubble its action up to the
+      // surrounding row (which would trigger 'project:<id>'). Buttons
+      // are handled first.
+      const button = e.target.closest('button[data-action]')
+      if (button) {
+        e.stopPropagation()
+        const id = button.dataset.action
+        // For project-menu we forward viewport-local coords so the
+        // chrome renderer can pop the rename/delete menu next to the
+        // ⋮ button instead of at the popup's origin.
+        const r = button.getBoundingClientRect()
+        try { window.seoz?.clientPicker?.action(id, { anchorX: Math.round(r.left), anchorY: Math.round(r.bottom) }) } catch (_) {}
+        return
+      }
+      const row = e.target.closest('[data-action]')
+      if (!row) return
+      const id = row.dataset.action
+      try { window.seoz?.clientPicker?.action(id) } catch (_) {}
+    })
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        try { window.seoz?.clientPicker?.close() } catch (_) {}
+      }
+    })
+    window.addEventListener('blur', () => {
+      try { window.seoz?.clientPicker?.close() } catch (_) {}
+    })
+
+    if (window.seoz?.clientPicker?.onItems) {
+      window.seoz.clientPicker.onItems((payload) => {
+        _state = {
+          clients: Array.isArray(payload.clients) ? payload.clients : [],
+          projects: Array.isArray(payload.projects) ? payload.projects : [],
+          activeClientId: payload.activeClientId || null,
+          activeProjectId: payload.activeProjectId || null,
+        }
+        document.documentElement.dataset.theme = payload.isDark === false ? 'light' : 'dark'
+        render()
+      })
+    }
+  </script>
+</body>
+</html>

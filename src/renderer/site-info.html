@@ -1,0 +1,255 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>SEOZ site info</title>
+<style>
+  /* The view bounds are sized to fit the card exactly. Body must be
+     TRANSPARENT — earlier we set it to the card colour to hide gray
+     sliver-rounding artefacts, but that masked the .card's
+     border-radius (the body's solid colour painted right past the
+     rounded corners, making the card visually square at the bottom).
+     The 4 small triangles outside the rounded radius now show through
+     to whatever is behind the WebContentsView, which is fine. */
+  html, body {
+    margin: 0; padding: 0;
+    background: transparent;
+    overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    color: #f8f8f8;
+  }
+
+  .card {
+    background: #1a1d23;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    overflow: hidden;
+  }
+
+  .head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 10px 14px 8px;
+  }
+  .head-title {
+    font-size: 12px; font-weight: 700; color: #f8f8f8;
+  }
+  .secure {
+    display: inline-flex; align-items: center; gap: 4px;
+    font-size: 10.5px; font-weight: 600;
+    color: #2ca87f;
+  }
+  .secure.insecure { color: #dc2626 }
+
+  .origin-row {
+    display: flex; align-items: center; gap: 8px;
+    padding: 8px 14px;
+    border-top: 1px solid rgba(255,255,255,.06);
+    font-size: 12px;
+  }
+  .origin-row img { width: 14px; height: 14px; border-radius: 3px; flex-shrink: 0 }
+  .origin-row .host { color: rgba(255,255,255,.85); white-space: nowrap; overflow: hidden; text-overflow: ellipsis }
+
+  /* Expandable section ("Clear site data") */
+  .section {
+    border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .section-head {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 9px 14px;
+    cursor: pointer;
+    font-size: 11.5px; color: rgba(255,255,255,.85);
+    user-select: none;
+  }
+  .section-head .ico {
+    display: inline-flex; align-items: center; gap: 8px;
+  }
+  .section-head svg { width: 14px; height: 14px; opacity: .7 }
+  .chev {
+    width: 10px; height: 10px; transition: transform .15s;
+    color: rgba(255,255,255,.45);
+  }
+  .section.open .chev { transform: rotate(180deg) }
+  .section-body {
+    display: none;
+    padding: 0 14px 8px 36px;
+  }
+  .section.open .section-body { display: block }
+
+  .row-action {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 7px 0;
+    font-size: 11px; color: rgba(255,255,255,.7);
+    cursor: pointer;
+    border-radius: 4px;
+  }
+  .row-action:hover { color: #fff }
+  .row-action svg { width: 12px; height: 12px; opacity: .55 }
+  .row-action:hover svg { opacity: .85 }
+
+  /* Cert details — rendered inside its own .section.
+     Two-column key/value layout for compactness. Long values
+     (fingerprint, SAN list) wrap normally and the popup resizes
+     itself via requestResize. */
+  .cert-grid {
+    display: grid;
+    grid-template-columns: 64px 1fr;
+    gap: 4px 8px;
+    font-size: 10.5px; line-height: 1.5;
+    padding: 4px 0 8px;
+  }
+  .cert-grid .k { color: rgba(255,255,255,.45); white-space: nowrap }
+  .cert-grid .v { color: rgba(255,255,255,.85); word-break: break-word }
+  .cert-grid .v.mono { font-family: ui-monospace, SFMono-Regular, Menlo, monospace; font-size: 10px }
+  .cert-loading { font-size: 10.5px; color: rgba(255,255,255,.45); padding: 4px 0 }
+  .cert-error   { font-size: 10.5px; color: #dc2626;            padding: 4px 0 }
+  .cert-expired { color: #dc2626 }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <div class="head">
+    <span class="head-title">Webbplats</span>
+    <span class="secure" id="secure"></span>
+  </div>
+  <div class="origin-row">
+    <img id="favicon" src="" onerror="this.style.display='none'">
+    <span class="host" id="host">—</span>
+  </div>
+
+  <div class="section" id="dataSection">
+    <div class="section-head" onclick="_toggleSection('dataSection')">
+      <span class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><ellipse cx="12" cy="5" rx="9" ry="3"/><path d="M3 5v6c0 1.66 4 3 9 3s9-1.34 9-3V5"/><path d="M3 11v6c0 1.66 4 3 9 3s9-1.34 9-3v-6"/></svg>
+        Rensa webbplatsdata
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body">
+      <div class="row-action" onclick="_doAction('clear-cookies')">
+        <span>Rensa cookies</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </div>
+      <div class="row-action" onclick="_doAction('clear-cache')">
+        <span>Rensa cache</span>
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/><path d="M10 11v6M14 11v6"/></svg>
+      </div>
+    </div>
+  </div>
+
+  <div class="section" id="certSection">
+    <div class="section-head" onclick="_toggleSection('certSection')">
+      <span class="ico">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+        TLS-certifikat
+      </span>
+      <svg class="chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><polyline points="6 9 12 15 18 9"/></svg>
+    </div>
+    <div class="section-body" id="certBody">
+      <div class="cert-loading">Hämtar certifikat…</div>
+    </div>
+  </div>
+</div>
+<script>
+  function _toggleSection(id) {
+    const el = document.getElementById(id)
+    if (!el) return
+    el.classList.toggle('open')
+    requestAnimationFrame(_reportSize)
+  }
+  function _doAction(action) {
+    if (window.seoz?.siteInfo?.action) window.seoz.siteInfo.action(action)
+  }
+  function _reportSize() {
+    const card = document.getElementById('card')
+    if (!card || !window.seoz?.siteInfo?.requestResize) return
+    const r = card.getBoundingClientRect()
+    // No margin/shadow padding any more — the view fits the card.
+    window.seoz.siteInfo.requestResize(Math.ceil(r.height))
+  }
+
+  // ── TLS cert rendering ───────────────────────────────────────
+  function _esc(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;')
+  }
+  // "Sep 14 12:00:00 2025 GMT" → "2025-09-14"
+  function _fmtCertDate(s) {
+    if (!s) return '—'
+    const d = new Date(s)
+    if (isNaN(d.getTime())) return s
+    const pad = (n) => String(n).padStart(2, '0')
+    return `${d.getFullYear()}-${pad(d.getMonth() + 1)}-${pad(d.getDate())}`
+  }
+  function _renderCert(cert) {
+    const body = document.getElementById('certBody')
+    if (!body) return
+    if (cert === null || cert === undefined) {
+      body.innerHTML = '<div class="cert-error">Kunde inte hämta certifikat (timeout eller anslutningsfel).</div>'
+      requestAnimationFrame(_reportSize)
+      return
+    }
+    const cn   = cert.subject?.CN || '—'
+    const issO = cert.issuer?.O || cert.issuer?.CN || '—'
+    const from = _fmtCertDate(cert.valid_from)
+    const to   = _fmtCertDate(cert.valid_to)
+    const expired = cert.valid_to && Date.now() > new Date(cert.valid_to).getTime()
+    const fp = cert.fingerprint256 || ''
+    // Fingerprint pretty-print: split into 8-byte groups for readability
+    const fpPretty = fp ? fp.replace(/:/g, ' ').replace(/((?:[A-F0-9]{2} ){8})/g, '$1​') : '—'
+    // Sub-cap subjectaltname so the popup doesn't grow huge for sites with
+    // dozens of SAN entries (e.g. cloudflare wildcards).
+    let san = cert.subjectaltname || ''
+    if (san.length > 200) san = san.slice(0, 200) + '…'
+    body.innerHTML = `
+      <div class="cert-grid">
+        <span class="k">Utfärdat åt</span><span class="v">${_esc(cn)}</span>
+        <span class="k">Utfärdare</span><span class="v">${_esc(issO)}</span>
+        <span class="k">Giltig från</span><span class="v">${_esc(from)}</span>
+        <span class="k">Giltig till</span><span class="v ${expired ? 'cert-expired' : ''}">${_esc(to)}${expired ? ' · UTGÅNGEN' : ''}</span>
+        ${cert.serialNumber ? `<span class="k">Serienr</span><span class="v mono">${_esc(cert.serialNumber)}</span>` : ''}
+        ${fp ? `<span class="k">SHA-256</span><span class="v mono">${_esc(fpPretty)}</span>` : ''}
+        ${san ? `<span class="k">Alt-namn</span><span class="v mono" style="font-size:9.5px">${_esc(san)}</span>` : ''}
+      </div>
+    `
+    requestAnimationFrame(_reportSize)
+  }
+
+  if (window.seoz?.siteInfo?.onCert) {
+    window.seoz.siteInfo.onCert(_renderCert)
+  }
+
+  if (window.seoz?.siteInfo?.onUpdate) {
+    window.seoz.siteInfo.onUpdate((data) => {
+      const fav  = document.getElementById('favicon')
+      const host = document.getElementById('host')
+      const sec  = document.getElementById('secure')
+      host.textContent = data.host || '—'
+      if (data.favicon) { fav.src = data.favicon; fav.style.display = '' }
+      else              { fav.style.display = 'none' }
+      const isSecure = data.scheme === 'https' || data.scheme === 'wss'
+      sec.className = 'secure' + (isSecure ? '' : ' insecure')
+      sec.innerHTML = isSecure
+        ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><rect x="3" y="11" width="18" height="11" rx="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>Säker'
+        : '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><circle cx="12" cy="12" r="10"/><line x1="12" y1="8" x2="12" y2="12"/><line x1="12" y1="16" x2="12.01" y2="16"/></svg>Osäker'
+      // Reset cert section state for the new site. https → "loading"
+      // until onCert arrives; non-https → hide the section entirely
+      // (no TLS to show).
+      const certSec  = document.getElementById('certSection')
+      const certBody = document.getElementById('certBody')
+      if (certSec && certBody) {
+        if (isSecure) {
+          certSec.style.display = ''
+          certBody.innerHTML = '<div class="cert-loading">Hämtar certifikat…</div>'
+        } else {
+          certSec.style.display = 'none'
+          certSec.classList.remove('open')
+        }
+      }
+      requestAnimationFrame(_reportSize)
+    })
+  }
+</script>
+</body>
+</html>

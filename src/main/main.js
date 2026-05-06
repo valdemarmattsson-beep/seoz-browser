@@ -766,59 +766,146 @@ if (!gotLock) {
 // ══════════════════════════════════════════════════════════════════════════════
 //  CONTENT BLOCKER — blocks ads, trackers, heavy junk
 // ══════════════════════════════════════════════════════════════════════════════
-const BLOCK_DOMAINS = [
-  // Ad networks
-  'doubleclick.net','googlesyndication.com','googleadservices.com','google-analytics.com',
-  'googletagmanager.com','adservice.google.com','pagead2.googlesyndication.com',
-  'adnxs.com','adsrvr.org','adform.net','advertising.com','ads-twitter.com',
-  'amazon-adsystem.com','ad.doubleclick.net','cm.g.doubleclick.net',
-  'securepubads.g.doubleclick.net','pubads.g.doubleclick.net',
-  'tpc.googlesyndication.com','adtech.de',
+// Domains grouped by what kind of thing they are. The split lets users
+// toggle categories on/off in Settings → SEOZ Shield (the popup keeps
+// the simple on/off master switch). When a category is disabled, its
+// domains are skipped during the onBeforeRequest hook.
+const BLOCK_RULES = {
+  // Display, banner, video and native ad networks. Largest impact on
+  // page-load weight; almost always safe to block.
+  ads: [
+    'doubleclick.net','googlesyndication.com','googleadservices.com',
+    'adservice.google.com','pagead2.googlesyndication.com',
+    'adnxs.com','adsrvr.org','adform.net','advertising.com',
+    'ads-twitter.com','bat.bing.com',
+    'amazon-adsystem.com','ad.doubleclick.net','cm.g.doubleclick.net',
+    'securepubads.g.doubleclick.net','pubads.g.doubleclick.net',
+    'tpc.googlesyndication.com','adtech.de',
+    // Swedish / Nordic ad networks
+    'adnami.io','readpeak.com','strossle.com','dable.io',
+    'content-ad.net','mgid.com','outbrain.com','taboola.com','zemanta.com',
+    'plista.com','ligatus.com','smartadserver.com','improveheroes.com',
+    // Heavy media / video ads
+    'imasdk.googleapis.com','s0.2mdn.net',
+    'vid.springserve.com','jwpltx.com',
+    // Display/retargeting
+    'criteo.com','criteo.net','casalemedia.com','bluekai.com','exelator.com',
+    'demdex.net','omtrdc.net','everesttech.net',
+  ],
 
-  // Swedish / Nordic ad networks
-  'adsrvr.org','adnami.io','readpeak.com','strossle.com','dable.io',
-  'content-ad.net','mgid.com','outbrain.com','taboola.com','zemanta.com',
-  'plista.com','ligatus.com','smartadserver.com','improveheroes.com',
+  // Page-view + event analytics + behaviour heatmaps + tag managers.
+  // Note: googletagmanager.com is a tag-loader, not analytics itself,
+  // but it's so often used to deploy GA/Mixpanel/etc. that blocking it
+  // here is the practical equivalent. Disabling this category lets GTM
+  // through, which on some sites also revives chat widgets / A/B-test
+  // scripts that route through GTM. Heatmaps live here too because users
+  // who want them on for testing usually want their normal analytics on
+  // alongside.
+  analytics: [
+    'google-analytics.com','googletagmanager.com',
+    'hotjar.com','hotjar.io','mouseflow.com','crazyegg.com','fullstory.com',
+    'clarity.ms','clickcease.com','luckyorange.com','inspectlet.com',
+    'scorecardresearch.com','imrworldwide.com','chartbeat.com','chartbeat.net',
+    'segment.io','segment.com','mixpanel.com',
+    'amplitude.com','heapanalytics.com','rudderstack.com',
+  ],
 
-  // Trackers
-  'facebook.net','connect.facebook.net','pixel.facebook.com',
-  'analytics.tiktok.com','bat.bing.com','snap.licdn.com','linkedin.com/li/',
-  'hotjar.com','hotjar.io','mouseflow.com','crazyegg.com','fullstory.com',
-  'clarity.ms','clickcease.com','luckyorange.com','inspectlet.com',
+  // Crash + performance monitoring SDKs. Useful to keep on when you're
+  // a developer testing your own product — production-only blocks
+  // these, but staging/dev work needs the visibility.
+  errorMonitoring: [
+    'sentry.io','bugsnag.com','newrelic.com','nr-data.net',
+  ],
 
-  // Heavy media / video ad
-  'imasdk.googleapis.com','s0.2mdn.net','pagead2.googlesyndication.com',
-  'vid.springserve.com','jwpltx.com',
+  // Mobile / marketing attribution. Mostly relevant on mobile-web
+  // landing pages; rarely affects normal browsing — own toggle so
+  // marketers / UA-folk who DO need to test attribution links can flip
+  // it without giving up other tracker blocking.
+  attribution: [
+    'branch.io','adjust.com','appsflyer.com','kochava.com',
+  ],
 
-  // Consent / cookie walls (optional — makes pages load faster)
-  'consentmanager.net','cookiebot.com','cookieinformation.com',
-  'quantcast.com','quantserve.com','onetrust.com',
+  // Pixel/share-button trackers from social networks. Often blocking
+  // these breaks "share to X" widgets or comment embeds — so it's its
+  // own toggle so users can keep widgets working when they need to.
+  social: [
+    'facebook.net','connect.facebook.net','pixel.facebook.com',
+    'analytics.tiktok.com','snap.licdn.com','linkedin.com/li/',
+  ],
 
-  // Misc trackers
-  'scorecardresearch.com','imrworldwide.com','chartbeat.com','chartbeat.net',
-  'newrelic.com','nr-data.net','segment.io','segment.com','mixpanel.com',
-  'amplitude.com','heapanalytics.com','rudderstack.com',
-  'sentry.io','bugsnag.com',
-  'branch.io','adjust.com','appsflyer.com','kochava.com',
-  'criteo.com','criteo.net','casalemedia.com','bluekai.com','exelator.com',
-  'demdex.net','omtrdc.net','everesttech.net',
-]
+  // CMP scripts that DRAW the consent banner. Different from the auto-
+  // handler in webview-preload (which CLICKS visible banners) — this
+  // blocks the JS bundle from loading at all, which gets rid of some
+  // banners entirely but breaks others (page hangs waiting for consent
+  // before rendering). Default-on; users can disable if a sajt breaks.
+  cookieScripts: [
+    'consentmanager.net','cookiebot.com','cookieinformation.com',
+    'quantcast.com','quantserve.com','onetrust.com',
+  ],
+}
 
-// Build a fast lookup Set of domains
-const blockedSet = new Set(BLOCK_DOMAINS)
-let blockerEnabled = true
+// Domain → category lookup. Built once at module load so the
+// onBeforeRequest hot path stays a single Map.get + parent-walk.
+const _domainCategory = new Map()
+for (const [cat, domains] of Object.entries(BLOCK_RULES)) {
+  for (const d of domains) _domainCategory.set(d, cat)
+}
+const ALL_CATEGORIES = Object.keys(BLOCK_RULES)
+function _allCategoriesEnabled() {
+  return Object.fromEntries(ALL_CATEGORIES.map(c => [c, true]))
+}
+
+// Persisted to the active profile (so different profiles can have
+// different Shield toggles, and so cross-device sync via the
+// 'settings' category can carry the choice). Default true matches the
+// previous in-memory default. v1.10.133: was RAM-only before; flipped
+// off on one machine wouldn't survive a restart let alone propagate.
+let blockerEnabled = PM.profileGet('blockerEnabled', true)
 let blockerStats = { blocked: 0, session: 0 }
+// Per-category enable map, persisted in the global store so the user's
+// choice survives restarts. Defaults to all-on, which matches the
+// pre-categorised behaviour exactly. Stored device-wide (not per
+// profile) since content-blocker preferences feel like a browsing-
+// posture choice, not a client-context choice.
+let blockerCategoriesState = (() => {
+  try {
+    const saved = store.get('blockerCategories')
+    if (saved && typeof saved === 'object') {
+      const merged = { ..._allCategoriesEnabled(), ...saved }
+      // ── Migration: pre-split `trackers` → analytics + errorMonitoring + attribution ──
+      // Older releases had a single `trackers` category covering all
+      // four. If the user had it explicitly off AND hasn't set any of
+      // the successors yet (saved.X === undefined), propagate the
+      // intent so we don't silently re-enable tracking on upgrade.
+      if (saved.trackers === false) {
+        if (saved.analytics       === undefined) merged.analytics       = false
+        if (saved.errorMonitoring === undefined) merged.errorMonitoring = false
+        if (saved.attribution     === undefined) merged.attribution     = false
+      }
+      return merged
+    }
+  } catch (_) {}
+  return _allCategoriesEnabled()
+})()
 
-function isDomainBlocked(hostname) {
-  if (!hostname) return false
-  // Check exact match
-  if (blockedSet.has(hostname)) return true
-  // Check if subdomain of a blocked domain (e.g. ads.example.com → example.com)
+function _categoryFor(hostname) {
+  if (!hostname) return null
+  if (_domainCategory.has(hostname)) return _domainCategory.get(hostname)
+  // Walk up the dot-segments so ads.example.com matches example.com.
   const parts = hostname.split('.')
   for (let i = 1; i < parts.length - 1; i++) {
-    if (blockedSet.has(parts.slice(i).join('.'))) return true
+    const d = parts.slice(i).join('.')
+    if (_domainCategory.has(d)) return _domainCategory.get(d)
   }
-  return false
+  return null
+}
+
+function isDomainBlocked(hostname) {
+  const cat = _categoryFor(hostname)
+  if (!cat) return false
+  // If the category is explicitly disabled, let the request through.
+  if (blockerCategoriesState && blockerCategoriesState[cat] === false) return false
+  return true
 }
 
 // Real Chromium version we're shipping (e.g. "138.0.0.0"). Pulled from
@@ -1203,6 +1290,37 @@ function createWindow() {
     try { tabManager.hostWindow = win } catch (_) {}
   }
 
+  // ── Auto-sync lifecycle hooks ─────────────────────────────────
+  // Kick off auto-sync the moment the window is ready (and sync is
+  // already enabled for this profile from a previous session). On
+  // focus we trigger an immediate pull so cross-device changes appear
+  // fast. On blur we push any local changes so the next device sees
+  // fresh data when it polls. before-quit flushes one last time.
+  try {
+    const eng = _ensureSyncEngine()
+    if (eng && eng.isEnabled && eng.isEnabled()) {
+      eng.startAutoSync()
+    }
+  } catch (_) {}
+  win.on('focus', () => {
+    try {
+      const eng = syncEngine
+      if (eng && eng.isEnabled && eng.isEnabled()) {
+        eng.pullChanged().catch(() => {})
+      }
+    } catch (_) {}
+  })
+  win.on('blur', () => {
+    try {
+      const eng = syncEngine
+      if (eng && eng.isEnabled && eng.isEnabled()) {
+        // Fire and forget — we're going to background anyway and
+        // can't block the event loop on the network.
+        eng.pushAll().catch(() => {})
+      }
+    } catch (_) {}
+  })
+
   win.on('resize', () => {
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
   })
@@ -1536,11 +1654,14 @@ ipcMain.on('shield-popup:update-state', (_e, payload = {}) => {
 ipcMain.on('shield:resize', (_e, payload = {}) => {
   try {
     if (!_shieldView || _shieldView.webContents.isDestroyed()) return
-    const want = Math.max(120, Math.min(520, Math.round(payload.height) || 320))
-    const b = _shieldView.getBounds()
-    if (b.height === want) return
     if (!win || win.isDestroyed()) return
     const cb = win.getContentBounds()
+    // Window-derived cap so cert-heavy / future-feature additions
+    // can grow the popup without re-clipping bottom corners.
+    const cap  = Math.max(200, cb.height - 80)
+    const want = Math.max(120, Math.min(cap, Math.round(payload.height) || 320))
+    const b = _shieldView.getBounds()
+    if (b.height === want) return
     const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
     _shieldView.setBounds({ x: b.x, y, width: b.width, height: want })
   } catch (_) {}
@@ -1555,6 +1676,455 @@ ipcMain.on('shield:cursor-on-card', (_e, on) => {
 ipcMain.on('shield:action', (_e, payload = {}) => {
   try {
     if (win && !win.isDestroyed()) win.webContents.send('shield-popup:action', payload)
+  } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  Chrome kebab-menu — sibling WebContentsView
+//
+//  In-DOM <div id="chromeDd"> kept getting clipped by the page
+//  WebContentsView like the Shield popup did before v1.10.x. Same fix
+//  applies: render the menu in its own transparent WebContentsView
+//  attached to contentView so it floats above any page view.
+//
+//  Channels:
+//    chrome-renderer → main:
+//      chrome-menu:show {anchorX, anchorY, items, zoomLevel, isDark}
+//      chrome-menu:hide
+//      chrome-menu:update-state {zoomLevel}   — repaint without re-show
+//
+//    main → menu-renderer:
+//      chrome-menu:items {items, zoomLevel, isDark}
+//
+//    menu-renderer → main:
+//      chrome-menu:action {id}      forwarded to chrome-renderer
+//      chrome-menu:resize {width, height}
+//      chrome-menu:close            forwarded as 'chrome-menu:closed'
+//
+//    main → chrome-renderer:
+//      chrome-menu:action {id}
+//      chrome-menu:closed
+// ════════════════════════════════════════════════════════════════════
+let _chromeMenuView = null
+let _chromeMenuLast = { items: [], zoomLevel: 100, isDark: true }
+let _chromeMenuAnchor = { x: 0, y: 0 }   // last anchor for re-position after resize
+
+function _ensureChromeMenuView() {
+  if (_chromeMenuView && _chromeMenuView.webContents && !_chromeMenuView.webContents.isDestroyed()) return _chromeMenuView
+  if (!win || win.isDestroyed()) return null
+  _chromeMenuView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/chrome-menu-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _chromeMenuView.setBackgroundColor('#00000000') } catch (_) {}
+  _chromeMenuView.setVisible(false)
+  _chromeMenuView.webContents.loadFile(path.join(__dirname, '../renderer/chrome-menu-popup.html'))
+
+  _chromeMenuView.webContents.once('did-finish-load', () => {
+    try {
+      if (_chromeMenuView?.webContents && !_chromeMenuView.webContents.isDestroyed()) {
+        _chromeMenuView.webContents.send('chrome-menu:items', _chromeMenuLast)
+      }
+    } catch (_) {}
+  })
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_chromeMenuView?.webContents && !_chromeMenuView.webContents.isDestroyed()) _chromeMenuView.webContents.close() } catch (_) {}
+      _chromeMenuView = null
+    })
+  }
+  return _chromeMenuView
+}
+
+ipcMain.on('chrome-menu:show', (_e, payload = {}) => {
+  try {
+    const mv = _ensureChromeMenuView()
+    if (!mv) return
+    if (!win || win.isDestroyed()) return
+
+    const { anchorX = 0, anchorY = 0, items = [], zoomLevel = 100, isDark = true } = payload
+    _chromeMenuLast = { items, zoomLevel, isDark }
+    _chromeMenuAnchor = { x: anchorX, y: anchorY }
+    try { mv.webContents.send('chrome-menu:items', _chromeMenuLast) } catch (_) {}
+
+    // Initial bounds — popup will request a precise resize once it
+    // measures itself, but we need a sensible starting size so it
+    // doesn't paint at 0×0.
+    const cb = win.getContentBounds()
+    const w = 260
+    const h = 380
+    let x = Math.round(anchorX - w + 24)  // right-align under the kebab button
+    let y = Math.round(anchorY)
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
+    mv.setBounds({ x, y, width: w, height: h })
+
+    try { win.contentView.addChildView(mv) } catch (_) {}
+    mv.setVisible(true)
+  } catch (err) {
+    console.error('[chrome-menu:show] failed:', err)
+  }
+})
+
+ipcMain.on('chrome-menu:hide', () => {
+  try {
+    if (_chromeMenuView && _chromeMenuView.webContents && !_chromeMenuView.webContents.isDestroyed()) {
+      _chromeMenuView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-menu:update-state', (_e, payload = {}) => {
+  try {
+    if (typeof payload.zoomLevel === 'number') _chromeMenuLast.zoomLevel = payload.zoomLevel
+    if (_chromeMenuView?.webContents && !_chromeMenuView.webContents.isDestroyed()) {
+      _chromeMenuView.webContents.send('chrome-menu:items', _chromeMenuLast)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-menu:resize', (_e, payload = {}) => {
+  try {
+    if (!_chromeMenuView || _chromeMenuView.webContents.isDestroyed()) return
+    if (!win || win.isDestroyed()) return
+    const wantW = Math.max(180, Math.min(420, Math.round(payload.width)  || 260))
+    const wantH = Math.max(80,  Math.min(560, Math.round(payload.height) || 320))
+    const cb = win.getContentBounds()
+    // Re-anchor right-edge to the kebab button's last position so the
+    // menu visually grows downward without sliding sideways.
+    let x = Math.round(_chromeMenuAnchor.x - wantW + 24)
+    let y = Math.round(_chromeMenuAnchor.y)
+    x = Math.max(4, Math.min(cb.width - wantW - 4, x))
+    y = Math.max(4, Math.min(cb.height - wantH - 4, y))
+    _chromeMenuView.setBounds({ x, y, width: wantW, height: wantH })
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-menu:action', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('chrome-menu:action', payload)
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-menu:close', () => {
+  try {
+    if (_chromeMenuView && _chromeMenuView.webContents && !_chromeMenuView.webContents.isDestroyed()) {
+      _chromeMenuView.setVisible(false)
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('chrome-menu:closed')
+  } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  Client / project picker — sibling WebContentsView
+//
+//  Bookmark-bar's "Välj klient"-dropdown used to render in-DOM, which
+//  meant it got clipped from above by the page WebContentsView (same
+//  bug class as the chrome kebab + shield). Migration is identical:
+//  the picker becomes its own transparent WebContentsView attached to
+//  contentView; renderer pushes data via show(), popup emits action
+//  ids on click.
+//
+//  Channels:
+//    chrome-renderer → main:
+//      client-picker:show {anchorX, anchorY, clients, projects,
+//                          activeClientId, activeProjectId, isDark}
+//      client-picker:hide
+//      client-picker:update-state {clients?, projects?,
+//                                  activeClientId?, activeProjectId?}
+//
+//    main → picker-renderer:
+//      client-picker:items (full state)
+//
+//    picker-renderer → main:
+//      client-picker:action {id, anchorX?, anchorY?}
+//      client-picker:resize {width, height}
+//      client-picker:close
+//
+//    main → chrome-renderer:
+//      client-picker:action {id, anchorX?, anchorY?}
+//      client-picker:closed
+// ════════════════════════════════════════════════════════════════════
+let _clientPickerView = null
+let _clientPickerLast = { clients: [], projects: [], activeClientId: null, activeProjectId: null, isDark: true }
+let _clientPickerAnchor = { x: 0, y: 0 }
+
+function _ensureClientPickerView() {
+  if (_clientPickerView && _clientPickerView.webContents && !_clientPickerView.webContents.isDestroyed()) return _clientPickerView
+  if (!win || win.isDestroyed()) return null
+  _clientPickerView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/client-picker-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _clientPickerView.setBackgroundColor('#00000000') } catch (_) {}
+  _clientPickerView.setVisible(false)
+  _clientPickerView.webContents.loadFile(path.join(__dirname, '../renderer/client-picker-popup.html'))
+
+  _clientPickerView.webContents.once('did-finish-load', () => {
+    try {
+      if (_clientPickerView?.webContents && !_clientPickerView.webContents.isDestroyed()) {
+        _clientPickerView.webContents.send('client-picker:items', _clientPickerLast)
+      }
+    } catch (_) {}
+  })
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_clientPickerView?.webContents && !_clientPickerView.webContents.isDestroyed()) _clientPickerView.webContents.close() } catch (_) {}
+      _clientPickerView = null
+    })
+  }
+  return _clientPickerView
+}
+
+ipcMain.on('client-picker:show', (_e, payload = {}) => {
+  try {
+    const pv = _ensureClientPickerView()
+    if (!pv) return
+    if (!win || win.isDestroyed()) return
+    const {
+      anchorX = 0, anchorY = 0,
+      clients = [], projects = [],
+      activeClientId = null, activeProjectId = null,
+      isDark = true,
+    } = payload
+    _clientPickerLast = { clients, projects, activeClientId, activeProjectId, isDark }
+    _clientPickerAnchor = { x: anchorX, y: anchorY }
+    try { pv.webContents.send('client-picker:items', _clientPickerLast) } catch (_) {}
+
+    // Initial bounds — popup will request a precise resize once it
+    // measures itself.
+    const cb = win.getContentBounds()
+    const w = 264
+    const h = 360
+    let x = Math.round(anchorX - w + 24)  // right-align under the trigger button
+    let y = Math.round(anchorY)
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
+    pv.setBounds({ x, y, width: w, height: h })
+
+    try { win.contentView.addChildView(pv) } catch (_) {}
+    pv.setVisible(true)
+  } catch (err) {
+    console.error('[client-picker:show] failed:', err)
+  }
+})
+
+ipcMain.on('client-picker:hide', () => {
+  try {
+    if (_clientPickerView && _clientPickerView.webContents && !_clientPickerView.webContents.isDestroyed()) {
+      _clientPickerView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('client-picker:update-state', (_e, payload = {}) => {
+  try {
+    if (payload && typeof payload === 'object') {
+      _clientPickerLast = { ..._clientPickerLast, ...payload }
+      if (_clientPickerView?.webContents && !_clientPickerView.webContents.isDestroyed()) {
+        _clientPickerView.webContents.send('client-picker:items', _clientPickerLast)
+      }
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('client-picker:resize', (_e, payload = {}) => {
+  try {
+    if (!_clientPickerView || _clientPickerView.webContents.isDestroyed()) return
+    if (!win || win.isDestroyed()) return
+    const wantW = Math.max(200, Math.min(420, Math.round(payload.width)  || 264))
+    const wantH = Math.max(80,  Math.min(640, Math.round(payload.height) || 320))
+    const cb = win.getContentBounds()
+    let x = Math.round(_clientPickerAnchor.x - wantW + 24)
+    let y = Math.round(_clientPickerAnchor.y)
+    x = Math.max(4, Math.min(cb.width - wantW - 4, x))
+    y = Math.max(4, Math.min(cb.height - wantH - 4, y))
+    _clientPickerView.setBounds({ x, y, width: wantW, height: wantH })
+  } catch (_) {}
+})
+
+ipcMain.on('client-picker:action', (_e, payload = {}) => {
+  try {
+    // Translate popup-local anchorX/Y to chrome-window-local coords so
+    // the chrome renderer can pop the per-project rename/delete menu
+    // exactly under the ⋮ button. The popup view's origin is its setBounds.x/y.
+    if (_clientPickerView && !_clientPickerView.webContents.isDestroyed()) {
+      const b = _clientPickerView.getBounds()
+      if (typeof payload.anchorX === 'number') payload.anchorX = b.x + payload.anchorX
+      if (typeof payload.anchorY === 'number') payload.anchorY = b.y + payload.anchorY
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('client-picker:action', payload)
+  } catch (_) {}
+})
+
+ipcMain.on('client-picker:close', () => {
+  try {
+    if (_clientPickerView && _clientPickerView.webContents && !_clientPickerView.webContents.isDestroyed()) {
+      _clientPickerView.setVisible(false)
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('client-picker:closed')
+  } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  Bookmark-folder dropdown — sibling WebContentsView
+//
+//  Each folder on the bookmark bar pops a list of its contents. The
+//  in-DOM .bm-drop got clipped by the page WebContentsView (same bug
+//  class as the chrome kebab + shield + client picker). One shared
+//  WebContentsView is enough — the folder being shown is identified
+//  per show() call. The chrome renderer keeps the bookmark store and
+//  the action map; popup just emits 'open:<id>' / 'ctx:<id>'.
+//
+//  Trade-off — drag-and-drop INTO the popup (reordering, drop into
+//  empty folder hint) is dropped because HTML5 DnD doesn't cross
+//  WebContentsView boundaries. Drop on the folder BUTTON still works
+//  (button stays in chrome).
+//
+//  Channels:
+//    chrome-renderer → main:
+//      bm-folder:show {anchorX, anchorY, folder, items, isDark}
+//      bm-folder:hide
+//      bm-folder:update-state {items?, folder?}
+//
+//    main → popup-renderer:
+//      bm-folder:items
+//
+//    popup-renderer → main:
+//      bm-folder:action {id, anchorX?, anchorY?}
+//      bm-folder:resize {width, height}
+//      bm-folder:close
+//
+//    main → chrome-renderer:
+//      bm-folder:action {id, anchorX?, anchorY?}
+//      bm-folder:closed
+// ════════════════════════════════════════════════════════════════════
+let _bmFolderView = null
+let _bmFolderLast = { folder: '', items: [], isDark: true }
+let _bmFolderAnchor = { x: 0, y: 0 }
+
+function _ensureBmFolderView() {
+  if (_bmFolderView && _bmFolderView.webContents && !_bmFolderView.webContents.isDestroyed()) return _bmFolderView
+  if (!win || win.isDestroyed()) return null
+  _bmFolderView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/bm-folder-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _bmFolderView.setBackgroundColor('#00000000') } catch (_) {}
+  _bmFolderView.setVisible(false)
+  _bmFolderView.webContents.loadFile(path.join(__dirname, '../renderer/bm-folder-popup.html'))
+
+  _bmFolderView.webContents.once('did-finish-load', () => {
+    try {
+      if (_bmFolderView?.webContents && !_bmFolderView.webContents.isDestroyed()) {
+        _bmFolderView.webContents.send('bm-folder:items', _bmFolderLast)
+      }
+    } catch (_) {}
+  })
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_bmFolderView?.webContents && !_bmFolderView.webContents.isDestroyed()) _bmFolderView.webContents.close() } catch (_) {}
+      _bmFolderView = null
+    })
+  }
+  return _bmFolderView
+}
+
+ipcMain.on('bm-folder:show', (_e, payload = {}) => {
+  try {
+    const fv = _ensureBmFolderView()
+    if (!fv) return
+    if (!win || win.isDestroyed()) return
+    const { anchorX = 0, anchorY = 0, folder = '', items = [], isDark = true } = payload
+    _bmFolderLast = { folder, items, isDark }
+    _bmFolderAnchor = { x: anchorX, y: anchorY }
+    try { fv.webContents.send('bm-folder:items', _bmFolderLast) } catch (_) {}
+
+    const cb = win.getContentBounds()
+    const w = 240
+    const h = Math.max(40, Math.min(420, items.length * 30 + 16))
+    // Left-anchor under the folder button (anchorX = button left edge).
+    let x = Math.round(anchorX)
+    let y = Math.round(anchorY)
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
+    fv.setBounds({ x, y, width: w, height: h })
+
+    try { win.contentView.addChildView(fv) } catch (_) {}
+    fv.setVisible(true)
+  } catch (err) {
+    console.error('[bm-folder:show] failed:', err)
+  }
+})
+
+ipcMain.on('bm-folder:hide', () => {
+  try {
+    if (_bmFolderView && _bmFolderView.webContents && !_bmFolderView.webContents.isDestroyed()) {
+      _bmFolderView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('bm-folder:update-state', (_e, payload = {}) => {
+  try {
+    if (payload && typeof payload === 'object') {
+      _bmFolderLast = { ..._bmFolderLast, ...payload }
+      if (_bmFolderView?.webContents && !_bmFolderView.webContents.isDestroyed()) {
+        _bmFolderView.webContents.send('bm-folder:items', _bmFolderLast)
+      }
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('bm-folder:resize', (_e, payload = {}) => {
+  try {
+    if (!_bmFolderView || _bmFolderView.webContents.isDestroyed()) return
+    if (!win || win.isDestroyed()) return
+    const wantW = Math.max(160, Math.min(420, Math.round(payload.width)  || 240))
+    const wantH = Math.max(40,  Math.min(560, Math.round(payload.height) || 200))
+    const cb = win.getContentBounds()
+    let x = Math.round(_bmFolderAnchor.x)
+    let y = Math.round(_bmFolderAnchor.y)
+    x = Math.max(4, Math.min(cb.width - wantW - 4, x))
+    y = Math.max(4, Math.min(cb.height - wantH - 4, y))
+    _bmFolderView.setBounds({ x, y, width: wantW, height: wantH })
+  } catch (_) {}
+})
+
+ipcMain.on('bm-folder:action', (_e, payload = {}) => {
+  try {
+    // Translate popup-local anchor coords to chrome-window-local so
+    // showCtx can pop the right-click menu under the actual click point.
+    if (_bmFolderView && !_bmFolderView.webContents.isDestroyed()) {
+      const b = _bmFolderView.getBounds()
+      if (typeof payload.anchorX === 'number') payload.anchorX = b.x + payload.anchorX
+      if (typeof payload.anchorY === 'number') payload.anchorY = b.y + payload.anchorY
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('bm-folder:action', payload)
+  } catch (_) {}
+})
+
+ipcMain.on('bm-folder:close', () => {
+  try {
+    if (_bmFolderView && _bmFolderView.webContents && !_bmFolderView.webContents.isDestroyed()) {
+      _bmFolderView.setVisible(false)
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('bm-folder:closed')
   } catch (_) {}
 })
 
@@ -1655,6 +2225,192 @@ ipcMain.on('chrome-label:hide', () => {
       _chromeLabelView.setVisible(false)
     }
   } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  Site Info popup — sibling WebContentsView
+//
+//  Strawberry-style "site info" panel triggered by a button beside
+//  the bookmark star. Shows hostname + TLS state and exposes
+//  Clear-cookies / Clear-cache scoped to the current origin.
+//
+//  Same architecture as Shield popup — sibling WCV, IPC-driven state.
+// ════════════════════════════════════════════════════════════════════
+let _siteInfoView = null
+let _siteInfoOrigin = null
+
+function _ensureSiteInfoView() {
+  if (_siteInfoView && _siteInfoView.webContents && !_siteInfoView.webContents.isDestroyed()) return _siteInfoView
+  if (!win || win.isDestroyed()) return null
+  _siteInfoView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/site-info-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _siteInfoView.setBackgroundColor('#00000000') } catch (_) {}
+  _siteInfoView.setVisible(false)
+  _siteInfoView.webContents.loadFile(path.join(__dirname, '../renderer/site-info.html'))
+  if (win) {
+    win.once('closed', () => {
+      try { if (_siteInfoView?.webContents && !_siteInfoView.webContents.isDestroyed()) _siteInfoView.webContents.close() } catch (_) {}
+      _siteInfoView = null
+    })
+  }
+  return _siteInfoView
+}
+
+// Helper: fetch the TLS cert for `host:port` via a fresh handshake.
+// We don't reuse the page's own connection because Electron 28+
+// removed webContents.getCertificate() and there's no other built-in
+// way to peek at the page's negotiated cert. The trade-off is one
+// extra TLS round-trip per popup open — acceptable since the user
+// triggered it intentionally. Network failures resolve to null so
+// the popup can show a graceful "kunde inte hämta cert" state.
+function _fetchSiteCert(host, port = 443) {
+  return new Promise((resolve) => {
+    if (!host || typeof host !== 'string') { resolve(null); return }
+    let settled = false
+    const done = (v) => { if (!settled) { settled = true; resolve(v) } }
+    let sock
+    try {
+      const tls = require('tls')
+      sock = tls.connect({
+        host, port,
+        servername: host,
+        // We're not validating — just inspecting. An expired or
+        // self-signed cert is still useful info to show the user.
+        rejectUnauthorized: false,
+        // Cap handshake time so a misbehaving host can't hang us.
+        timeout: 4000,
+      }, () => {
+        try {
+          const cert = sock.getPeerCertificate(true /* detailed */)
+          sock.end()
+          done(cert && Object.keys(cert).length ? cert : null)
+        } catch (_) { done(null) }
+      })
+      sock.on('error',   () => { try { sock.destroy() } catch (_) {} ; done(null) })
+      sock.on('timeout', () => { try { sock.destroy() } catch (_) {} ; done(null) })
+    } catch (_) {
+      done(null)
+    }
+  })
+}
+
+// Trim a Node tls.PeerCertificate down to what the popup actually
+// renders. Avoids shipping the full DER-encoded raw bytes (10s of KB)
+// across IPC and keeps the wire format stable for the renderer.
+function _shapeCertForUi(cert) {
+  if (!cert) return null
+  const shape = (n) => n && typeof n === 'object'
+    ? { CN: n.CN, O: n.O, C: n.C, ST: n.ST, L: n.L }
+    : null
+  return {
+    subject:        shape(cert.subject),
+    issuer:         shape(cert.issuer),
+    valid_from:     cert.valid_from || null,
+    valid_to:       cert.valid_to || null,
+    serialNumber:   cert.serialNumber || null,
+    fingerprint256: cert.fingerprint256 || cert.fingerprint || null,
+    subjectaltname: cert.subjectaltname || null,
+  }
+}
+
+ipcMain.on('site-info:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureSiteInfoView()
+    if (!v || !win || win.isDestroyed()) return
+    const { anchorX = 0, anchorY = 0, host = '', favicon = '', scheme = 'https', origin = '' } = payload
+    _siteInfoOrigin = origin || (host ? `${scheme}://${host}` : null)
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('site-info:update', { host, favicon, scheme })
+    }
+    // Kick off cert fetch async — popup shows "Hämtar..." while we wait,
+    // then re-renders when 'site-info:cert' arrives. Skip for non-https.
+    if (scheme === 'https' && host) {
+      _fetchSiteCert(host).then((cert) => {
+        if (!_siteInfoView || _siteInfoView.webContents.isDestroyed()) return
+        try { _siteInfoView.webContents.send('site-info:cert', _shapeCertForUi(cert)) } catch (_) {}
+      })
+    } else {
+      // No TLS for http: / file: / about: — explicitly send null so
+      // the popup hides the cert section instead of showing "loading".
+      try { v.webContents.send('site-info:cert', null) } catch (_) {}
+    }
+    const cb = win.getContentBounds()
+    const w = 280
+    const h = (v.getBounds().height) || 220
+    // Anchor right-edge to the trigger (anchorX is the trigger's right edge).
+    let x = Math.round(anchorX - w + 24)
+    let y = Math.round(anchorY)
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
+    v.setBounds({ x, y, width: w, height: h })
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[site-info:show] failed:', err)
+  }
+})
+
+ipcMain.on('site-info:hide', () => {
+  try {
+    if (_siteInfoView && _siteInfoView.webContents && !_siteInfoView.webContents.isDestroyed()) {
+      _siteInfoView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('site-info:resize', (_e, payload = {}) => {
+  try {
+    if (!_siteInfoView || _siteInfoView.webContents.isDestroyed()) return
+    if (!win || win.isDestroyed()) return
+    const cb = win.getContentBounds()
+    // Cap at window height minus a small margin so the popup can
+    // grow as tall as the cert-heavy hosts need (long SAN lists +
+    // both sections open). Earlier hardcoded 420 clipped the
+    // bottom rounded corners off for those cases.
+    const cap  = Math.max(200, cb.height - 80)
+    const want = Math.max(120, Math.min(cap, Math.round(payload.height) || 220))
+    const b = _siteInfoView.getBounds()
+    if (b.height === want) return
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _siteInfoView.setBounds({ x: b.x, y, width: b.width, height: want })
+  } catch (_) {}
+})
+
+ipcMain.on('site-info:action', async (_e, action) => {
+  try {
+    if (!_siteInfoOrigin) return
+    const sess = session.defaultSession
+    if (action === 'clear-cookies') {
+      // Per-origin cookie + storage removal. clearStorageData scopes
+      // by origin; we also wipe parent-domain cookies that match the
+      // hostname (some sites set on .example.com instead of www.).
+      await sess.clearStorageData({
+        origin:   _siteInfoOrigin,
+        storages: ['cookies', 'localstorage', 'indexdb', 'serviceworkers', 'cachestorage'],
+      })
+      try {
+        const u = new URL(_siteInfoOrigin)
+        const all = await sess.cookies.get({ domain: u.hostname })
+        for (const c of all) {
+          try { await sess.cookies.remove(`https://${c.domain.replace(/^\./, '')}${c.path || '/'}`, c.name) } catch (_) {}
+        }
+      } catch (_) {}
+      if (win && !win.isDestroyed()) win.webContents.send('site-info:action-done', { action, ok: true })
+    } else if (action === 'clear-cache') {
+      // session.clearCache is global — Electron doesn't expose
+      // per-origin cache eviction. Document via toast in renderer.
+      await sess.clearCache()
+      if (win && !win.isDestroyed()) win.webContents.send('site-info:action-done', { action, ok: true })
+    }
+  } catch (err) {
+    if (win && !win.isDestroyed()) win.webContents.send('site-info:action-done', { action, ok: false, error: err?.message || String(err) })
+  }
 })
 
 ipcMain.on('chrome-label:resize', (_e, payload = {}) => {
@@ -2155,8 +2911,42 @@ ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
 
 // ── Content blocker ──
 ipcMain.handle('blocker-get-enabled', () => blockerEnabled)
-ipcMain.handle('blocker-set-enabled', (_, v) => { blockerEnabled = !!v; return blockerEnabled })
+ipcMain.handle('blocker-set-enabled', (_, v) => {
+  blockerEnabled = !!v
+  PM.profileSet('blockerEnabled', blockerEnabled)
+  return blockerEnabled
+})
 ipcMain.handle('blocker-get-stats', () => blockerStats)
+// Cosmetic-filtering config for the webview preload — tells it whether
+// to inject ad-slot-hiding CSS + run the "Annons"-label finder. Tied to
+// the master toggle AND the ads category, so disabling ad-blocking also
+// disables cosmetic hiding (otherwise we'd hide containers but the
+// network would still load the ad).
+ipcMain.handle('blocker-cosmetic-config', () => ({
+  enabled: blockerEnabled && blockerCategoriesState.ads !== false,
+  // Lowercased exact-match labels. Multilingual since Swedish news sites
+  // use "Annons", international ones "Sponsored" / "Advertisement".
+  labels: ['annons', 'annons:', 'reklam', 'reklam:', 'sponsrat', 'sponsored', 'advertisement', 'ad', 'ads'],
+}))
+// Per-category controls — exposed as { categories: {...}, available: [...],
+// counts: { catId: domainCount } } so the Settings UI can render labels +
+// "Blockerar N domäner" hints without owning the rule list itself.
+ipcMain.handle('blocker-get-categories', () => ({
+  ok: true,
+  categories: blockerCategoriesState,
+  available: ALL_CATEGORIES,
+  counts: Object.fromEntries(ALL_CATEGORIES.map(c => [c, BLOCK_RULES[c].length])),
+}))
+ipcMain.handle('blocker-set-categories', (_e, cats) => {
+  if (!cats || typeof cats !== 'object') return { ok: false, error: 'Invalid categories' }
+  // Sanitise: only known category keys, coerce to bool. Anything we
+  // don't recognise gets ignored (forward-compat with older clients).
+  const clean = {}
+  for (const c of ALL_CATEGORIES) clean[c] = cats[c] !== false
+  blockerCategoriesState = clean
+  try { store.set('blockerCategories', clean) } catch (_) {}
+  return { ok: true, categories: clean }
+})
 
 // Cookie-banner auto-handler preference (off / accept / reject) —
 // per profile so multiple users / clients each control their own
@@ -2455,6 +3245,376 @@ ipcMain.handle('trigger-sync', async (_, apiKey) => doAPISync(apiKey))
 
 ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params, method, body }) => {
   return apiFetch(endpoint, apiKey, { params, method, body })
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  E2E-encrypted sync (Brave-style: 24-word BIP-39 mnemonic)
+//
+//  The mnemonic is the user's identity. From it we derive:
+//    - sync_id   (16 bytes, used as bucket address on Supabase)
+//    - encKey    (32 bytes, AES-256-GCM key — never touches the wire)
+//
+//  Server stores opaque ciphertext blobs keyed by (sync_id, category).
+//  Server cannot decrypt — that's the whole security property.
+//
+//  Categories are pluggable adapters that know how to collect()
+//  current local state and apply() remote state. Bookmarks is the
+//  first one wired up; passwords / history / settings come next.
+// ════════════════════════════════════════════════════════════════════
+const { SyncEngine } = require('./sync/sync-engine')
+
+let syncEngine = null
+
+function _ensureSyncEngine() {
+  if (syncEngine) return syncEngine
+  syncEngine = new SyncEngine({
+    PM,
+    onStatus: (status) => {
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:status', status) } catch (_) {}
+    },
+  })
+  // ── Category: bookmarks ──
+  // Single blob containing both `bookmarks` (the items) and `bmFolders`
+  // (the folder list). Storage keys MUST match what the renderer uses
+  // via SE.storeGet('bookmarks') / SE.storeGet('bmFolders') (a thin
+  // alias over PM.profileGet) — earlier versions used 'bookmarkFolders'
+  // which the renderer never reads, so folders silently never synced.
+  //
+  // Renderer also persists these as JSON-encoded STRINGS via
+  // SE.storeSet (not raw arrays). collect() decodes them so the
+  // encrypted blob always contains real arrays; apply() re-encodes
+  // when writing back so the renderer's loadBookmarks() keeps working.
+  const _maybeJsonArr = (v, fallback) => {
+    if (Array.isArray(v)) return v
+    if (typeof v === 'string') {
+      try { const p = JSON.parse(v); return Array.isArray(p) ? p : fallback } catch (_) { return fallback }
+    }
+    return fallback
+  }
+  syncEngine.registerCategory({
+    key: 'bookmarks',
+    collect: async () => ({
+      bookmarks: _maybeJsonArr(PM.profileGet('bookmarks', []), []),
+      bmFolders: _maybeJsonArr(PM.profileGet('bmFolders', []), []),
+    }),
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      if (Array.isArray(data.bookmarks)) PM.profileSet('bookmarks', JSON.stringify(data.bookmarks))
+      if (Array.isArray(data.bmFolders)) PM.profileSet('bmFolders', JSON.stringify(data.bmFolders))
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:bookmarks-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: settings ──
+  // Opinionated user prefs that the user expects to follow them across
+  // devices: theme, cookie mode, search engine, UI language, OS-notif
+  // toggle. Anything that's machine-bound (window position, cache,
+  // session cookies, etc.) is deliberately NOT synced.
+  //
+  // Excluded: blockerEnabled (RAM-only — not persisted), autoSync
+  // (internal flag for the platform-API sync, irrelevant here),
+  // apiKey / anthropicKey (credentials, separate handling), mailAccounts
+  // (mail credentials live in their own per-account safeStorage envelope).
+  // Shield toggle (blockerEnabled) and category toggles join the
+  // settings sync. blockerCategoriesState lives in the root store,
+  // not PM — collect/apply special-case it via the global `store`
+  // alias below.
+  const SETTING_KEYS = ['theme', 'cookieMode', 'defaultSearchEngine', 'appLanguage', 'osNotifs', 'blockerEnabled']
+  syncEngine.registerCategory({
+    key: 'settings',
+    collect: async () => {
+      const out = {}
+      for (const k of SETTING_KEYS) {
+        const v = PM.profileGet(k, undefined)
+        if (v !== undefined) out[k] = v
+      }
+      // blockerCategoriesState lives in the root (device-wide) store,
+      // not PM, but it's a Shield user-preference so it makes sense to
+      // sync it across devices alongside the toggle. Stored under a
+      // namespaced key to avoid collisions if we add more device-wide
+      // settings later.
+      try {
+        const bc = store.get('blockerCategories')
+        if (bc && typeof bc === 'object') out._blockerCategories = bc
+      } catch (_) {}
+      return out
+    },
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      for (const k of SETTING_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(data, k)) {
+          PM.profileSet(k, data[k])
+        }
+      }
+      // Restore blocker category toggles to root store + live state.
+      if (data._blockerCategories && typeof data._blockerCategories === 'object') {
+        try {
+          // Merge with the all-on default so any new category we ship
+          // later defaults to enabled when a device pulls older blob.
+          const merged = { ..._allCategoriesEnabled(), ...data._blockerCategories }
+          blockerCategoriesState = merged
+          store.set('blockerCategories', merged)
+        } catch (_) {}
+      }
+      // Apply blockerEnabled live too — IPC handler updates the in-memory
+      // var, but we wrote directly to PM here so sync the var too.
+      if (Object.prototype.hasOwnProperty.call(data, 'blockerEnabled')) {
+        blockerEnabled = !!data.blockerEnabled
+      }
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:settings-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: tabs ──
+  // The "save tabs on close" feature persists a JSON-encoded list of
+  // open tabs + the active URL. Cross-device tab sync is opt-in via
+  // the same category — useful for "left work mid-task on laptop,
+  // open desktop and pick up where I left off". Active URL pointer
+  // makes restore land on the right tab.
+  syncEngine.registerCategory({
+    key: 'tabs',
+    collect: async () => ({
+      savedTabs:           _maybeJsonArr(PM.profileGet('savedTabs', []), []),
+      savedTabsActiveUrl:  PM.profileGet('savedTabsActiveUrl', '') || '',
+    }),
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      if (Array.isArray(data.savedTabs)) PM.profileSet('savedTabs', JSON.stringify(data.savedTabs))
+      if (typeof data.savedTabsActiveUrl === 'string') PM.profileSet('savedTabsActiveUrl', data.savedTabsActiveUrl)
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:tabs-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: passwords ──
+  // Stored locally as `[{id, site, username, passwordEnc, createdAt, updatedAt}]`
+  // where passwordEnc is safeStorage-base64 (machine-bound — DPAPI on
+  // Windows, Keychain on macOS, libsecret on Linux). On push we
+  // decrypt each entry's passwordEnc to plaintext so the encrypted
+  // BLOB shipped to Supabase contains the actual passwords. On pull
+  // we re-encrypt with safeStorage on the receiving machine.
+  //
+  // Plaintext passwords exist in memory ONLY during push/pull. The
+  // outer AES-GCM blob from the sync key is what keeps them safe in
+  // transit and at rest. The user's mnemonic IS effectively the
+  // master password for this category.
+  //
+  // If safeStorage isn't available on either end, the category errors
+  // out cleanly rather than shipping plaintext anywhere it shouldn't.
+  syncEngine.registerCategory({
+    key: 'passwords',
+    collect: async () => {
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage unavailable; cannot push passwords')
+      }
+      const list = PM.profileGet(PASSWORDS_KEY, []) || []
+      // Strip passwordEnc, replace with plaintext password (decrypted
+      // here, encrypted again by the AES-GCM blob layer).
+      const plain = list.map(e => {
+        if (!e) return null
+        let pw = ''
+        try {
+          if (e.passwordEnc) pw = safeStorage.decryptString(Buffer.from(e.passwordEnc, 'base64')) || ''
+        } catch (_) {}
+        return {
+          id:        e.id,
+          site:      e.site,
+          username:  e.username,
+          password:  pw,
+          createdAt: e.createdAt,
+          updatedAt: e.updatedAt,
+        }
+      }).filter(Boolean)
+      return { entries: plain }
+    },
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      if (!Array.isArray(data.entries)) return
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage unavailable; cannot apply passwords')
+      }
+      // Re-encrypt each plaintext password with this machine's
+      // safeStorage so the on-disk format matches what the password-
+      // manager IPC layer expects. updatedAt comes from the server
+      // entry so multi-device edit-conflicts can be reasoned about
+      // when we add CRDT merge later.
+      const reEncrypted = data.entries.map(e => {
+        if (!e) return null
+        let enc = null
+        try {
+          if (e.password) enc = safeStorage.encryptString(String(e.password)).toString('base64')
+        } catch (_) {}
+        return {
+          id:          e.id,
+          site:        e.site,
+          username:    e.username,
+          passwordEnc: enc,
+          createdAt:   e.createdAt || new Date().toISOString(),
+          updatedAt:   e.updatedAt || new Date().toISOString(),
+        }
+      }).filter(Boolean)
+      PM.profileSet(PASSWORDS_KEY, reEncrypted)
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:passwords-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: secrets ──
+  // API keys for SEOZ platform + AI providers (Anthropic, OpenAI,
+  // ElevenLabs). The renderer treats these as plain strings stored
+  // via SE.storeSet/Get; same key names are used directly here.
+  //
+  // Empty/missing keys are NOT included in the synced blob — that
+  // way connecting on a new device (where you haven't entered any
+  // keys yet) overwrites all-empty rather than partial-empty, and
+  // disconnecting / blanking a key on one device DOES propagate
+  // (we explicitly write an empty string in apply).
+  const SECRET_KEYS = ['apiKey', 'anthropicApiKey', 'openaiApiKey', 'elevenlabsApiKey']
+  syncEngine.registerCategory({
+    key: 'secrets',
+    collect: async () => {
+      const out = {}
+      for (const k of SECRET_KEYS) {
+        const v = PM.profileGet(k, '')
+        // Only include keys that are actually set (non-empty). The
+        // renderer reads with default '' so missing keys behave the
+        // same as empty ones at read time.
+        if (typeof v === 'string' && v.length > 0) out[k] = v
+      }
+      return out
+    },
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      for (const k of SECRET_KEYS) {
+        if (Object.prototype.hasOwnProperty.call(data, k)) {
+          PM.profileSet(k, String(data[k] || ''))
+        }
+      }
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:secrets-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: mail ──
+  // IMAP/SMTP account configs. Each account stores its password as a
+  // safeStorage-base64 envelope (machine-bound). On push we decrypt
+  // each password to plaintext for inclusion in the AES-GCM blob;
+  // on apply we re-encrypt with the receiving machine's safeStorage.
+  // Same pattern as the passwords category — see _maybeJsonArr above
+  // for the parallel.
+  syncEngine.registerCategory({
+    key: 'mail',
+    collect: async () => {
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage unavailable; cannot push mail accounts')
+      }
+      const list = PM.profileGet('mailAccounts', []) || []
+      const plain = list.map(a => {
+        if (!a) return null
+        let pw = ''
+        try {
+          if (a.passwordEnc) pw = safeStorage.decryptString(Buffer.from(a.passwordEnc, 'base64')) || ''
+        } catch (_) {}
+        // Strip passwordEnc, replace with plain `password`. All other
+        // fields (host, port, tls, email, displayName, etc.) ride along
+        // unchanged so any future field additions don't need a schema
+        // update here.
+        const { passwordEnc: _drop, ...rest } = a
+        return { ...rest, password: pw }
+      }).filter(Boolean)
+      return {
+        accounts: plain,
+        activeAccountId: PM.profileGet('mailActiveAccountId', null),
+      }
+    },
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      if (!Array.isArray(data.accounts)) return
+      if (!safeStorage.isEncryptionAvailable()) {
+        throw new Error('safeStorage unavailable; cannot apply mail accounts')
+      }
+      const reEncrypted = data.accounts.map(a => {
+        if (!a) return null
+        let enc = null
+        try {
+          if (a.password) enc = safeStorage.encryptString(String(a.password)).toString('base64')
+        } catch (_) {}
+        const { password: _drop, ...rest } = a
+        return { ...rest, passwordEnc: enc }
+      }).filter(Boolean)
+      PM.profileSet('mailAccounts', reEncrypted)
+      if (data.activeAccountId !== undefined) {
+        PM.profileSet('mailActiveAccountId', data.activeAccountId)
+      }
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:mail-applied') } catch (_) {}
+    },
+  })
+
+  // ── Category: news ──
+  // RSS sources + theme keywords. The news module owns its own
+  // per-profile electron-store (`news-${profileId}`) — read/write via
+  // its public API rather than poking the store directly. The cache
+  // (downloaded items) is intentionally NOT synced; each device keeps
+  // its own freshness.
+  syncEngine.registerCategory({
+    key: 'news',
+    collect: async () => {
+      try {
+        return {
+          sources: news.getSources() || [],
+          themes:  news.getThemes()  || [],
+        }
+      } catch (_) {
+        return { sources: [], themes: [] }
+      }
+    },
+    apply: async (data) => {
+      if (!data || typeof data !== 'object') return
+      try {
+        if (Array.isArray(data.sources)) news.setSources(data.sources)
+        if (Array.isArray(data.themes))  news.setThemes(data.themes)
+      } catch (err) {
+        // setSources/Themes throw on malformed input — log but don't
+        // break the rest of the apply pass.
+        try { console.warn('[sync.news] apply error:', err?.message || err) } catch (_) {}
+      }
+      try { if (win && !win.isDestroyed()) win.webContents.send('sync:news-applied') } catch (_) {}
+    },
+  })
+
+  return syncEngine
+}
+
+ipcMain.handle('sync:get-status', () => {
+  try { return _ensureSyncEngine().getStatus() }
+  catch (err) { return { enabled: false, error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:enable', async () => {
+  try { return await _ensureSyncEngine().enable() }
+  catch (err) { return { error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:restore', async (_e, { mnemonic: phrase } = {}) => {
+  try { return await _ensureSyncEngine().restore(phrase) }
+  catch (err) { return { error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:disable', async (_e, { wipeBucket } = {}) => {
+  try { return await _ensureSyncEngine().disable({ wipeBucket: !!wipeBucket }) }
+  catch (err) { return { error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:push-all', async () => {
+  try { return await _ensureSyncEngine().pushAll() }
+  catch (err) { return { error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:pull-all', async () => {
+  try { return await _ensureSyncEngine().pullAll() }
+  catch (err) { return { error: err.message || String(err) } }
+})
+
+ipcMain.handle('sync:push-one', async (_e, { category } = {}) => {
+  try { return await _ensureSyncEngine().pushOne(String(category || '')) }
+  catch (err) { return { error: err.message || String(err) } }
 })
 
 // ── Agent Ready scan ──
@@ -4231,4 +5391,17 @@ app.whenReady().then(() => {
   app.on('activate', () => { if (!BrowserWindow.getAllWindows().length) createWindow() })
 })
 app.on('window-all-closed', () => { if (process.platform !== 'darwin') app.quit() })
-app.on('before-quit', () => { stopSync(); stopMCPServer() })
+app.on('before-quit', () => {
+  stopSync()
+  stopMCPServer()
+  // Flush any local sync state to the server one last time. We don't
+  // await — the OS gives us limited time after quit was requested
+  // and Electron will tear down the network stack momentarily. Best-
+  // effort: any race-loss is corrected on next launch's first pull.
+  try {
+    if (syncEngine && syncEngine.isEnabled && syncEngine.isEnabled()) {
+      syncEngine.stopAutoSync()
+      syncEngine.pushAll().catch(() => {})
+    }
+  } catch (_) {}
+})

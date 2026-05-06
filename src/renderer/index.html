@@ -706,6 +706,24 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   border-radius:12px;overflow:hidden;
   margin-bottom:18px;
 }
+/* 24-word BIP-39 sync code grid: 4 columns × 6 rows on desktop. */
+.sync-words-grid{
+  display:grid;grid-template-columns:repeat(4, 1fr);gap:8px;
+}
+.sync-word{
+  display:flex;align-items:center;gap:6px;
+  padding:8px 10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;
+  font-family:'JetBrains Mono', ui-monospace, monospace;font-size:12px;
+}
+.sync-word-n{
+  color:var(--ink-3);font-size:10px;width:20px;text-align:right;flex-shrink:0;
+}
+.sync-word-w{
+  color:var(--ink-1);font-weight:500;
+}
+@media (max-width: 720px) {
+  .sync-words-grid{ grid-template-columns:repeat(3, 1fr) }
+}
 .settings-card-h{
   font-size:11px;font-weight:600;color:var(--ink-2);
   letter-spacing:0.04em;text-transform:uppercase;
@@ -772,6 +790,26 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 }
 .settings-input:focus{border-color:var(--border-strong);background:var(--card)}
 .settings-input::placeholder{color:var(--ink-3)}
+
+/* History row checkbox — used in Inställningar → Historik for bulk
+   selection. The row's onclick still navigates; only the checkbox
+   itself swallows the click via stopPropagation. */
+.hist-check{
+  display:inline-flex;align-items:center;justify-content:center;
+  width:16px;height:16px;flex-shrink:0;
+  border:1.5px solid var(--border-strong, var(--border));
+  border-radius:4px;background:var(--panel);
+  cursor:pointer;
+  color:#fff;
+  transition:background var(--dur-fast) var(--ease-out),border-color var(--dur-fast) var(--ease-out);
+}
+.hist-check:hover{border-color:var(--p)}
+.hist-check.checked{
+  background:var(--p);
+  border-color:var(--p);
+}
+.hist-row-selected{background:rgba(70,128,255,.06)}
+.hist-row-selected:hover{background:rgba(70,128,255,.10)}
 
 .settings-hero{
   display:flex;align-items:center;gap:16px;margin-bottom:36px;
@@ -1766,18 +1804,46 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes voicePulse{0%,100%{box-shadow:0 0 0 0 rgba(44,168,127,.4)}50%{box-shadow:0 0 0 12px rgba(44,168,127,0)}}
 #voiceFab.recording{color:var(--r);animation:voicePulse 1.5s ease-in-out infinite}
-.seoz-pill{display:flex;align-items:center;gap:5px;font-size:10px;font-weight:700;padding:3px 10px;border-radius:100px;background:rgba(44,168,127,.12);color:var(--g);flex-shrink:0;cursor:pointer;-webkit-app-region:no-drag;transition:background .15s}
-.seoz-pill:hover{background:rgba(44,168,127,.22)}
-.seoz-pill.inactive{background:rgba(220,53,69,.10);color:var(--r)}
-.seoz-pill.inactive:hover{background:rgba(220,53,69,.18)}
-.seoz-pill.inactive .sdot{background:var(--r);animation:none}
-/* Unconnected state — user skipped auth or no API key. Quieter than
-   the inactive (red) state since it's intentional, not an error. */
-.seoz-pill.unconnected{background:var(--panel);color:var(--ink-2);border:1px solid var(--border);padding:2px 9px}
-.seoz-pill.unconnected:hover{background:var(--hover);color:var(--head);border-color:var(--border-strong)}
-.seoz-pill.unconnected .sdot{background:var(--ink-3);animation:none}
-.sdot{width:6px;height:6px;border-radius:50%;background:var(--g);animation:pulse 2s infinite}
-@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.5;transform:scale(1.3)}}
+/* New SEOZ-status button — same 26×26 form as the shield, monochrome
+   icon coloured by state. Old .seoz-pill (text + dot) lived here; the
+   states (.unconnected etc.) are kept further down for now since the
+   updateSyncUI handler still toggles them. */
+.seoz-status{
+  width:26px;height:26px;border-radius:5px;border:none;background:none;
+  display:flex;align-items:center;justify-content:center;cursor:pointer;
+  flex-shrink:0;padding:0;-webkit-app-region:no-drag;
+  transition:background .15s,color .15s,opacity .15s;
+}
+.seoz-status svg{width:15px;height:15px}
+.seoz-status:hover{background:rgba(255,255,255,.08)}
+/* Three-state colour driven by updateSyncUI:
+     .connected → grön (inloggad + sidopanel öppen)
+     .idle      → grå  (inloggad + sidopanel stängd)
+     .error     → röd  (inget SEOZ-konto / demo / sync misslyckas)
+   Red state is visually disabled — cursor:not-allowed + the click
+   handler no-ops. Tooltip explains why ("Endast för SEOZ-användare").
+   Legacy aliases (.inactive, .disconnected, .unconnected) map to red
+   so old code paths still surface the no-account/sync-fail signal. */
+.seoz-status.connected { color:var(--g)     }
+.seoz-status.idle      { color:var(--ink-3) }
+.seoz-status.error,
+.seoz-status.inactive,
+.seoz-status.disconnected,
+.seoz-status.unconnected { color:var(--r); cursor:not-allowed }
+.seoz-status.error:hover,
+.seoz-status.inactive:hover,
+.seoz-status.disconnected:hover,
+.seoz-status.unconnected:hover { background:rgba(220,53,69,.08) }
+/* When the account is in a red state the dock + sidopanel must not be
+   visible at all — even cached data isn't ours to show. body.no-seoz
+   is set/cleared by updateSyncUI; lives on body so it overrides any
+   inline display:'' from toggleDock. */
+body.no-seoz .dock,
+body.no-seoz .seoz-panel { display:none !important }
+/* .seoz-pill / .sdot / @keyframes pulse rules were removed — the old
+   text-pill (dot + "SEOZ" label) is gone, replaced by the icon-only
+   .seoz-status button above. The statusbar's #sbDot still gets its
+   colour set inline by updateSyncUI(). */
 
 /* Shield (content blocker) in URL bar */
 .blocker-shield{
@@ -1797,13 +1863,19 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 }
 .blocker-badge:empty{display:none}
 .flow-btn{
+  /* Matched to .blocker-shield: same 26×26 form, same default green so
+     the chrome row reads as a peer set (Flow / Shield / Sidebar) instead
+     of three different visual systems. */
   width:26px;height:26px;border-radius:5px;border:none;background:transparent;
   display:flex;align-items:center;justify-content:center;cursor:pointer;
-  flex-shrink:0;transition:background .15s;
-  -webkit-app-region:no-drag;padding:0;overflow:hidden;
+  flex-shrink:0;color:var(--g);transition:background .15s,color .15s;
+  -webkit-app-region:no-drag;padding:0;
 }
-.flow-btn:hover{background:var(--border)}
-.flow-btn img{width:16px;height:16px;border-radius:4px}
+.flow-btn:hover{background:rgba(255,255,255,.08)}
+/* Orbit-marken har mer "luft" i sin geometri (två arcs + prick) än
+   sköldens fyllda silhuett — bumpas till 17px så den visuellt väger
+   ungefär lika mycket som shielden/sidebar-rektangeln vid 15px. */
+.flow-btn svg{width:17px;height:17px}
 
 /* Blocker popup */
 .blocker-popup{
@@ -3745,21 +3817,19 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(10)" title="Zooma in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
+        <button class="bm-star" id="siteInfoBtn" onclick="toggleSiteInfo(event)" title="Webbplatsinformation" aria-label="Webbplatsinformation" style="margin-left:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
         <!-- URL suggest dropdown is now a sibling WebContentsView
              (see main.js _ensureUrlSuggestView). It floats above the
              page WebContentsView instead of competing via clip-from-top. -->
       </div>
-      <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
+      <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow" aria-label="Öppna SEOZ Flow"><svg width="17" height="17" viewBox="0 0 200 200" fill="none" aria-hidden="true"><circle cx="100" cy="100" r="8" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
         <button class="blocker-shield" id="blockerShield" onclick="toggleBlockerPopup()" title="Innehållsblockering" aria-label="Innehållsblockering"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg><span class="blocker-badge" id="blockerBadge"></span></button>
         <!-- Popup is now a sibling WebContentsView (see main.js
              _ensureShieldView). It floats above the page WebContentsView
              instead of competing with it via chrome-clip-active CSS. -->
       </div>
-      <div class="seoz-pill" id="seozPill" onclick="onSeozPillClick()">
-        <div class="sdot" id="seozDot"></div>
-        <span class="seoz-pill-label">SEOZ</span>
-      </div>
+      <button class="seoz-status connected" id="seozPill" onclick="onSeozPillClick()" title="SEOZ-konto" aria-label="SEOZ-konto"><svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect x="3" y="3" width="18" height="18" rx="2"/><path d="M15 3v18"/></svg></button>
       <button class="chrome-menu-btn" id="chromeMenuBtn" onclick="toggleChromeMenu()" title="Inställningar"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1"/><circle cx="12" cy="12" r="1"/><circle cx="12" cy="19" r="1"/></svg></button>
     </div>
 
@@ -3841,6 +3911,23 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
         <div style="flex:1"></div>
         <button class="bm-cancel" onclick="resolvePrompt(null)">Avbryt</button>
         <button class="bm-save" onclick="resolvePrompt(document.getElementById('promptInput').value)">OK</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Generic confirm modal — replaces the native confirm() dialog so
+       UX matches the v2 design system. Driven by seozConfirm({ ... })
+       which returns a Promise<boolean>. -->
+  <div class="bm-modal-bg" id="confirmModal">
+    <div class="bm-modal" style="width:340px">
+      <div class="bm-modal-hdr">
+        <h3 id="confirmTitle">Bekräfta</h3>
+      </div>
+      <div class="bm-modal-body" id="confirmBody" style="font-size:12px;color:var(--txt);line-height:1.5"></div>
+      <div class="bm-modal-foot">
+        <div style="flex:1"></div>
+        <button class="bm-cancel" id="confirmCancelBtn" onclick="_resolveConfirm(false)">Avbryt</button>
+        <button class="bm-save" id="confirmOkBtn" onclick="_resolveConfirm(true)">OK</button>
       </div>
     </div>
   </div>
@@ -4151,52 +4238,48 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
       <div class="panel-body" id="panelBody"></div>
     </div>
 
-    <!-- DOCK -->
+    <!-- DOCK
+         v1.10.133 reorder rationale:
+           Top group     = "what's happening" — insikter + tasks
+           Middle group  = "what you're working on" — SEO + Creative + ads + Design
+           Bottom group  = "communication & system" — chat / voice / mail / settings
+         Konkurrentannonser hör logiskt ihop med Creative AI, så den
+         lever kvar i mitten-gruppen. -->
     <div class="dock">
-      <div class="di" id="di-seo" onclick="togglePanel('seo')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
-        <div class="dtt">SEO-analys</div>
-      </div>
       <div class="di" id="di-tracking" onclick="togglePanel('tracking')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
         <div class="dtt">Insikter</div>
-      </div>
-      <div class="di" id="di-agentready" onclick="togglePanel('agentready')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2 12 12"/><path d="m16 6 6-4-2 6"/></svg>
-        <div class="dtt">Agent Ready</div>
       </div>
       <div class="di" id="di-tasks" onclick="togglePanel('tasks')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div class="dtt">Tasks</div>
       </div>
       <div class="dock-sep"></div>
+      <div class="di" id="di-seo" onclick="togglePanel('seo')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
+        <div class="dtt">SEO</div>
+      </div>
       <div class="di" id="di-creative" onclick="togglePanel('creative')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         <div class="dtt">Creative AI</div>
       </div>
-      <div class="di" id="di-compads" onclick="togglePanel('compads')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
-        <div class="dtt">Konkurrentannonser</div>
+      <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
+        <div class="dtt">Design Mode (Ctrl+Shift+D)</div>
+      </div>
+      <div class="dock-spacer"></div>
+      <div class="di" id="di-claude" onclick="togglePanel('claude')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
+        <div class="dtt">AI Chatt</div>
+      </div>
+      <div class="di" id="voiceFab" onclick="toggleVoiceRecording()">
+        <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+        <div class="dtt">Röstsamtal</div>
       </div>
       <div class="di" id="di-mail" onclick="openMail()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
         <span class="di-badge" id="di-mail-badge">0</span>
         <div class="dtt">Mejl</div>
-      </div>
-      <div class="dock-sep"></div>
-      <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
-        <div class="dtt">Design Mode (Ctrl+Shift+D)</div>
-      </div>
-      <div class="dock-sep"></div>
-      <div class="dock-spacer"></div>
-      <div class="di" id="di-claude" onclick="togglePanel('claude')">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
-        <div class="dtt">Claude AI</div>
-      </div>
-      <div class="di" id="voiceFab" onclick="toggleVoiceRecording()">
-        <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-        <div class="dtt">Röstsamtal</div>
       </div>
       <div class="di" id="di-settings" onclick="openSettings()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
@@ -4220,7 +4303,9 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 </div>
 
 <!-- CHROME DROPDOWN MENU -->
-<div class="chrome-dd" id="chromeDd"></div>
+<!-- Kebab-menyn (#chromeDd) flyttades till en sibling WebContentsView i v1.10.x.
+     Se chrome-menu-popup.html + main.js _ensureChromeMenuView. -->
+
 
 <!-- USER DROPDOWN MENU (header avatar) -->
 <div class="chrome-dd" id="userDd" style="width:280px"></div>
@@ -4647,6 +4732,11 @@ async function updateProfileStatusBar() {
 // ══════════════════════════════════════════════════════
 const synced = {
   user: null,
+  // True när användaren kör demo-läge (apiKey === 'demo_123'). Drives
+  // the red state on the seoz-status pill — demo doesn't have real
+  // backend data so we surface that as a "needs attention"-signal,
+  // same as no-account.
+  isDemo: false,
   workspace: null,
   clients: [],
   activeClientId: null,
@@ -4923,6 +5013,7 @@ const _OVERLAY_OPEN_SELECTOR = [
   // Modal/dialog backgrounds (full-screen)
   '#bmModal.open',
   '#promptModal.open',
+  '#confirmModal.open',
   '#mailComposeBg.open',
   '#ssEditor.open',
   '#pwModal.open',
@@ -4955,9 +5046,6 @@ const _OVERLAY_OPEN_SELECTOR = [
 // the tallest visible overlay sits in exposed chrome bg. v1.10.105.
 const _CLIP_OPEN_SELECTOR = [
   '#ctxMenu.open',
-  '#chromeDd.open',
-  '.bm-drop.open',
-  '.client-sel-drop.open',
   '.mail-acct-menu.show',
   '.mail-folder-menu.show',
   '.mail-compose-tpl-menu.show',
@@ -5920,6 +6008,13 @@ function _displayUrlForBar(tab) {
   const u = tab.url || ''
   if (u === SETTINGS_URL) {
     const section = window._settingsSection || 'konto'
+    // Konto-sektionen har sub-tabs (Konto / Profiler / Sync) — visa
+    // den aktiva sub-tabben i URL:en så den både blir copy-pasta-bar
+    // och matchar deep-link-formen seoz://settings/profiler.
+    if (section === 'konto') {
+      const sub = window._kontoTab || 'konto'
+      return SETTINGS_URL + '/' + sub
+    }
     return SETTINGS_URL + '/' + section
   }
   if (u === MAIL_URL) return MAIL_URL
@@ -9913,6 +10008,20 @@ async function renderSeoSubTab(tab) {
       <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">${_BTN.barChart}Live-övervakning (auto)</button>
       <div id="cwvHistory" style="margin-top:14px"></div>
     `
+  } else if (tab === 'agentready') {
+    // Folded in from its own dock icon (v1.10.x). Same scan flow + cache
+    // as before — #arUrl / #arResult ids preserved so runAgentReadyScan
+    // and renderAgentReadyResult keep working without changes.
+    const active = tabs.find(t => t.id === activeId)
+    const url = active && !isOverlayUrl(active.url) ? active.url : ''
+    const cached = window._agentReadyCache && window._agentReadyCache.url === url ? window._agentReadyCache.scorecard : null
+    el.innerHTML = `
+      <p style="font-size:10px;color:var(--muted);margin-bottom:8px">Skannar agent/LLM-readiness — robots.txt, MCP card, OAuth discovery, content negotiation, Web Bot Auth m.m.</p>
+      <div class="ar-url" id="arUrl">${url ? esc(url) : 'Ingen URL — surfa till en sida först'}</div>
+      <button class="act-btn" onclick="runAgentReadyScan()" ${url ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'}>${_BTN.zap}Skanna sidan</button>
+      <div id="arResult" style="margin-top:12px">${cached ? '' : '<div class="ar-empty">Tryck "Skanna sidan" för att börja</div>'}</div>
+    `
+    if (cached) renderAgentReadyResult(cached)
   }
 }
 
@@ -10137,6 +10246,23 @@ if (document.readyState === 'loading') {
 }
 
 function togglePanel(name) {
+  // Single chokepoint: the SEOZ sidebar requires a real (non-demo)
+  // account. No-account / demo users hit a silent no-op — the
+  // sidopanel is hidden via body.no-seoz already, so dock-clicks
+  // can't fire (no visible target), but home-chips / slash-commands
+  // / hotkeys / IPC actions still arrive here. We bounce silently
+  // rather than dragging users back to the auth overlay (which
+  // feels like a forced logout while the demo is running).
+  if (!synced.user || synced.isDemo) return
+  // Legacy alias: 'agentready' used to be a top-level panel with its
+  // own dock icon. v1.10.x folded it into the SEO panel as a sub-tab.
+  // Forward the alias here so dock-icon highlighting + currentPanel
+  // state match what's actually rendered (di-seo lights up, not the
+  // now-removed di-agentready).
+  if (name === 'agentready') {
+    window._seoTab = 'agentready'
+    name = 'seo'
+  }
   if (currentPanel === name) { closePanel(); return }
   openPanel(name)
 }
@@ -10149,12 +10275,17 @@ function openPanel(name) {
   const diEl = document.getElementById('di-' + name)
   if (diEl) diEl.classList.add('active')
   renderPanelContent(name)
+  // Flip the seoz-status pill grey → green so the chrome reflects the
+  // open panel state. updateSyncUI is the single source of truth for
+  // pill colour — calling it here keeps everything in sync.
+  if (typeof updateSyncUI === 'function') updateSyncUI()
 }
 
 function closePanel() {
   currentPanel = null
   document.getElementById('seozPanel').classList.remove('open')
   document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
+  if (typeof updateSyncUI === 'function') updateSyncUI()
 }
 
 // Lucide line-icons for act-btn content inside panels. 13×13 inline,
@@ -10215,7 +10346,7 @@ async function renderPanelContent(name) {
   const body = document.getElementById('panelBody')
 
   if (name === 'seo') {
-    icon.innerHTML = _PANEL_ICONS.search; title.textContent = 'SEO-analys'
+    icon.innerHTML = _PANEL_ICONS.search; title.textContent = 'SEO'
     // Sub-tab state
     if (!window._seoTab) window._seoTab = 'onpage'
     body.innerHTML = `
@@ -10224,22 +10355,18 @@ async function renderPanelContent(name) {
         <div class="seo-sub-tab ${window._seoTab==='crawl'?'active':''}" onclick="window._seoTab='crawl';renderPanelContent('seo')">Crawl</div>
         <div class="seo-sub-tab ${window._seoTab==='lighthouse'?'active':''}" onclick="window._seoTab='lighthouse';renderPanelContent('seo')">Lighthouse</div>
         <div class="seo-sub-tab ${window._seoTab==='cwv'?'active':''}" onclick="window._seoTab='cwv';renderPanelContent('seo')">Core Web Vitals</div>
+        <div class="seo-sub-tab ${window._seoTab==='agentready'?'active':''}" onclick="window._seoTab='agentready';renderPanelContent('seo')">Agent Ready</div>
       </div>
       <div id="seoPanelContent"><div style="text-align:center;padding:20px;color:var(--muted)">Laddar...</div></div>
     `
     renderSeoSubTab(window._seoTab)
   } else if (name === 'agentready') {
-    icon.innerHTML = _PANEL_ICONS.zap; title.textContent = 'Agent Ready'
-    const active = tabs.find(t => t.id === activeId)
-    const url = active && !isOverlayUrl(active.url) ? active.url : ''
-    const cached = window._agentReadyCache && window._agentReadyCache.url === url ? window._agentReadyCache.scorecard : null
-    body.innerHTML = `
-      <div style="font-size:10px;color:var(--muted);margin-bottom:6px">Skannar agent/LLM-readiness — robots.txt, MCP card, OAuth discovery, content negotiation, Web Bot Auth m.m.</div>
-      <div class="ar-url" id="arUrl">${url ? esc(url) : 'Ingen URL — surfa till en sida först'}</div>
-      <button class="act-btn" onclick="runAgentReadyScan()" ${url ? '' : 'disabled style="opacity:.5;cursor:not-allowed"'}>${_BTN.zap}Skanna sidan</button>
-      <div id="arResult" style="margin-top:12px">${cached ? '' : '<div class="ar-empty">Tryck "Skanna sidan" för att börja</div>'}</div>
-    `
-    if (cached) renderAgentReadyResult(cached)
+    // Back-compat: legacy callers (hotkeys, slash-commands, deeplinks)
+    // still routera through 'agentready' as a panel name. Forward them
+    // to the SEO panel with the right sub-tab pre-selected so the URL
+    // and chip-action codepaths don't need updating.
+    window._seoTab = 'agentready'
+    return renderPanelContent('seo')
   } else if (name === 'tracking') {
     icon.innerHTML = _PANEL_ICONS.trendUp; title.textContent = 'Klientinsikter'
     body.innerHTML = _renderTrackingOverview()
@@ -10878,7 +11005,24 @@ window._settingsCopyMcp = function(btn) {
 // switch to an existing settings tab, promote a home tab, or open
 // a fresh tab. Mirrors the mail-tab opening flow.
 function openSettings(section) {
-  if (section) window._settingsSection = section
+  if (section) {
+    // Konto / Profiler / Sync are now sub-tabs inside one merged
+    // "konto" section. Old links like seoz://settings/profiler still
+    // route here (we own the URL space) — translate so the matching
+    // sub-tab opens automatically.
+    const _KONTO_SUB = { konto: 'konto', profiler: 'profiler', sync: 'sync' }
+    // Juridiskt + System merged into "om" (Om SEOZ). Old deep-links
+    // route to the new section transparently.
+    const _OM_ALIASES = new Set(['juridiskt', 'system'])
+    if (_KONTO_SUB[section]) {
+      window._settingsSection = 'konto'
+      window._kontoTab = _KONTO_SUB[section]
+    } else if (_OM_ALIASES.has(section)) {
+      window._settingsSection = 'om'
+    } else {
+      window._settingsSection = section
+    }
+  }
   // Existing settings tab? focus it.
   const existing = tabs.find(t => isSettingsUrl(t.url))
   if (existing) { switchTab(existing.id); return }
@@ -10925,8 +11069,11 @@ const SETTINGS_NAV_ICONS = {
 function _settingsSectionList() {
   return [
     { group: _t('settings.group.konto','Konto') },
+    // Konto-sektionen har inbyggda flikar för Konto / Profiler / Sync
+    // (se _renderSettingsKonto). Tidigare hade vi tre nav-items för
+    // samma logiska område — det blev rörigt eftersom alla tre handlar
+    // om "vem du är + var din data lagras".
     { id: 'konto',       label: _t('settings.nav.konto','Konto'),                  icon: SETTINGS_NAV_ICONS.konto },
-    { id: 'profiler',    label: _t('settings.nav.profiler','Profiler'),            icon: SETTINGS_NAV_ICONS.profiler },
 
     { group: _t('settings.group.data','Data') },
     { id: 'losenord',    label: _t('settings.nav.losenord','Lösenord'),            icon: SETTINGS_NAV_ICONS.losenord },
@@ -10951,8 +11098,10 @@ function _settingsSectionList() {
     { id: 'diagnostik',  label: _t('settings.nav.diagnostik','Kraschrapporter'),   icon: SETTINGS_NAV_ICONS.diagnostik },
 
     { group: _t('settings.group.om','Om') },
-    { id: 'juridiskt',   label: _t('settings.nav.juridiskt','Juridiskt'),          icon: SETTINGS_NAV_ICONS.juridiskt },
-    { id: 'system',      label: _t('settings.nav.system','System'),                icon: SETTINGS_NAV_ICONS.system },
+    // v1.10.133: Juridiskt + System slogs ihop till "Om SEOZ" med ett
+    // intro-stycke högst upp om vad webbläsaren är. Gamla deep-links
+    // (seoz://settings/juridiskt, /system) routas via openSettings().
+    { id: 'om',          label: _t('settings.nav.om','Om SEOZ'),                  icon: SETTINGS_NAV_ICONS.system },
   ]
 }
 
@@ -10979,12 +11128,13 @@ function renderSettingsScreen() {
   if (window._settingsSection === 'rostchatt')  _settingsPostRostchatt()
   if (window._settingsSection === 'permissions') renderSitePermissions()
   if (window._settingsSection === 'diagnostik')  refreshCrashStatus()
-  if (window._settingsSection === 'system')     _settingsPostSystem()
+  if (window._settingsSection === 'om')         _settingsPostOmSeoz()
   if (window._settingsSection === 'default')    _settingsPostDefault()
   if (window._settingsSection === 'losenord')   _settingsPostLosenord()
   if (window._settingsSection === 'nyheter')    _settingsPostNyheter()
   if (window._settingsSection === 'sprak')      _settingsPostSprak()
   if (window._settingsSection === 'sokmotor')   _settingsPostSokmotor()
+  if (window._settingsSection === 'shield')     _settingsPostShield()
 
   // Some sections need extra horizontal room for multi-column layouts.
   // Default settings-content max-width is 760px which is too narrow for
@@ -11002,8 +11152,7 @@ function _settingsSelect(section) {
 
 // ── Per-section content renderers ────────────────────────────────────
 const SETTINGS_RENDERERS = {
-  konto:        () => _renderSettingsKonto(),
-  profiler:     () => _renderSettingsProfiler(),
+  konto:        () => _renderSettingsKontoCombined(),
   losenord:     () => _renderSettingsLosenord(),
   bokmarken:    () => _renderSettingsBokmarken(),
   historik:     () => _renderSettingsHistorik(),
@@ -11017,9 +11166,31 @@ const SETTINGS_RENDERERS = {
   ai:           () => _renderSettingsAi(),
   rostchatt:    () => _renderSettingsRostchatt(),
   diagnostik:   () => _renderSettingsDiagnostik(),
-  juridiskt:    () => _renderSettingsJuridiskt(),
-  system:       () => _renderSettingsSystem(),
+  om:           () => _renderSettingsOmSeoz(),
   nyheter:      () => _renderSettingsNyheter(),
+}
+
+// Wrapper that renders the merged Konto / Profiler / Sync section as
+// a single nav entry with three sub-tabs at the top. State persists
+// in window._kontoTab so navigating away and back lands on the same
+// tab. Default = 'konto' (the one most users will glance at first).
+function _renderSettingsKontoCombined() {
+  if (!window._kontoTab) window._kontoTab = 'konto'
+  const tab = window._kontoTab
+  const tabBtn = (id, label) =>
+    `<div class="seo-sub-tab ${tab === id ? 'active' : ''}" onclick="window._kontoTab='${id}';renderSettingsScreen();_refreshUrlBar()">${esc(label)}</div>`
+  const inner =
+    tab === 'profiler' ? _renderSettingsProfiler() :
+    tab === 'sync'     ? _renderSettingsSync() :
+                         _renderSettingsKonto()
+  return `
+    <div class="seo-sub-tabs" style="display:flex;gap:0;margin-bottom:18px;border-bottom:1px solid var(--border)">
+      ${tabBtn('konto',    'Konto')}
+      ${tabBtn('profiler', 'Profiler')}
+      ${tabBtn('sync',     'Sync')}
+    </div>
+    ${inner}
+  `
 }
 
 function _renderSettingsKonto() {
@@ -11124,6 +11295,397 @@ function _renderSettingsProfiler() {
     </div>
   `
 }
+
+// ── E2E sync section ──
+// Three states the UI must handle:
+//   1) Unset      — user has no sync configured. Show two CTAs:
+//                   "Set up sync" or "Restore from existing phrase".
+//   2) Setup-flow — we just generated a phrase. Show 24 words in
+//                   a grid with copy + "I've saved this" confirm.
+//   3) Active     — sync is running. Show short syncId, last sync,
+//                   per-category status, "Stop syncing" buttons.
+//   4) Restore    — user clicked "I have a phrase". Show a textarea
+//                   for the 24 words with validate-on-input.
+//
+// All state is derived from sync.getStatus() pushed via 'sync:status'.
+// Every action is a single async IPC; no in-renderer crypto.
+function _renderSettingsSync() {
+  const status = window._syncStatus || { enabled: false }
+  if (window._syncSetupFresh) {
+    return _renderSettingsSyncSetupFresh()
+  }
+  if (window._syncRestoreFlow) {
+    return _renderSettingsSyncRestoreFlow()
+  }
+  if (status.enabled) {
+    return _renderSettingsSyncActive(status)
+  }
+  return _renderSettingsSyncUnset()
+}
+
+function _renderSettingsSyncUnset() {
+  return `
+    <div class="settings-section-h1">Sync</div>
+    <div class="settings-section-sub">Synkronisera bokmärken, lösenord och inställningar mellan dina enheter med end-to-end-kryptering. Ingen — inte ens vi — kan läsa din data på servern.</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="gap:12px;align-items:flex-start;padding:16px">
+        <div class="settings-row-icon blue" style="margin-top:2px">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"/><polyline points="1 20 1 14 7 14"/><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10M1 14l4.64 4.36A9 9 0 0 0 20.49 15"/></svg>
+        </div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Aktivera sync</div>
+          <div class="settings-row-sub" style="line-height:1.5">
+            Vi genererar en sync-kod på 24 ord. Du sparar den (lösenordshanterare eller papper). På varje annan enhet skriver du in samma 24 ord — så syncas allt automatiskt.
+            <br><br>
+            <strong>Tappar du bort orden går datan inte att återställa.</strong> Det är poängen: ingen — vare sig vi eller Supabase — kan dekryptera utan dem.
+          </div>
+        </div>
+      </div>
+      <div class="settings-row" style="gap:8px;justify-content:flex-end;padding:12px 16px;border-top:1px solid var(--border)">
+        <button class="settings-btn" onclick="_syncBeginRestore()">Jag har redan en sync-kod</button>
+        <button class="settings-btn primary" onclick="_syncBeginSetup()">Skapa sync-kod</button>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsSyncSetupFresh() {
+  const phrase = window._syncSetupFresh.mnemonic
+  const words = phrase.split(' ')
+  const wordsHtml = words.map((w, i) =>
+    `<div class="sync-word"><span class="sync-word-n">${i + 1}</span><span class="sync-word-w">${esc(w)}</span></div>`
+  ).join('')
+  return `
+    <div class="settings-section-h1">Spara din sync-kod</div>
+    <div class="settings-section-sub" style="color:#dc2626"><strong>Skriv ner dessa 24 ord i exakt rätt ordning.</strong> De är den ENDA vägen tillbaka till din data om något händer den här datorn.</div>
+
+    <div class="settings-card" style="padding:16px">
+      <div class="sync-words-grid">${wordsHtml}</div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <button class="settings-btn" onclick="_syncCopyPhrase()">Kopiera till urklipp</button>
+        <button class="settings-btn primary" onclick="_syncFinishSetup()">Jag har sparat orden</button>
+      </div>
+    </div>
+
+    <div class="settings-section-sub" style="margin-top:16px;font-size:11px">
+      Tips: spara orden i en lösenordshanterare (1Password, Bitwarden, Apple Keychain) som en "Säker anteckning". Skriv inte ner dem i mejl eller chatt.
+    </div>
+  `
+}
+
+function _renderSettingsSyncRestoreFlow() {
+  return `
+    <div class="settings-section-h1">Återställ från sync-kod</div>
+    <div class="settings-section-sub">Skriv eller klistra in dina 24 ord, separerade med mellanslag.</div>
+
+    <div class="settings-card" style="padding:16px">
+      <textarea id="syncRestoreInput"
+        placeholder="abandon ability able about ..."
+        spellcheck="false" autocorrect="off" autocapitalize="off"
+        style="width:100%;min-height:96px;padding:10px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-family:'Inter',monospace;font-size:12px;color:var(--ink-1);resize:vertical"
+        oninput="_syncRestoreInputChange()"></textarea>
+      <div id="syncRestoreError" style="margin-top:8px;font-size:11px;color:#dc2626;min-height:14px"></div>
+      <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:12px;border-top:1px solid var(--border);padding-top:12px">
+        <button class="settings-btn" onclick="_syncCancelRestore()">Avbryt</button>
+        <button class="settings-btn primary" id="syncRestoreBtn" onclick="_syncDoRestore()" disabled>Återställ</button>
+      </div>
+    </div>
+  `
+}
+
+function _renderSettingsSyncActive(status) {
+  const idShort = status.syncIdHex ? status.syncIdHex.slice(0, 8) + '…' + status.syncIdHex.slice(-4) : '—'
+  const last = status.lastSyncAt ? new Date(status.lastSyncAt).toLocaleString('sv-SE') : 'Aldrig'
+  const cats = (status.categories || []).map(c => {
+    const v = (status.versions || {})[c] || 0
+    return `<div class="settings-row" style="padding:8px 14px"><div style="flex:1">${esc(c)}</div><div style="font-size:11px;color:var(--ink-3)">v${v}</div></div>`
+  }).join('')
+  return `
+    <div class="settings-section-h1">Sync är aktiv</div>
+    <div class="settings-section-sub">Din data synkas end-to-end-krypterat. Sync-koden är endast lagrad lokalt på den här enheten (krypterad med OS-nyckel).</div>
+
+    <div class="settings-card">
+      <div class="settings-row" style="padding:14px">
+        <div class="settings-row-content">
+          <div class="settings-row-title">Sync-ID</div>
+          <div class="settings-row-sub" style="font-family:monospace;font-size:11px">${esc(idShort)}</div>
+        </div>
+      </div>
+      <div class="settings-row" style="padding:14px;border-top:1px solid var(--border)">
+        <div class="settings-row-content">
+          <div class="settings-row-title">Senaste synk</div>
+          <div class="settings-row-sub">${esc(last)}</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn" onclick="_syncDoPushAll()">Synka nu</button>
+        </div>
+      </div>
+      ${cats ? `<div style="border-top:1px solid var(--border);padding:6px 0">${cats}</div>` : ''}
+    </div>
+
+    <div class="settings-card" style="margin-top:14px">
+      <div class="settings-row" style="padding:14px">
+        <div class="settings-row-content">
+          <div class="settings-row-title">Stäng av sync på den här enheten</div>
+          <div class="settings-row-sub">Lokal data behålls. Andra enheter fortsätter synka som vanligt.</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn" onclick="_syncDoDisable(false)">Stäng av</button>
+        </div>
+      </div>
+      <div class="settings-row" style="padding:14px;border-top:1px solid var(--border)">
+        <div class="settings-row-content">
+          <div class="settings-row-title" style="color:#dc2626">Radera all sync-data från servern</div>
+          <div class="settings-row-sub">Alla enheter mister sync — du måste skapa en ny sync-kod om du vill aktivera igen.</div>
+        </div>
+        <div class="settings-row-action">
+          <button class="settings-btn" style="color:#dc2626" onclick="_syncDoDisable(true)">Radera bucket</button>
+        </div>
+      </div>
+    </div>
+  `
+}
+
+// ── Action handlers ──
+async function _syncBeginSetup() {
+  const r = await window.seoz.sync.enable()
+  if (r && r.error) { toast('Kunde inte aktivera sync: ' + r.error, '#dc2626'); return }
+  if (!r || !r.mnemonic) {
+    toast('Kunde inte aktivera sync (oväntat svar). Se sync.log.', '#dc2626')
+    console.error('[sync] enable returned unexpected payload:', r)
+    return
+  }
+  // Initial push happened during enable(). If any category errored,
+  // surface the first one — the user still gets the 24 words to save.
+  if (Array.isArray(r.errors) && r.errors.length) {
+    const e = r.errors[0]
+    toast(`Sync skapad men push failade (${e.category}): ${e.error}`, '#e58a00', 7000)
+    console.error('[sync] enable push errors:', r.errors)
+  }
+  window._syncSetupFresh = r
+  renderSettingsScreen()
+}
+function _syncCopyPhrase() {
+  if (!window._syncSetupFresh) return
+  navigator.clipboard.writeText(window._syncSetupFresh.mnemonic).then(
+    () => toast('Sync-kod kopierad — klistra in i lösenordshanterare', '#2ca87f'),
+    () => toast('Kunde inte kopiera', '#dc2626')
+  )
+}
+function _syncFinishSetup() {
+  delete window._syncSetupFresh
+  renderSettingsScreen()
+}
+
+function _syncBeginRestore() {
+  window._syncRestoreFlow = true
+  renderSettingsScreen()
+}
+function _syncCancelRestore() {
+  delete window._syncRestoreFlow
+  renderSettingsScreen()
+}
+function _syncRestoreInputChange() {
+  const ta = document.getElementById('syncRestoreInput')
+  const err = document.getElementById('syncRestoreError')
+  const btn = document.getElementById('syncRestoreBtn')
+  if (!ta || !btn) return
+  const v = (ta.value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const wc = v ? v.split(' ').length : 0
+  if (!v) {
+    err.textContent = ''
+    btn.disabled = true
+  } else if (wc < 24) {
+    err.textContent = `${wc}/24 ord`
+    btn.disabled = true
+  } else if (wc > 24) {
+    err.textContent = `För många ord: ${wc}/24`
+    btn.disabled = true
+  } else {
+    err.textContent = ''
+    btn.disabled = false
+  }
+}
+async function _syncDoRestore() {
+  const ta = document.getElementById('syncRestoreInput')
+  if (!ta) return
+  const phrase = (ta.value || '').trim().toLowerCase().replace(/\s+/g, ' ')
+  const btn = document.getElementById('syncRestoreBtn')
+  const err = document.getElementById('syncRestoreError')
+  if (btn) { btn.disabled = true; btn.textContent = 'Återställer…' }
+  const r = await window.seoz.sync.restore(phrase)
+  if (r && r.error) {
+    if (err) err.textContent = r.error
+    if (btn) { btn.disabled = false; btn.textContent = 'Återställ' }
+    return
+  }
+  delete window._syncRestoreFlow
+  toast('Sync återställd — data hämtad', '#2ca87f')
+  // Bookmarks etc. were rewritten in main; reload our local copies.
+  if (typeof loadBookmarks === 'function') loadBookmarks()
+  if (typeof renderBookmarks === 'function') renderBookmarks()
+  // Refresh sync status from main → re-render Active screen.
+  await _syncRefreshStatus()
+  renderSettingsScreen()
+}
+
+async function _syncDoPushAll() {
+  toast('Synkar…', '#4680ff')
+  const r = await window.seoz.sync.pushAll()
+  // Three failure modes: (a) outer error string, (b) per-category errors
+  // array. Surface either so the user can act on a real message instead
+  // of a misleading "Synk klar".
+  if (r && r.error) { toast('Synk-fel: ' + r.error, '#dc2626'); return }
+  if (r && Array.isArray(r.errors) && r.errors.length) {
+    const e = r.errors[0]
+    toast(`Synk-fel (${e.category}): ${e.error}`, '#dc2626')
+    console.error('[sync] push errors:', r.errors)
+    return
+  }
+  const count = r && Array.isArray(r.pushed) ? r.pushed.length : 0
+  toast(`Synk klar — ${count} kategorier pushade`, '#2ca87f')
+  await _syncRefreshStatus()
+  renderSettingsScreen()
+}
+
+async function _syncDoDisable(wipeBucket) {
+  let ok
+  if (wipeBucket) {
+    ok = await seozConfirm({
+      title: 'Radera all sync-data från servern?',
+      body: 'Alla enheter mister synkronisering. Lokala bokmärken och andra inställningar behålls oförändrade på den här enheten — det är bara den krypterade kopian på servern som tas bort.',
+      confirmLabel: 'Radera bucket',
+      cancelLabel:  'Avbryt',
+      danger: true,
+    })
+  } else {
+    ok = await seozConfirm({
+      title: 'Stänga av sync på den här enheten?',
+      body: 'Lokal data behålls oförändrad. Andra enheter fortsätter synka som vanligt — de märker inte att den här enheten kopplats av.',
+      confirmLabel: 'Stäng av',
+      cancelLabel:  'Avbryt',
+    })
+  }
+  if (!ok) return
+  const r = await window.seoz.sync.disable(wipeBucket)
+  if (r && r.error) { toast('Kunde inte stänga av: ' + r.error, '#dc2626'); return }
+  toast(wipeBucket ? 'Sync inaktiverad + bucket raderad' : 'Sync inaktiverad på denna enhet', '#e58a00')
+  await _syncRefreshStatus()
+  renderSettingsScreen()
+}
+
+async function _syncRefreshStatus() {
+  try { window._syncStatus = await window.seoz.sync.getStatus() } catch (_) {}
+}
+
+// Live status updates from main when push/pull happens elsewhere.
+if (window.seoz?.sync?.onStatus) {
+  window.seoz.sync.onStatus((status) => {
+    window._syncStatus = status
+    if (window._settingsSection === 'sync') renderSettingsScreen()
+  })
+}
+if (window.seoz?.sync?.onBookmarksApplied) {
+  window.seoz.sync.onBookmarksApplied(() => {
+    if (typeof loadBookmarks === 'function') loadBookmarks()
+    if (typeof renderBookmarks === 'function') renderBookmarks()
+    toast('Bokmärken uppdaterade från sync', '#2ca87f')
+  })
+}
+// Settings/tabs/passwords category-applied handlers. Theme + language
+// require live re-application; tabs + saved passwords are read on
+// startup (or when the password modal opens), so we just toast and let
+// the next read pick up the new values.
+if (window.seoz?.sync?.onSettingsApplied) {
+  window.seoz.sync.onSettingsApplied(async () => {
+    // Re-pull theme + cookie mode + search engine + language live so
+    // the user sees the change without a restart.
+    //
+    // Theme: applySyncedTheme() owns the full apply path —
+    //   1. document.documentElement.dataset.theme = mapped (drives CSS
+    //      via [data-theme="..."] selectors)
+    //   2. SE.setTheme(mapped) so the value is persisted again on this
+    //      device too. (No-op vs. just-pulled value, but cheap.)
+    // Calling a non-existent setTheme() was the v1.10.133 first bug —
+    // the IPC apply wrote PM but the chrome's <html data-theme="">
+    // never updated, so the user saw passwords come back but theme
+    // stuck on whatever it was before restore.
+    try {
+      const t = await SE.getTheme()
+      if (t && typeof applySyncedTheme === 'function') applySyncedTheme(t)
+    } catch (_) {}
+    if (typeof initCookieMode === 'function') initCookieMode()
+    try {
+      const eng = await SE.storeGet('defaultSearchEngine', null)
+      if (eng) window._defaultSearchEngine = eng
+    } catch (_) {}
+    try {
+      const lang = await SE.storeGet('appLanguage', null)
+      // _setAppLanguage is module-scoped; it's reachable from this
+      // top-level script context but not via window, so probe directly.
+      if (lang && typeof _setAppLanguage === 'function') _setAppLanguage(lang)
+    } catch (_) {}
+    // Shield toggle — re-pull from main so the chrome shield icon
+    // and popup-count display reflect the synced value live.
+    try {
+      const enabled = await SE.blockerGetEnabled()
+      blockerOn = !!enabled
+      if (typeof updateBlockerUI === 'function') updateBlockerUI()
+    } catch (_) {}
+    // Re-render whichever settings tab is open so synced values
+    // (sökmotor, shield, utseende, …) reflect immediately.
+    if (window._settingsSection && typeof renderSettingsScreen === 'function') {
+      renderSettingsScreen()
+    }
+    toast('Inställningar uppdaterade från sync', '#2ca87f')
+  })
+}
+if (window.seoz?.sync?.onTabsApplied) {
+  window.seoz.sync.onTabsApplied(() => {
+    // Saved tabs are read at app startup (`restoreSavedTabs` etc.) — a
+    // live tab restore mid-session would be jarring. Toast and let
+    // next start pick up the new state.
+    toast('Sparade flikar synkade — öppna nästa start för att återställa', '#4680ff')
+  })
+}
+if (window.seoz?.sync?.onPasswordsApplied) {
+  window.seoz.sync.onPasswordsApplied(() => {
+    // Password modal reads via IPC every open, so it's automatic.
+    toast('Lösenord synkade', '#2ca87f')
+  })
+}
+if (window.seoz?.sync?.onSecretsApplied) {
+  window.seoz.sync.onSecretsApplied(() => {
+    // AI / SEOZ key fields read on demand (next chat / next sync /
+    // next render of AI settings tab). Force a re-render if the AI
+    // tab is currently visible so the status badges flip immediately.
+    if (window._settingsSection === 'ai' && typeof renderSettingsScreen === 'function') {
+      renderSettingsScreen()
+    }
+    toast('API-nycklar synkade', '#2ca87f')
+  })
+}
+if (window.seoz?.sync?.onMailApplied) {
+  window.seoz.sync.onMailApplied(() => {
+    // Mail panel re-fetches via IPC on open. Toast and let it pick
+    // up next time the user navigates there.
+    toast('Mejlkonton synkade — öppna mejl-panelen för att se dem', '#2ca87f')
+  })
+}
+if (window.seoz?.sync?.onNewsApplied) {
+  window.seoz.sync.onNewsApplied(() => {
+    // News rail / settings render lazily. Force a re-render of the
+    // Nyheter tab if it's the active settings section so the user
+    // sees the synced sources/themes immediately.
+    if (window._settingsSection === 'nyheter' && typeof renderSettingsScreen === 'function') {
+      renderSettingsScreen()
+    }
+    toast('Nyhetskällor synkade', '#2ca87f')
+  })
+}
+// Pull on init.
+;(async () => { await _syncRefreshStatus() })()
 
 function _renderSettingsLosenord() {
   return `
@@ -11266,21 +11828,63 @@ function _settingsDeleteBookmark(id) {
 }
 
 // ── Historik ──────────────────────────────────────────
+// ── Historik (multi-select-aware) ────────────────────────────────────
+//
+// Each row gets a checkbox. Clicking the checkbox toggles selection
+// (event.stopPropagation so the row's own onclick doesn't navigate).
+// Click anywhere else on the row navigates as before. When at least
+// one item is selected the toolbar swaps from "search + clear-all" to
+// "N markerade · markera alla synliga · ta bort markerade" so bulk
+// delete is one-click.
+//
+// Selection survives search-filter changes for keys still visible
+// (we prune selections whose key is no longer in the rendered slice).
+//
+// Confirms use seozConfirm (v2-themed) instead of native confirm().
+if (!(window._histSelected instanceof Set)) window._histSelected = new Set()
+function _histKey(h) { return (h.time || 0) + '::' + (h.url || '') }
+
 function _renderSettingsHistorik() {
   if (typeof window._settingsHistFilter !== 'string') window._settingsHistFilter = ''
   const q = window._settingsHistFilter.toLowerCase()
+  // URL-only search — title-matching produced false-positive noise
+  // (e.g. searching "google" matched OAuth login pages whose title
+  // happens to be "Google-konto" but URL is on a totally different
+  // host). Users expect "domain filter" semantics here.
   const list = q
-    ? browsingHistory.filter(h =>
-        (h.title || '').toLowerCase().includes(q) ||
-        (h.url || '').toLowerCase().includes(q))
+    ? browsingHistory.filter(h => (h.url || '').toLowerCase().includes(q))
     : browsingHistory
 
+  const visible = list.slice(0, 200)
+  const visibleKeys = new Set(visible.map(_histKey))
+  for (const k of window._histSelected) if (!visibleKeys.has(k)) window._histSelected.delete(k)
+  const selN = window._histSelected.size
+
+  let toolbarRow
+  if (selN > 0) {
+    const allVisibleSelected = visible.length > 0 && visible.every(h => window._histSelected.has(_histKey(h)))
+    toolbarRow = `
+      <div class="settings-row" style="padding:10px 18px;gap:8px;align-items:center">
+        <div style="flex:1;font-size:11.5px;color:var(--ink-1);font-weight:600">${selN} markerade</div>
+        <button class="settings-btn" onclick="${allVisibleSelected ? '_histClearSelection()' : '_histSelectAllVisible()'}">${allVisibleSelected ? 'Avmarkera alla' : 'Markera alla synliga'}</button>
+        <button class="settings-btn danger" onclick="_histDeleteSelected()">Ta bort markerade</button>
+      </div>
+    `
+  } else {
+    toolbarRow = `
+      <div class="settings-row" style="padding:10px 18px;gap:8px">
+        <input class="settings-input" id="settingsHistSearch" placeholder="Sök i historik..." value="${esc(window._settingsHistFilter)}" oninput="_settingsHistSearch(this.value)" style="flex:1">
+        <button class="settings-btn danger" onclick="_settingsClearHistory()">Rensa historik</button>
+      </div>
+    `
+  }
+
   let rows = ''
-  if (!list.length) {
+  if (!visible.length) {
     rows = `<div class="settings-row"><div class="settings-row-content" style="text-align:center;color:var(--ink-3);padding:18px 0">${q ? 'Inga sidor matchar sökningen.' : 'Ingen historik ännu.'}</div></div>`
   } else {
     let lastDate = ''
-    rows = list.slice(0, 200).map(h => {
+    rows = visible.map(h => {
       const d = new Date(h.time)
       const dateStr = d.toLocaleDateString('sv-SE')
       const isToday = dateStr === new Date().toLocaleDateString('sv-SE')
@@ -11294,7 +11898,11 @@ function _renderSettingsHistorik() {
       const fav = h.favicon
         ? `<img src="${esc(h.favicon)}" style="width:14px;height:14px;border-radius:3px" onerror="this.style.display='none'">`
         : SETTINGS_NAV_ICONS.historik
-      return `${heading}<div class="settings-row clickable" onclick="closeSettings();doNav('${esc(h.url)}')" title="${esc(h.url)}">
+      const key = _histKey(h)
+      const checked = window._histSelected.has(key)
+      const checkboxHtml = `<span class="hist-check ${checked ? 'checked' : ''}" onclick="event.stopPropagation();_histToggle('${esc(key)}')" role="checkbox" aria-checked="${checked}">${checked ? '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" style="width:11px;height:11px"><polyline points="20 6 9 17 4 12"/></svg>' : ''}</span>`
+      return `${heading}<div class="settings-row clickable hist-row ${checked ? 'hist-row-selected' : ''}" onclick="closeSettings();doNav('${esc(h.url)}')" title="${esc(h.url)}">
+        ${checkboxHtml}
         <div class="settings-row-icon gray" style="width:28px;height:28px">${fav}</div>
         <div class="settings-row-content">
           <div class="settings-row-title">${esc(h.title || h.url)}</div>
@@ -11309,16 +11917,8 @@ function _renderSettingsHistorik() {
     <div class="settings-section-h1">Historik</div>
     <div class="settings-section-sub">Sidor du har besökt. Lagras lokalt på din enhet och synkar inte mot någon server.</div>
 
-    <div class="settings-card">
-      <div class="settings-row" style="padding:10px 18px">
-        <input class="settings-input" id="settingsHistSearch" placeholder="Sök i historik..." value="${esc(window._settingsHistFilter)}" oninput="_settingsHistSearch(this.value)" style="flex:1">
-        <button class="settings-btn danger" onclick="_settingsClearHistory()">Rensa historik</button>
-      </div>
-    </div>
-
-    <div class="settings-card">
-      ${rows}
-    </div>
+    <div class="settings-card">${toolbarRow}</div>
+    <div class="settings-card">${rows}</div>
   `
 }
 function _settingsHistSearch(v) {
@@ -11330,9 +11930,57 @@ function _settingsHistSearch(v) {
     if (inp) { inp.focus(); inp.setSelectionRange(inp.value.length, inp.value.length) }
   }
 }
-function _settingsClearHistory() {
-  if (!confirm('Rensa hela browser-historiken? Den här åtgärden går inte att ångra.')) return
+function _histToggle(key) {
+  if (window._histSelected.has(key)) window._histSelected.delete(key)
+  else window._histSelected.add(key)
+  renderSettingsScreen()
+}
+function _histSelectAllVisible() {
+  const q = (window._settingsHistFilter || '').toLowerCase()
+  // Mirror the URL-only filter the renderer uses, otherwise "select
+  // all visible" would silently include rows that the user can't
+  // see in the list.
+  const list = q
+    ? browsingHistory.filter(h => (h.url || '').toLowerCase().includes(q))
+    : browsingHistory
+  for (const h of list.slice(0, 200)) window._histSelected.add(_histKey(h))
+  renderSettingsScreen()
+}
+function _histClearSelection() {
+  window._histSelected.clear()
+  renderSettingsScreen()
+}
+async function _histDeleteSelected() {
+  const n = window._histSelected.size
+  if (!n) return
+  const ok = await seozConfirm({
+    title: `Ta bort ${n} ${n === 1 ? 'sida' : 'sidor'}?`,
+    body:  'De markerade sidorna tas bort från historiken på den här enheten. Den här åtgärden går inte att ångra.',
+    confirmLabel: `Ta bort ${n}`,
+    cancelLabel:  'Avbryt',
+    danger: true,
+  })
+  if (!ok) return
+  const sel = window._histSelected
+  browsingHistory = browsingHistory.filter(h => !sel.has(_histKey(h)))
+  try { await SE.storeSet('browsingHistory', JSON.stringify(browsingHistory)) } catch (_) {}
+  window._histSelected = new Set()
+  toast(`${n} ${n === 1 ? 'sida' : 'sidor'} borttagna`, '#e58a00')
+  renderSettingsScreen()
+}
+async function _settingsClearHistory() {
+  const n = browsingHistory.length
+  if (!n) { toast('Historiken är redan tom', '#4680ff'); return }
+  const ok = await seozConfirm({
+    title: 'Rensa hela historiken?',
+    body:  `Tar bort alla ${n} sidor från historiken på den här enheten. Den här åtgärden går inte att ångra.`,
+    confirmLabel: 'Rensa allt',
+    cancelLabel:  'Avbryt',
+    danger: true,
+  })
+  if (!ok) return
   clearHistory()
+  window._histSelected = new Set()
   renderSettingsScreen()
 }
 
@@ -11647,6 +12295,48 @@ function _settingsSetTheme(t) {
   toast(t === 'dark' ? 'Mörkt läge på' : 'Ljust läge på', '#4680ff')
 }
 
+// Per-category labels + colours + icons for the Shield settings page.
+// Order = display order. Icons use the same SEMANTIC palette as
+// settings-row-icon so the page reads like the rest of Inställningar.
+const SHIELD_CATEGORY_META = {
+  ads: {
+    label: 'Annonser',
+    sub: 'Display, banner, video och native ad-nätverk',
+    color: 'orange',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="14" rx="2"/><path d="M3 17l4-4 4 4 6-6 4 4"/></svg>',
+  },
+  analytics: {
+    label: 'Analytics & heatmaps',
+    sub: 'Google Analytics, Tag Manager, Hotjar, Mixpanel, FullStory m.fl.',
+    color: 'purple',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="18" y1="20" x2="18" y2="10"/><line x1="12" y1="20" x2="12" y2="4"/><line x1="6" y1="20" x2="6" y2="14"/></svg>',
+  },
+  errorMonitoring: {
+    label: 'Krasch- & prestandarapporter',
+    sub: 'Sentry, Bugsnag, NewRelic — slå av om du dev-testar egen sajt',
+    color: 'red',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m10.29 3.86-8.3 14.4a2 2 0 0 0 1.73 3h16.56a2 2 0 0 0 1.73-3L13.71 3.86a2 2 0 0 0-3.42 0z"/><line x1="12" y1="9" x2="12" y2="13"/><line x1="12" y1="17" x2="12.01" y2="17"/></svg>',
+  },
+  attribution: {
+    label: 'Marknadsföringsattribution',
+    sub: 'Branch, Adjust, AppsFlyer, Kochava — relevant för mobil-landing',
+    color: 'orange',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/></svg>',
+  },
+  social: {
+    label: 'Sociala pixlar',
+    sub: 'Facebook, TikTok, LinkedIn, Twitter — kan bryta share-widgets',
+    color: 'blue',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M17 21v-2a4 4 0 0 0-4-4H5a4 4 0 0 0-4 4v2"/><circle cx="9" cy="7" r="4"/><path d="M23 21v-2a4 4 0 0 0-3-3.87"/><path d="M16 3.13a4 4 0 0 1 0 7.75"/></svg>',
+  },
+  cookieScripts: {
+    label: 'Cookie-banner-script',
+    sub: 'Blockerar CMP-bibliotek innan de laddar — kompletterar auto-klickaren',
+    color: 'gray',
+    icon: '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><circle cx="9" cy="9" r="1" fill="currentColor"/><circle cx="15" cy="11" r="1" fill="currentColor"/><circle cx="11" cy="15" r="1" fill="currentColor"/></svg>',
+  },
+}
+
 function _renderSettingsShield() {
   return `
     <div class="settings-section-h1">SEOZ Shield</div>
@@ -11662,6 +12352,16 @@ function _renderSettingsShield() {
         <div class="settings-row-action">
           <label class="set-toggle"><input type="checkbox" id="settingsBlockerToggle" ${blockerOn ? 'checked' : ''} onchange="toggleBlockerEnabled()"><div class="set-toggle-slider"></div></label>
         </div>
+      </div>
+    </div>
+
+    <!-- Per-category controls. Dimmed when master is off; toggles still
+         work but visually signal that they're moot until master flips on.
+         _settingsPostShield fills in the live state from main. -->
+    <div class="settings-card" id="settingsShieldCategoriesCard">
+      <div class="settings-card-h">Vad ska blockeras?</div>
+      <div id="settingsShieldCategories">
+        <div class="settings-row" style="color:var(--ink-3);font-size:11.5px">Laddar…</div>
       </div>
     </div>
 
@@ -11681,6 +12381,50 @@ function _renderSettingsShield() {
       </div>
     </div>
   `
+}
+
+async function _settingsPostShield() {
+  const box = document.getElementById('settingsShieldCategories')
+  const card = document.getElementById('settingsShieldCategoriesCard')
+  if (!box) return
+  let payload = null
+  try { payload = await SE.blockerGetCategories() } catch (_) {}
+  if (!payload || !payload.ok) {
+    box.innerHTML = '<div class="settings-row" style="color:var(--ink-3);font-size:11.5px">Kunde inte ladda kategorier.</div>'
+    return
+  }
+  const { categories, available, counts } = payload
+  // Dim the card when master is off — toggles still write through but
+  // the visual cue makes it clear they don't enforce until master flips.
+  if (card) card.style.opacity = blockerOn ? '1' : '0.55'
+
+  box.innerHTML = available.map(cat => {
+    const meta = SHIELD_CATEGORY_META[cat] || { label: cat, sub: '', color: 'gray', icon: '' }
+    const on = categories[cat] !== false
+    const count = counts[cat] != null ? `${counts[cat]} domäner` : ''
+    return `
+      <div class="settings-row">
+        <div class="settings-row-icon ${esc(meta.color)}">${meta.icon}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(meta.label)}</div>
+          <div class="settings-row-sub">${esc(meta.sub)}${count ? ' · ' + esc(count) : ''}</div>
+        </div>
+        <div class="settings-row-action">
+          <label class="set-toggle"><input type="checkbox" data-cat="${esc(cat)}" ${on ? 'checked' : ''} onchange="toggleShieldCategory('${esc(cat)}', this.checked)"><div class="set-toggle-slider"></div></label>
+        </div>
+      </div>`
+  }).join('')
+}
+
+window.toggleShieldCategory = async function(cat, on) {
+  // Read fresh state in case another window changed it; cheap, all in-memory.
+  let current = {}
+  try {
+    const cur = await SE.blockerGetCategories()
+    if (cur && cur.ok) current = { ...cur.categories }
+  } catch (_) {}
+  current[cat] = !!on
+  try { await SE.blockerSetCategories(current) } catch (_) {}
 }
 
 function _renderSettingsPermissions() {
@@ -11929,37 +12673,29 @@ function _renderSettingsDiagnostik() {
   `
 }
 
-function _renderSettingsJuridiskt() {
+// "Om SEOZ" merges the old separate Juridiskt + System sections into
+// one page, with an introductory paragraph at the top so new users
+// understand what the browser is. Order: intro → system info →
+// juridiska dokument (längst ner som är minst klick-attraktivt men
+// måste vara tillgängligt).
+function _renderSettingsOmSeoz() {
   return `
-    <div class="settings-section-h1">Juridiskt</div>
-    <div class="settings-section-sub">Vilka data SEOZ lagrar och vilka villkor som gäller när du använder appen.</div>
+    <div class="settings-section-h1">Om SEOZ</div>
+    <div class="settings-section-sub">SEOZ är en webbläsare byggd för SEO-arbete och vardaglig surfning, med integritet som utgångspunkt.</div>
 
-    <div class="settings-card">
-      <div class="settings-row clickable" onclick="showLegalDoc('privacy')">
-        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.shield}</div>
-        <div class="settings-row-content">
-          <div class="settings-row-title">Integritetspolicy</div>
-          <div class="settings-row-sub">Vad SEOZ lagrar och hur datan behandlas</div>
-        </div>
-        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
-      <div class="settings-row clickable" onclick="showLegalDoc('terms')">
-        <div class="settings-row-icon purple">${SETTINGS_NAV_ICONS.juridiskt}</div>
-        <div class="settings-row-content">
-          <div class="settings-row-title">Användarvillkor</div>
-          <div class="settings-row-sub">Licens, ansvarsbegränsning och tillämplig lag</div>
-        </div>
-        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
-      </div>
+    <div class="settings-card" style="padding:18px;line-height:1.6;font-size:12.5px;color:var(--ink-1)">
+      <p style="margin:0 0 10px">
+        SEOZ är en Chromium-baserad webbläsare som vi har byggt för att kombinera de bästa delarna av en modern browser med verktyg vi själva saknat: <strong>klientinsikter</strong> direkt i flikraden, <strong>SEO-analys</strong> live på sidan du tittar på, en <strong>AI-assistent</strong> som ser samma sak som du, och <strong>sync</strong> som faktiskt är end-to-end-krypterad.
+      </p>
+      <p style="margin:0 0 10px">
+        Tanken: en webbläsare ska tjäna dig, inte mata din data till någon. Bokmärken, lösenord, mejl-konton, inställningar — allt synkas mellan dina enheter via en <strong>24-ords sync-kod</strong> du själv äger. Servern (vår Supabase-instans) ser bara opaque krypterad data och kan inte dekryptera. Tappar du koden är datan borta — det är poängen.
+      </p>
+      <p style="margin:0">
+        Bygget pågår i öppen källkod på <a href="https://github.com/valdemarmattsson-beep/seoz-browser" onclick="event.preventDefault();doNav('https://github.com/valdemarmattsson-beep/seoz-browser');closeSettings()" style="color:var(--p);cursor:pointer">github.com/valdemarmattsson-beep/seoz-browser</a>. Vi använder den själva varje dag — om något känns fel eller saknas, säg till.
+      </p>
     </div>
-  `
-}
 
-function _renderSettingsSystem() {
-  return `
-    <div class="settings-section-h1">System</div>
-    <div class="settings-section-sub">Versionsinformation, uppdateringar och MCP-server.</div>
-
+    <div class="settings-card-h" style="padding:18px 0 8px">SYSTEM</div>
     <div class="settings-card">
       <div class="settings-row">
         <div class="settings-row-icon gray">${SETTINGS_NAV_ICONS.system}</div>
@@ -11982,9 +12718,29 @@ function _renderSettingsSystem() {
         </div>
       </div>
     </div>
+
+    <div class="settings-card-h" style="padding:18px 0 8px">JURIDISKT</div>
+    <div class="settings-card">
+      <div class="settings-row clickable" onclick="showLegalDoc('privacy')">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.shield}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Integritetspolicy</div>
+          <div class="settings-row-sub">Vad SEOZ lagrar och hur datan behandlas</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+      <div class="settings-row clickable" onclick="showLegalDoc('terms')">
+        <div class="settings-row-icon purple">${SETTINGS_NAV_ICONS.juridiskt}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">Användarvillkor</div>
+          <div class="settings-row-sub">Licens, ansvarsbegränsning och tillämplig lag</div>
+        </div>
+        <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
+      </div>
+    </div>
   `
 }
-function _settingsPostSystem() {
+function _settingsPostOmSeoz() {
   SE.updaterGetVersion().then(v => {
     const el = document.getElementById('settingsVersion')
     if (el) el.textContent = 'v' + v
@@ -12498,6 +13254,9 @@ async function init() {
 
   const key = await SE.getApiKey()
   if (key) {
+    // Restore demo-mode flag across restarts so the seoz-status pill
+    // turns red on launch when the persisted key is the demo key.
+    synced.isDemo = (key === 'demo_123')
     document.getElementById('auth').classList.add('gone')
     // Auto-sync on startup
     await syncNow()
@@ -12554,8 +13313,12 @@ function _setAuthError(el, msg) {
 // (legacy behavior). When unconnected/skipped it routes back to the
 // auth screen so the user can connect.
 function onSeozPillClick() {
-  if (synced.user) toggleDock()
-  else showAuthAgain()
+  // Red states (no account / demo) — silent no-op. Cursor:not-allowed
+  // + tooltip "Endast för SEOZ-användare" already tell the user the
+  // button is disabled; firing showAuthAgain() here would dump the
+  // user back on the auth overlay which feels like a forced logout.
+  if (!synced.user || synced.isDemo) return
+  toggleDock()
 }
 
 // User chose to use the browser without connecting a SEOZ account.
@@ -12608,7 +13371,9 @@ async function doConnect(mode) {
 
   if (mode === 'demo') {
     await SE.setApiKey(key)
+    synced.isDemo = true
     document.getElementById('auth').classList.add('gone')
+    if (typeof updateSyncUI === 'function') updateSyncUI()
     toast('Demokonto anslutet!', '#2ca87f')
     return
   }
@@ -12621,6 +13386,7 @@ async function doConnect(mode) {
       // Connecting clears any prior "skipped"-state so the auth flow
       // is fresh next time the user disconnects.
       try { await SE.storeSet('skippedAuth', false) } catch (_) {}
+      synced.isDemo = false  // real-mode connect overrides any prior demo session
       synced.user = res.user
       synced.workspace = res.workspace
       synced.clients = _filterActiveClients(res.clients || [])
@@ -12661,7 +13427,7 @@ async function doDisconnect() {
   // auth wall — disconnecting is an explicit choice, just like skip.
   // Set skippedAuth so init() on next launch also stays put.
   try { await SE.storeSet('skippedAuth', true) } catch (_) {}
-  synced.user = null; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.tasks = null; synced.activeClientId = null
+  synced.user = null; synced.isDemo = false; synced.workspace = null; synced.clients = []; synced.keywords = null; synced.aiVisibility = null; synced.tasks = null; synced.activeClientId = null
   updateSyncUI()
   renderBmBar()
   // Re-render the active panel so any "client-required" panels swap
@@ -12744,23 +13510,36 @@ function updateSyncUI() {
   const sb   = document.getElementById('sbSync')
   const dot  = document.getElementById('sbDot')
   const pill = document.getElementById('seozPill')
-  const pillText = pill?.querySelector('.seoz-pill-label')
-  // Three-state pill:
-  //   connected:    green pulse, "SEOZ" — pill toggles dock as before
-  //   unconnected:  muted dot, "Anslut SEOZ" — click → re-open auth
-  //   inactive:     red dot — sync error. Existing behavior elsewhere.
-  if (synced.user) {
+  // Three-state status button:
+  //   .error  red  — no SEOZ account / API not synced. Click → auth.
+  //   .idle   grey — connected but sidopanel closed (standby).
+  //   .connected green — connected AND sidopanel currently open.
+  // Sync-error code paths still set legacy .inactive — that aliases to
+  // .error in the CSS so red still surfaces through.
+  if (pill) pill.classList.remove('connected', 'idle', 'error', 'inactive', 'disconnected', 'unconnected')
+  // body.no-seoz hides the dock + seoz-panel entirely. Cleared on
+  // green/grey, set on red so demo / no-account users don't see a
+  // sidebar they can't use.
+  if (!synced.user || synced.isDemo) {
+    document.body.classList.add('no-seoz')
+    if (sb)  sb.textContent = synced.isDemo ? 'Demo-läge' : 'Ej kopplad'
+    if (dot) dot.style.background = 'var(--r)'
+    pill?.classList.add('error')
+    if (pill) pill.title = 'Endast för SEOZ-användare'
+  } else if (currentPanel) {
+    document.body.classList.remove('no-seoz')
     const now = new Date()
     if (sb)  sb.textContent = `Synkad ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`
     if (dot) dot.style.background = 'var(--g)'
-    pill?.classList.remove('inactive', 'unconnected')
-    if (pillText) pillText.textContent = 'SEOZ'
+    pill?.classList.add('connected')
+    if (pill) pill.title = 'SEOZ — sidopanel öppen. Klicka för att stänga'
   } else {
-    if (sb)  sb.textContent = 'Ej kopplad'
+    document.body.classList.remove('no-seoz')
+    const now = new Date()
+    if (sb)  sb.textContent = `Synkad ${now.getHours()}:${String(now.getMinutes()).padStart(2,'0')}`
     if (dot) dot.style.background = 'var(--ink-3)'
-    pill?.classList.remove('inactive')
-    pill?.classList.add('unconnected')
-    if (pillText) pillText.textContent = 'Anslut SEOZ'
+    pill?.classList.add('idle')
+    if (pill) pill.title = 'SEOZ — sidopanel stängd. Klicka för att öppna'
   }
 }
 
@@ -12991,7 +13770,11 @@ function renderBmBar() {
   // Loose bookmarks (no folder)
   bookmarks.filter(b => !b.folder).forEach(b => bar.appendChild(makeBmEl(b)))
 
-  // Folders
+  // Folders — only the BUTTON lives in chrome now. The dropdown itself
+  // is a sibling WebContentsView (bm-folder-popup.html); see
+  // toggleFolderDrop() for the IPC + payload-build. Folder button keeps
+  // its drop-target so users can drag a bookmark onto the folder name
+  // without opening the dropdown — that's the most common DnD path.
   getAllFolders().forEach(fname => {
     const wrap = document.createElement('div')
     wrap.style.cssText = 'position:relative;flex-shrink:0'
@@ -13000,9 +13783,10 @@ function renderBmBar() {
     const btn = document.createElement('div')
     btn.className = 'bm-item bm-folder-item'
     btn.innerHTML = `<svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-2px;margin-right:4px;opacity:.85"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg><span>${esc(fname)}</span><span class="bm-folder-arrow">▾</span>`
-    btn.onclick = () => toggleFolderDrop(wrap)
+    btn.onclick = (e) => { e.stopPropagation(); toggleFolderDrop(wrap) }
     btn.oncontextmenu = (e) => { e.preventDefault(); showCtx(e, folderCtxItems(fname)) }
-    // Drop target: drag bookmark onto folder
+    // Drop target: drag bookmark onto folder. Still works because the
+    // button stays in chrome (DnD never had to cross a WebContentsView).
     btn.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); e.dataTransfer.dropEffect = 'move'; btn.classList.add('drag-over') })
     btn.addEventListener('dragleave', e => { if (!btn.contains(e.relatedTarget)) btn.classList.remove('drag-over') })
     btn.addEventListener('drop', e => {
@@ -13010,44 +13794,6 @@ function renderBmBar() {
       if (bmDragId != null) { moveBmToFolder(bmDragId, fname) }
     })
     wrap.appendChild(btn)
-
-    // Dropdown
-    const drop = document.createElement('div')
-    drop.className = 'bm-drop'
-    const inFolder = bookmarks.filter(b => b.folder === fname)
-    inFolder.forEach(b => {
-      const item = document.createElement('div')
-      item.className = 'bm-drop-item'
-      item.draggable = true
-      item.dataset.bmid = b.id
-      const fav = b.favicon ? `<img class="bm-ico" src="${esc(b.favicon)}" onerror="this.style.display='none'">` : '<svg class="bm-ico" viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
-      item.innerHTML = fav + `<span>${esc(b.title)}</span>`
-      item.onclick = (e) => { e.stopPropagation(); wv.loadURL(b.url); closeAllDrops() }
-      item.oncontextmenu = (e) => { e.preventDefault(); e.stopPropagation(); showCtx(e, bmCtxItems(b)) }
-      item.addEventListener('dragstart', e => { bmDragId = b.id; item.classList.add('dragging'); e.dataTransfer.effectAllowed = 'move'; e.dataTransfer.setData('text/plain', String(b.id)) })
-      item.addEventListener('dragend', () => { bmDragId = null; item.classList.remove('dragging') })
-      item.addEventListener('dragover', e => { e.preventDefault(); e.stopPropagation(); item.classList.add('drag-over') })
-      item.addEventListener('dragleave', e => { if (!item.contains(e.relatedTarget)) item.classList.remove('drag-over') })
-      item.addEventListener('drop', e => {
-        e.preventDefault(); e.stopPropagation(); item.classList.remove('drag-over')
-        if (bmDragId != null && bmDragId !== b.id) reorderBm(bmDragId, b.id)
-      })
-      drop.appendChild(item)
-    })
-    if (!inFolder.length) {
-      const empty = document.createElement('div')
-      empty.className = 'bm-drop-item muted'
-      empty.textContent = 'Tom mapp — dra hit bokmärken'
-      // Accept drops on empty folder
-      empty.addEventListener('dragover', e => { e.preventDefault(); empty.classList.add('drag-over') })
-      empty.addEventListener('dragleave', () => empty.classList.remove('drag-over'))
-      empty.addEventListener('drop', e => {
-        e.preventDefault(); empty.classList.remove('drag-over')
-        if (bmDragId != null) moveBmToFolder(bmDragId, fname)
-      })
-      drop.appendChild(empty)
-    }
-    wrap.appendChild(drop)
     bar.appendChild(wrap)
   })
 
@@ -13057,6 +13803,10 @@ function renderBmBar() {
   updateBmStar()
 }
 
+// Bookmark-bar's "Välj klient"-button. The dropdown itself lives in a
+// sibling WebContentsView (client-picker-popup.html) — this renderer
+// only owns the trigger button + the data payload sent via IPC. See
+// the action dispatcher below for click → selectClient/Project/etc.
 function renderClientSelector(bar) {
   const wrap = document.createElement('div')
   wrap.className = 'client-sel'
@@ -13079,75 +13829,31 @@ function renderClientSelector(bar) {
   const btn = document.createElement('button')
   btn.className = 'client-sel-btn'
   btn.innerHTML = `<div class="client-sel-dot" style="background:${col}"></div><span class="client-sel-name">${esc(label)}</span><span class="client-sel-arrow">▾</span>`
-  btn.onclick = (e) => { e.stopPropagation(); toggleClientDrop(wrap) }
+  btn.onclick = (e) => { e.stopPropagation(); toggleClientDrop(btn) }
   wrap.appendChild(btn)
-
-  const drop = document.createElement('div')
-  drop.className = 'client-sel-drop'
-  drop.innerHTML = `
-    <div class="client-sel-drop-hdr">
-      <span style="flex:1">Klienter</span>
-      <button class="client-sel-refresh" type="button" onclick="event.stopPropagation();forceRefreshClients()" title="Tvinga synk från seoz.io">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a9 9 0 1 1-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
-      </button>
-    </div>
-  `
-
-  if (synced.clients.length) {
-    synced.clients.forEach((c, i) => {
-      const item = document.createElement('div')
-      item.className = 'client-sel-drop-item' + (c.id === synced.activeClientId ? ' active' : '')
-      const cCol = colors[i % colors.length]
-      const score = c.seoScore != null ? Math.round(c.seoScore) : '—'
-      item.innerHTML = `<div class="client-sel-dot" style="background:${cCol}"></div><span style="flex:1">${esc(c.name)}</span><span style="font-size:10px;color:${cCol};font-weight:700">${score}</span>`
-      item.onclick = (e) => { e.stopPropagation(); selectClient(c.id); closeClientDrop() }
-      drop.appendChild(item)
-    })
-  } else {
-    const empty = document.createElement('div')
-    empty.className = 'client-sel-drop-item'
-    empty.style.cssText = 'color:var(--muted);font-style:italic;font-size:10px'
-    empty.textContent = 'Inga klienter — synka ditt konto'
-    drop.appendChild(empty)
-  }
-
-  // ── Projects section ──────────────────────────────────────
-  const projects = synced.projects || []
-  const projHdr = document.createElement('div')
-  projHdr.className = 'client-sel-drop-hdr'
-  projHdr.style.marginTop = '6px'
-  projHdr.innerHTML = '<span style="flex:1">Projekt</span>'
-  drop.appendChild(projHdr)
-
-  projects.forEach(p => {
-    const item = document.createElement('div')
-    item.className = 'client-sel-drop-item' + (p.id === synced.activeProjectId ? ' active' : '')
-    item.innerHTML = `<div class="client-sel-dot" style="background:${p.color}"></div><span style="flex:1">${esc(p.name)}</span><button class="client-sel-refresh" style="margin-left:auto" onclick="event.stopPropagation();_projectMenu('${p.id}', this)" title="Hantera projekt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></button>`
-    item.onclick = (e) => {
-      if (e.target.closest('button')) return
-      e.stopPropagation(); selectProject(p.id); closeClientDrop()
-    }
-    drop.appendChild(item)
-  })
-
-  // "Skapa projekt"-knapp längst ner
-  const create = document.createElement('div')
-  create.className = 'client-sel-drop-item'
-  create.style.cssText = 'color:var(--p);font-weight:600;font-size:11px;justify-content:center'
-  create.innerHTML = '+ Skapa projekt'
-  create.onclick = async (e) => {
-    e.stopPropagation()
-    const proj = await _createProjectPrompt()
-    if (proj) {
-      // Activate the new project immediately so the user sees it.
-      await selectProject(proj.id)
-      closeClientDrop()
-    }
-  }
-  drop.appendChild(create)
-
-  wrap.appendChild(drop)
   bar.appendChild(wrap)
+}
+
+// Build the serialisable data payload the popup needs. Stays in sync
+// with the columns the in-DOM dropdown used to render.
+function _clientPickerPayload() {
+  const colors = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
+  return {
+    clients: (synced.clients || []).map((c, i) => ({
+      id: c.id,
+      name: c.name,
+      color: colors[i % colors.length],
+      seoScore: c.seoScore != null ? c.seoScore : null,
+    })),
+    projects: (synced.projects || []).map(p => ({
+      id: p.id,
+      name: p.name,
+      color: p.color || '#888',
+    })),
+    activeClientId: synced.activeClientId || null,
+    activeProjectId: synced.activeProjectId || null,
+    isDark: document.documentElement.dataset.theme === 'dark',
+  }
 }
 
 // Tiny per-project menu — rename / delete. Triggered by the dot-icon
@@ -13162,18 +13868,24 @@ function _projectMenu(projectId, anchor) {
   ])
 }
 
-function toggleClientDrop(wrap) {
-  const drop = wrap?.querySelector('.client-sel-drop')
-  if (!drop) return
-  const isOpen = drop.classList.contains('open')
-  closeAllDrops()
-  if (!isOpen) {
-    drop.classList.add('open')
-    // Pull fresh clients from seoz.io in the background so deletions
-    // / renames made in the platform show up immediately instead of
-    // waiting up to 30 s for the next auto-sync.
-    refreshClientsKeepDropOpen()
-  }
+// State flag — popup lives in a sibling WebContentsView so we can't
+// query its DOM directly. Tracking open here so toggle() can close on
+// second-click and outside-click handlers know what to do.
+let _clientDropOpen = false
+
+function toggleClientDrop(btn) {
+  if (_clientDropOpen) { closeClientDrop(); return }
+  const r = (btn || document.querySelector('.client-sel-btn'))?.getBoundingClientRect()
+  if (!r) return
+  // anchorX = button right edge, anchorY = bottom + 4px gap. Main
+  // right-aligns the popup, same trick as the chrome kebab popup.
+  SE.clientPicker.show(Math.round(r.right), Math.round(r.bottom + 4), _clientPickerPayload())
+  _clientDropOpen = true
+  // Pull fresh clients from seoz.io in the background so deletions /
+  // renames made in the platform show up immediately instead of
+  // waiting for the next auto-sync. updateState pushes the fresh
+  // payload to the popup without re-anchoring.
+  refreshClientsKeepDropOpen()
 }
 
 async function refreshClientsKeepDropOpen(opts = {}) {
@@ -13196,9 +13908,12 @@ async function refreshClientsKeepDropOpen(opts = {}) {
     }
     updateSyncUI()
     renderBmBar()
-    // renderBmBar replaces the picker DOM — re-open the fresh dropdown.
-    const newDrop = document.querySelector('.client-sel-drop')
-    if (newDrop) newDrop.classList.add('open')
+    // Picker popup is a sibling WebContentsView — push the fresh data
+    // straight to it via updateState (no re-render of the in-DOM
+    // dropdown is needed since there isn't one anymore).
+    if (_clientDropOpen) {
+      try { SE.clientPicker.updateState(_clientPickerPayload()) } catch (_) {}
+    }
     if (currentPanel) renderPanelContent(currentPanel)
 
     if (opts.verbose) {
@@ -13242,11 +13957,56 @@ async function refreshClientsKeepDropOpen(opts = {}) {
 window.forceRefreshClients = () => refreshClientsKeepDropOpen({ verbose: true })
 
 function closeClientDrop() {
-  document.querySelectorAll('.client-sel-drop.open').forEach(d => d.classList.remove('open'))
+  if (!_clientDropOpen) return
+  try { SE.clientPicker.hide() } catch (_) {}
+  _clientDropOpen = false
 }
 
-// Close client dropdown on outside click
-document.addEventListener('click', () => closeClientDrop())
+// Action dispatcher — popup forwards click ids through main. Each id
+// is decoded here and routed to the existing select* / refresh /
+// project-management functions.
+SE.clientPicker?.onAction((payload) => {
+  const id = payload && payload.id
+  if (!id) return
+  if (id.startsWith('client:')) {
+    const cid = id.slice('client:'.length)
+    selectClient(cid)
+    closeClientDrop()
+    return
+  }
+  if (id.startsWith('project:')) {
+    const pid = id.slice('project:'.length)
+    selectProject(pid)
+    closeClientDrop()
+    return
+  }
+  if (id.startsWith('project-menu:')) {
+    const pid = id.slice('project-menu:'.length)
+    closeClientDrop()
+    // Re-open the per-project rename/delete menu next to the ⋮ button.
+    // Anchor coords arrived from the popup in window-local space.
+    const x = typeof payload.anchorX === 'number' ? payload.anchorX : 0
+    const y = typeof payload.anchorY === 'number' ? payload.anchorY : 0
+    showCtx({ clientX: x, clientY: y }, [
+      { label: 'Byt namn',       action: () => _renameProject(pid).then(renderBmBar) },
+      '---',
+      { label: 'Ta bort projekt', danger: true, action: () => _deleteProject(pid).then(renderBmBar) },
+    ])
+    return
+  }
+  if (id === 'refresh') {
+    refreshClientsKeepDropOpen({ verbose: true })
+    return
+  }
+  if (id === 'create-project') {
+    closeClientDrop()
+    _createProjectPrompt().then(proj => {
+      if (proj) selectProject(proj.id)
+    })
+    return
+  }
+})
+SE.clientPicker?.onClosed(() => { _clientDropOpen = false })
 
 function makeBmEl(b) {
   const el = document.createElement('div')
@@ -13304,13 +14064,73 @@ function reorderBm(dragId, targetId, before = true) {
 }
 
 // ── Folder dropdown ──
+// Bookmark-folder dropdown — popup lives in a sibling WebContentsView
+// (bm-folder-popup.html). Renderer keeps the open-state flag + the
+// active folder name so toggle() can close on second click and so the
+// outside-click handler knows what to send.
+let _bmFolderOpen = false
+let _bmFolderActive = null
+
 function toggleFolderDrop(wrap) {
-  const drop = wrap.querySelector('.bm-drop')
-  const isOpen = drop.classList.contains('open')
-  closeAllDrops()
-  if (!isOpen) drop.classList.add('open')
+  const fname = wrap?.dataset?.folder
+  if (!fname) return
+  // Same folder → toggle closed.
+  if (_bmFolderOpen && _bmFolderActive === fname) { closeAllDrops(); return }
+  const btn = wrap.querySelector('.bm-folder-item')
+  const r = btn?.getBoundingClientRect()
+  if (!r) return
+  // Build serialisable items list — popup renders these. Drag-and-drop
+  // inside the popup isn't supported (HTML5 DnD doesn't cross
+  // WebContentsView boundaries), so we don't need draggable / drop
+  // metadata anymore — just id, title, favicon, url.
+  const items = bookmarks
+    .filter(b => b.folder === fname)
+    .map(b => ({ id: b.id, title: b.title, url: b.url, favicon: b.favicon || null }))
+  const isDark = document.documentElement.dataset.theme === 'dark'
+  SE.bmFolder.show(Math.round(r.left), Math.round(r.bottom + 4), { folder: fname, items, isDark })
+  _bmFolderOpen = true
+  _bmFolderActive = fname
 }
-function closeAllDrops() { document.querySelectorAll('.bm-drop').forEach(d => d.classList.remove('open')) }
+
+function closeAllDrops() {
+  // No more in-DOM .bm-drop elements (folder dropdowns moved to a
+  // WebContentsView popup). Hide the popup if it's open; flag clears
+  // when main confirms via 'closed'.
+  if (_bmFolderOpen) {
+    try { SE.bmFolder.hide() } catch (_) {}
+    _bmFolderOpen = false
+    _bmFolderActive = null
+  }
+}
+
+// Bookmark-folder action dispatcher — popup forwards click ids:
+//   open:<id> → load the bookmark URL into the active webview
+//   ctx:<id>  → open the existing per-bookmark right-click menu at
+//               anchor (translated to chrome-window-local in main)
+SE.bmFolder?.onAction((payload) => {
+  const id = payload && payload.id
+  if (!id) return
+  if (id.startsWith('open:')) {
+    const bmId = id.slice('open:'.length)
+    // bookmarks ids may be numeric — coerce both sides for safe lookup.
+    const b = bookmarks.find(x => String(x.id) === String(bmId))
+    if (!b) return
+    closeAllDrops()
+    if (typeof wv !== 'undefined' && wv && b.url) wv.loadURL(b.url)
+    return
+  }
+  if (id.startsWith('ctx:')) {
+    const bmId = id.slice('ctx:'.length)
+    const b = bookmarks.find(x => String(x.id) === String(bmId))
+    if (!b) return
+    closeAllDrops()
+    const x = typeof payload.anchorX === 'number' ? payload.anchorX : 0
+    const y = typeof payload.anchorY === 'number' ? payload.anchorY : 0
+    showCtx({ clientX: x, clientY: y }, bmCtxItems(b))
+    return
+  }
+})
+SE.bmFolder?.onClosed(() => { _bmFolderOpen = false; _bmFolderActive = null })
 
 // ── Context menu ──
 function showCtx(e, items) {
@@ -13574,9 +14394,13 @@ function updateBmStar() {
   star.classList.toggle('saved', exists)
 }
 
-// Close menus on click outside
+// Close menus on click outside. .bm-drop no longer exists in this
+// document (folder dropdowns moved to a sibling WebContentsView), so
+// the only chrome-side anchor we need to spare is the folder button.
+// The popup itself self-closes on blur, so clicks landing in the page
+// don't need to be intercepted here.
 document.addEventListener('click', e => {
-  if (!e.target.closest('.bm-folder-item') && !e.target.closest('.bm-drop')) closeAllDrops()
+  if (!e.target.closest('.bm-folder-item')) closeAllDrops()
   if (!e.target.closest('.ctx-menu')) hideCtx()
 })
 
@@ -13600,6 +14424,48 @@ function seozPrompt(title, defaultVal = '') {
 function resolvePrompt(val) {
   document.getElementById('promptModal').classList.remove('open')
   if (_promptResolve) { _promptResolve(val && val.trim() ? val.trim() : null); _promptResolve = null }
+}
+
+// ── Custom confirm — replaces native confirm() so UX is v2-themed ──
+// Returns Promise<boolean>. Pass `danger:true` to colour the confirm
+// button red for destructive actions (e.g. wipe sync bucket).
+let _confirmResolve = null
+function seozConfirm({ title = 'Bekräfta', body = '', confirmLabel = 'OK', cancelLabel = 'Avbryt', danger = false } = {}) {
+  return new Promise(resolve => {
+    _confirmResolve = resolve
+    document.getElementById('confirmTitle').textContent = title
+    document.getElementById('confirmBody').textContent  = body
+    const okBtn = document.getElementById('confirmOkBtn')
+    const cancelBtn = document.getElementById('confirmCancelBtn')
+    okBtn.textContent = confirmLabel
+    cancelBtn.textContent = cancelLabel
+    if (danger) {
+      okBtn.style.background = '#dc2626'
+      okBtn.style.color = '#fff'
+      okBtn.style.borderColor = '#dc2626'
+    } else {
+      okBtn.style.background = ''
+      okBtn.style.color = ''
+      okBtn.style.borderColor = ''
+    }
+    document.getElementById('confirmModal').classList.add('open')
+    // Esc → cancel. Bind once per open; unbinds on resolve.
+    const onKey = (e) => {
+      if (e.key === 'Escape') { e.preventDefault(); _resolveConfirm(false) }
+      else if (e.key === 'Enter') { e.preventDefault(); _resolveConfirm(true) }
+    }
+    document.addEventListener('keydown', onKey)
+    _confirmResolve._cleanup = () => document.removeEventListener('keydown', onKey)
+    setTimeout(() => okBtn.focus(), 50)
+  })
+}
+function _resolveConfirm(answer) {
+  document.getElementById('confirmModal').classList.remove('open')
+  if (_confirmResolve) {
+    try { _confirmResolve._cleanup && _confirmResolve._cleanup() } catch (_) {}
+    _confirmResolve(!!answer)
+    _confirmResolve = null
+  }
 }
 
 // ── Setup bookmark bar events (once) ──
@@ -13664,6 +14530,78 @@ function updateBlockerUI() {
 // by main.js _ensureShieldView). Show/hide via IPC; main positions it
 // relative to the trigger button's bounding rect.
 let _shieldPopupOpen = false
+// ── Site Info popup ────────────────────────────────────────────
+// Strawberry-style site-info panel (TLS state + per-origin clear-data)
+// triggered by the (i)-button next to the bookmark star. Same sibling-
+// WebContentsView pattern as Shield popup — see main.js
+// _ensureSiteInfoView. Master state (current tab URL) lives in chrome.
+let _siteInfoOpen = false
+function toggleSiteInfo(e) {
+  if (e) e.stopPropagation()
+  if (_siteInfoOpen) {
+    _hideSiteInfo()
+    return
+  }
+  const btn = document.getElementById('siteInfoBtn')
+  if (!btn) return
+  const r = btn.getBoundingClientRect()
+  const tab = tabs.find(t => t.id === activeId)
+  const url = tab?.url || ''
+  let host = '', scheme = 'https', origin = ''
+  try {
+    const u = new URL(url)
+    host = u.hostname
+    scheme = u.protocol.replace(':', '')
+    origin = u.origin
+  } catch (_) {
+    // about: / chrome: / file: / seoz: → no host, popup will show "—"
+  }
+  if (!host) {
+    toast('Ingen webbplats laddad', '#4680ff')
+    return
+  }
+  try {
+    if (window.seoz?.siteInfo?.show) {
+      window.seoz.siteInfo.show(
+        Math.round(r.right),
+        Math.round(r.bottom + 6),
+        host,
+        tab?.favicon || '',
+        scheme,
+        origin,
+      )
+      _siteInfoOpen = true
+    }
+  } catch (_) {}
+}
+function _hideSiteInfo() {
+  if (!_siteInfoOpen) return
+  try { window.seoz?.siteInfo?.hide?.() } catch (_) {}
+  _siteInfoOpen = false
+}
+// Outside-click closes the popup. Same pattern as Shield popup —
+// the popup itself is a separate WebContentsView so its own clicks
+// don't fire any DOM events here, only chrome-side clicks do.
+document.addEventListener('mousedown', (e) => {
+  if (!_siteInfoOpen) return
+  // Don't close when clicking the trigger — toggleSiteInfo handles it.
+  const btn = document.getElementById('siteInfoBtn')
+  if (btn && btn.contains(e.target)) return
+  _hideSiteInfo()
+}, true)
+// Action results from main → toast.
+if (window.seoz?.siteInfo?.onActionDone) {
+  window.seoz.siteInfo.onActionDone(({ action, ok, error }) => {
+    if (!ok) { toast('Fel: ' + (error || 'okänt'), '#dc2626'); return }
+    if (action === 'clear-cookies') {
+      toast('Cookies rensade för denna webbplats', '#2ca87f')
+    } else if (action === 'clear-cache') {
+      toast('Cache rensad (gäller alla sajter)', '#2ca87f')
+    }
+    _hideSiteInfo()
+  })
+}
+
 function toggleBlockerPopup() {
   if (_shieldPopupOpen) {
     _hideShieldPopup()
@@ -13710,6 +14648,11 @@ async function toggleBlockerEnabled() {
   blockerOn = !blockerOn
   await SE.blockerSetEnabled(blockerOn)
   updateBlockerUI()
+  // Refresh the Shield settings page (if currently open) so the category
+  // card dims/un-dims to reflect that toggles only matter when master on.
+  if (window._settingsSection === 'shield' && typeof _settingsPostShield === 'function') {
+    _settingsPostShield().catch(() => {})
+  }
   toast(blockerOn ? 'Shield aktiverad' : 'Shield avstängd', blockerOn ? '#2ca87f' : '#e58a00')
 }
 
@@ -13909,93 +14852,99 @@ document.addEventListener('click', e => {
 // ══════════════════════════════════════════════════════
 let zoomLevel = 100
 
+// Chrome kebab menu — same sibling-WebContentsView pattern as the
+// shield popup / urlSuggest / tab-tooltip. The popup is dumb: it
+// receives an items list via IPC and emits action ids on click.
+// The renderer keeps the action closures and dispatches them here.
+let _chromeMenuActions = {}
+let _chromeMenuOpen = false
+
 function toggleChromeMenu() {
-  const dd = document.getElementById('chromeDd')
-  if (dd.classList.contains('open')) { closeChromeMenu(); return }
-  buildChromeMenu()
-  // Position below the button
+  if (_chromeMenuOpen) { closeChromeMenu(); return }
+  const { items, actions } = buildChromeMenuItems()
+  _chromeMenuActions = actions
   const btn = document.getElementById('chromeMenuBtn')
   const r = btn.getBoundingClientRect()
-  dd.style.top = (r.bottom + 4) + 'px'
-  dd.style.right = (window.innerWidth - r.right) + 'px'
-  dd.style.left = 'auto'
-  dd.classList.add('open')
+  // anchorX = button right edge, anchorY = bottom + 4px gap. Main
+  // right-aligns the popup to anchorX so it drops directly under the
+  // kebab regardless of viewport width.
+  const isDark = document.documentElement.dataset.theme === 'dark'
+  SE.chromeMenu.show(Math.round(r.right), Math.round(r.bottom + 4), items, zoomLevel, isDark)
+  _chromeMenuOpen = true
 }
-function closeChromeMenu() { document.getElementById('chromeDd').classList.remove('open') }
+function closeChromeMenu() {
+  if (!_chromeMenuOpen) return
+  try { SE.chromeMenu.hide() } catch (_) {}
+  _chromeMenuOpen = false
+}
 
-function buildChromeMenu() {
-  const dd = document.getElementById('chromeDd')
-  dd.innerHTML = ''
-  // Lucide line-icons (24-grid, 1.8 stroke). Replaces emoji per SEOZ OS v2.0.
+// Returns { items, actions } — items is pure serialisable data sent
+// across IPC, actions is the parallel id-keyed closure map kept in
+// the renderer where the closures actually have meaning.
+function buildChromeMenuItems() {
   const lc = (path) => `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`
   const ico = {
-    plus:     lc('<path d="M12 5v14M5 12h14"/>'),
-    link:     lc('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
-    copy:     lc('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
-    external: lc('<path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/>'),
-    search:   lc('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>'),
-    printer:  lc('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
-    clock:    lc('<circle cx="12" cy="12" r="10"/><polyline points="12 6 12 12 16 14"/>'),
-    download: lc('<path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7 10 12 15 17 10"/><line x1="12" y1="15" x2="12" y2="3"/>'),
-    star:     lc('<polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/>'),
-    shield:   lc('<path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>'),
-    scan:     lc('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/>'),
+    plus:       lc('<path d="M12 5v14M5 12h14"/>'),
+    link:       lc('<path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"/><path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"/>'),
+    copy:       lc('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+    search:     lc('<circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/>'),
+    printer:    lc('<polyline points="6 9 6 2 18 2 18 9"/><path d="M6 18H4a2 2 0 0 1-2-2v-5a2 2 0 0 1 2-2h16a2 2 0 0 1 2 2v5a2 2 0 0 1-2 2h-2"/><rect x="6" y="14" width="12" height="8"/>'),
+    scan:       lc('<path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/>'),
     fullscreen: lc('<polyline points="15 3 21 3 21 9"/><polyline points="9 21 3 21 3 15"/><line x1="21" y1="3" x2="14" y2="10"/><line x1="3" y1="21" x2="10" y2="14"/>'),
-    split:    lc('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>'),
-    moon:     lc('<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>'),
-    sun:      lc('<circle cx="12" cy="12" r="4"/><path d="M12 2v2M12 20v2M4.93 4.93l1.41 1.41M17.66 17.66l1.41 1.41M2 12h2M20 12h2M6.34 17.66l-1.41 1.41M19.07 4.93l-1.41 1.41"/>'),
-    settings: lc('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
-    zoomIn:   lc('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>'),
+    split:      lc('<rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/>'),
+    settings:   lc('<circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09a1.65 1.65 0 0 0-1-1.51 1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06A1.65 1.65 0 0 0 4.6 15a1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09a1.65 1.65 0 0 0 1.51-1 1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/>'),
+    zoom:       lc('<circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/><line x1="11" y1="8" x2="11" y2="14"/><line x1="8" y1="11" x2="14" y2="11"/>'),
   }
-  const isDark = document.documentElement.dataset.theme === 'dark'
+
+  const splitOpen = _splitWebviews.has(activeId)
   const items = [
-    { icon: ico.plus,      label:'Ny flik', shortcut:'Ctrl+T', action: () => newTab() },
-    { icon: ico.link,      label:'Ny flik med URL', shortcut:'', action: () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) } },
-    '---',
-    { icon: ico.copy,      label:'Kopiera URL', shortcut:'', action: () => copyUrl() },
-    '---',
-    'zoom',
-    '---',
-    { icon: ico.search,    label:'Sök på sidan', shortcut:'Ctrl+F', action: () => openFindBar() },
-    { icon: ico.printer,   label:'Skriv ut', shortcut:'Ctrl+P', action: () => doPrint() },
-    '---',
-    // Bokmärken/Historik/Nedladdningar har egna sektioner i Inställningar
-    // sedan v1.10.41. Ctrl+D fortsätter spara aktuell sida (URL-bar
-    // ★-knappen). Ctrl+H och Ctrl+J öppnar respektive settings-sektion.
-    // Shield-status finns redan i URL-baren — togs bort härifrån.
-    { icon: ico.scan,      label:'SEOZ Inspector', shortcut:'F12', action: () => toggleInspector() },
-    { icon: ico.fullscreen,label:'Helskärm', shortcut:'F11', action: () => SE.fullscreen() },
-    { icon: ico.split,     label: _splitWebviews.has(activeId) ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\', action: () => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() } },
-    '---',
-    // Tema flyttat till Inställningar → Utseende sedan v1.10.40
-    { icon: ico.settings,  label:'Inställningar', shortcut:'', action: () => openSettings() },
+    { kind:'item', id:'new-tab',     icon: ico.plus,       label:'Ny flik',         shortcut:'Ctrl+T' },
+    { kind:'item', id:'new-tab-url', icon: ico.link,       label:'Ny flik med URL', shortcut:'' },
+    { kind:'sep' },
+    { kind:'item', id:'copy-url',    icon: ico.copy,       label:'Kopiera URL',     shortcut:'' },
+    { kind:'sep' },
+    { kind:'zoom', icon: ico.zoom },
+    { kind:'sep' },
+    { kind:'item', id:'find',        icon: ico.search,     label:'Sök på sidan',    shortcut:'Ctrl+F' },
+    { kind:'item', id:'print',       icon: ico.printer,    label:'Skriv ut',        shortcut:'Ctrl+P' },
+    { kind:'sep' },
+    { kind:'item', id:'inspector',   icon: ico.scan,       label:'SEOZ Inspector',  shortcut:'F12' },
+    { kind:'item', id:'fullscreen',  icon: ico.fullscreen, label:'Helskärm',        shortcut:'F11' },
+    { kind:'item', id:'split-toggle',icon: ico.split,      label: splitOpen ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\' },
+    { kind:'sep' },
+    { kind:'item', id:'settings',    icon: ico.settings,   label:'Inställningar',   shortcut:'' },
   ]
-  // Make the zoom-row icon available to the zoom block below
-  items._zoomIcon = ico.zoomIn
-  items.forEach(item => {
-    if (item === '---') {
-      const sep = document.createElement('div'); sep.className = 'chrome-dd-sep'; dd.appendChild(sep); return
-    }
-    if (item === 'zoom') {
-      // Zoom control row
-      const row = document.createElement('div'); row.className = 'zoom-row'
-      const resetIcon = `<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="width:12px;height:12px"><path d="M3 12a9 9 0 1 0 3-6.7L3 8"/><path d="M3 3v5h5"/></svg>`
-      row.innerHTML = `
-        <span class="cdi-icon">${items._zoomIcon}</span>
-        <button class="zoom-btn" onclick="event.stopPropagation();doZoom(-10)">−</button>
-        <span class="zoom-label" id="zoomLabel">${zoomLevel}%</span>
-        <button class="zoom-btn" onclick="event.stopPropagation();doZoom(10)">+</button>
-        <button class="zoom-btn" style="margin-left:4px;width:auto;padding:0 8px;display:inline-flex;align-items:center;justify-content:center" onclick="event.stopPropagation();doZoom(0)" aria-label="Återställ zoom">${resetIcon}</button>
-      `
-      dd.appendChild(row); return
-    }
-    const el = document.createElement('div')
-    el.className = 'chrome-dd-item'
-    el.innerHTML = `<span class="cdi-icon">${item.icon}</span><span class="cdi-label">${item.label}</span>${item.shortcut ? `<span class="cdi-shortcut">${item.shortcut}</span>` : ''}`
-    el.onclick = () => { closeChromeMenu(); item.action() }
-    dd.appendChild(el)
-  })
+
+  const actions = {
+    'new-tab':     () => newTab(),
+    'new-tab-url': () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) },
+    'copy-url':    () => copyUrl(),
+    'find':        () => openFindBar(),
+    'print':       () => doPrint(),
+    'inspector':   () => toggleInspector(),
+    'fullscreen':  () => SE.fullscreen(),
+    'split-toggle':() => { _splitWebviews.has(activeId) ? closeSplitView(activeId) : openSplitView() },
+    'settings':    () => openSettings(),
+    // Zoom keeps the menu open so user can tap +/- multiple times
+    // without re-clicking the kebab. updateState repaints the % label.
+    'zoom-in':     () => { doZoom(10);  try { SE.chromeMenu.updateState(zoomLevel) } catch (_) {} },
+    'zoom-out':    () => { doZoom(-10); try { SE.chromeMenu.updateState(zoomLevel) } catch (_) {} },
+    'zoom-reset':  () => { doZoom(0);   try { SE.chromeMenu.updateState(zoomLevel) } catch (_) {} },
+  }
+  return { items, actions }
 }
+
+// Action dispatcher — fires when popup forwards a click. Zoom actions
+// keep the menu open; everything else auto-closes after running.
+SE.chromeMenu?.onAction((payload) => {
+  const id = payload && payload.id
+  if (!id) return
+  const handler = _chromeMenuActions[id]
+  if (typeof handler !== 'function') return
+  try { handler() } catch (err) { console.error('[chrome-menu action]', id, err) }
+  if (id !== 'zoom-in' && id !== 'zoom-out' && id !== 'zoom-reset') closeChromeMenu()
+})
+SE.chromeMenu?.onClosed(() => { _chromeMenuOpen = false })
 
 // ══════════════════════════════════════════════════════
 //  USER MENU (header avatar dropdown)
@@ -19384,7 +20333,7 @@ document.addEventListener('keydown', e => {
     }
     else if (document.getElementById('pwModal').classList.contains('open')) closePasswords()
     else if (document.getElementById('userDd').classList.contains('open')) closeUserMenu()
-    else if (document.getElementById('chromeDd').classList.contains('open')) closeChromeMenu()
+    else if (_chromeMenuOpen) closeChromeMenu()
     else if (document.getElementById('historyOverlay').classList.contains('open')) closeHistory()
     else if (document.getElementById('inspectorDrawer').classList.contains('open')) closeInspector()
     else {

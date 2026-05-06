@@ -380,6 +380,21 @@ const REJECT_TEXTS = [
   'endast nödvändigt', 'bara nödvändiga',
 ]
 
+// High-confidence subsets — strings so specific to consent UI that
+// they're effectively impossible to encounter elsewhere on a page
+// ("godkänn alla" never appears outside a CMP). Buttons matching these
+// skip the _looksLikeCookieBanner gate, which catches CMPs that use
+// non-standard container ids/classes (Schibsted's Sourcepoint fork,
+// custom in-house CMPs, etc.).
+const HIGH_CONFIDENCE_ACCEPT_TEXTS = [
+  'accept all cookies', 'allow all cookies', 'allow all',
+  'godkänn alla', 'acceptera alla', 'tillåt alla',
+]
+const HIGH_CONFIDENCE_REJECT_TEXTS = [
+  'reject all cookies', 'reject all', 'refuse all',
+  'avvisa alla', 'neka alla', 'endast nödvändiga', 'only necessary',
+]
+
 function _isVisible(el) {
   if (!el) return false
   const r = el.getBoundingClientRect()
@@ -392,8 +407,18 @@ function _isVisible(el) {
 function _looksLikeCookieBanner(el) {
   let cur = el
   for (let i = 0; i < 6 && cur; i++) {
-    const sig = ((cur.id || '') + ' ' + (cur.className || '')).toLowerCase()
-    if (/cookie|consent|gdpr|privacy|cmp|onetrust|didomi|cookiebot/.test(sig)) return true
+    // Probe id, className, role, and aria-label — Schibsted's Sourcepoint
+    // fork doesn't put "cookie" in the id/class but does set
+    // role="dialog" + aria-label="Cookieinställningar". A few CMP-vendor
+    // signatures (sourcepoint, sp_message, tcf, sn-cmp, schibsted)
+    // cover the major in-house implementations that rebrand themselves.
+    const sig = (
+      (cur.id || '') + ' ' +
+      (typeof cur.className === 'string' ? cur.className : '') + ' ' +
+      (cur.getAttribute && (cur.getAttribute('aria-label') || '')) + ' ' +
+      (cur.getAttribute && (cur.getAttribute('role') || ''))
+    ).toLowerCase()
+    if (/cookie|consent|gdpr|privacy|cmp|onetrust|didomi|cookiebot|sourcepoint|sp_message|sp-message|tcf|sn-cmp|schibsted/.test(sig)) return true
     cur = cur.parentElement
   }
   return false
@@ -401,6 +426,7 @@ function _looksLikeCookieBanner(el) {
 
 function _clickByText(kind) {
   const wanted = kind === 'accept' ? ACCEPT_TEXTS : REJECT_TEXTS
+  const highConf = kind === 'accept' ? HIGH_CONFIDENCE_ACCEPT_TEXTS : HIGH_CONFIDENCE_REJECT_TEXTS
   // Scan buttons + role=button + anchor links — banners use all three.
   const nodes = document.querySelectorAll(
     'button, [role="button"], input[type="button"], input[type="submit"], a'
@@ -410,7 +436,12 @@ function _clickByText(kind) {
     const txt = (el.textContent || el.value || '').trim().toLowerCase()
     if (!txt || txt.length > 60) continue
     if (!wanted.includes(txt)) continue
-    if (!_looksLikeCookieBanner(el)) continue
+    // High-confidence text bypasses the banner-context gate — buttons
+    // saying "Godkänn alla" / "Accept all cookies" effectively only
+    // exist in CMPs, so we trust the text alone. Other matches still
+    // need a banner-like container to avoid clicking random "OK" or
+    // "I agree" buttons elsewhere on the page.
+    if (!highConf.includes(txt) && !_looksLikeCookieBanner(el)) continue
     try { el.click(); return true } catch (_) { /* keep trying */ }
   }
   return false
@@ -450,18 +481,137 @@ async function _initCookieMode() {
   }
 }
 
+// ════════════════════════════════════════════════════════════════════
+//  COSMETIC AD-SLOT HIDING — collapses leftover empty containers from
+//  network-blocked ads ("Annons" / "Sponsored" placeholders, etc.).
+//  Two complementary mechanisms:
+//    1) <style> injection with high-confidence selectors (Adsense ins
+//       tags, googlesyndication iframes, [class*="annons"]). Runs at
+//       document_start so the DOM never paints a flash of ad slot.
+//    2) Mutation-driven label scan — finds tiny elements whose only
+//       content is an exact ad-label text and hides their nearest
+//       block ancestor. Catches custom slots that don't use any of
+//       the predictable class names.
+//  Gated on the ads category being enabled — if the user has chosen
+//  to allow ads through the network blocker, we don't hide their UI.
+// ════════════════════════════════════════════════════════════════════
+
+let _adsCosmeticEnabled = false
+let _adsLabels = ['annons', 'reklam', 'sponsrat', 'sponsored', 'advertisement']
+
+const COSMETIC_CSS = `
+  /* High-confidence ad iframes + Adsense ins tags */
+  ins.adsbygoogle, ins.adsbygoogle:empty,
+  ins.adsbygoogle[data-ad-status="unfilled"],
+  iframe[src*="googlesyndication" i],
+  iframe[src*="doubleclick.net" i],
+  iframe[src*="adsystem.amazon" i],
+  iframe[src*="adservice" i],
+  iframe[id*="google_ads_iframe"],
+  [data-ad-unit], [data-ad-slot], [data-google-query-id] {
+    display: none !important;
+  }
+
+  /* Generic ad-slot wrapper conventions. Substring matches are narrow
+     enough that real article structure rarely trips them. */
+  [class*="ad-slot" i], [class*="adslot" i],
+  [class*="ad-wrapper" i], [class*="ad-banner" i],
+  [class*="banner-ad" i],
+  [id*="ad-slot" i], [id*="adslot" i],
+  [id^="ad_" i], [id^="ad-" i], [id*="banner_ad" i] {
+    display: none !important;
+  }
+
+  /* Swedish/Nordic conventions. :not(a) excludes plain links to
+     "annonsering"-info pages — those are content, not slots. */
+  [class*="annons" i]:not(a):not(button),
+  [id*="annons" i]:not(a):not(button),
+  [class*="reklam" i]:not(a):not(button),
+  [id*="reklam" i]:not(a):not(button) {
+    display: none !important;
+  }
+`
+
+function _injectCosmeticCss() {
+  if (!_adsCosmeticEnabled) return
+  if (document.getElementById('__seoz_ad_cosmetic_css')) return
+  try {
+    const style = document.createElement('style')
+    style.id = '__seoz_ad_cosmetic_css'
+    style.textContent = COSMETIC_CSS
+    // documentElement so it works even before <head> is parsed.
+    ;(document.head || document.documentElement).appendChild(style)
+  } catch (_) {}
+}
+
+function _hideAdLabelContainers() {
+  if (!_adsCosmeticEnabled) return
+  // Tiny elements that typically wrap the ad-slot label. Avoid heavy
+  // tags (article, section by themselves) since those are content.
+  const selectors = 'span, div, p, em, small, b, strong, label, h6'
+  let nodes
+  try { nodes = document.querySelectorAll(selectors) } catch (_) { return }
+  for (const el of nodes) {
+    if (el.dataset && el.dataset.seozAdHidden) continue
+    // Single text-node only — labels are bare text without nested HTML.
+    if (!el.firstChild || el.firstChild !== el.lastChild) continue
+    if (el.firstChild.nodeType !== 3 /* TEXT_NODE */) continue
+    const txt = (el.textContent || '').trim().toLowerCase()
+    if (!txt || txt.length > 20) continue
+    // Strip trailing punctuation so "Annons:" / "Annons." also match.
+    const norm = txt.replace(/[.:;!?]+$/, '')
+    if (!_adsLabels.includes(norm)) continue
+    // Walk up to find a block-level wrapper that likely contains the
+    // empty ad slot together with this label. 5 levels up is enough
+    // for typical sajt structures without bleeding into article body.
+    let wrapper = el.parentElement
+    let depth = 0
+    while (wrapper && depth < 5) {
+      const tag = wrapper.tagName && wrapper.tagName.toLowerCase()
+      if (wrapper === document.body) break
+      if (['section', 'aside', 'figure', 'div'].includes(tag)) {
+        try {
+          wrapper.style.setProperty('display', 'none', 'important')
+          wrapper.dataset.seozAdHidden = '1'
+        } catch (_) {}
+        break
+      }
+      wrapper = wrapper.parentElement
+      depth++
+    }
+    try { el.dataset.seozAdHidden = '1' } catch (_) {}
+  }
+}
+
+async function _initCosmeticAds() {
+  try {
+    const cfg = await ipcRenderer.invoke('blocker-cosmetic-config')
+    if (cfg && cfg.enabled) {
+      _adsCosmeticEnabled = true
+      if (Array.isArray(cfg.labels) && cfg.labels.length) _adsLabels = cfg.labels
+      _injectCosmeticCss()
+    }
+  } catch (_) { /* IPC down — leave cosmetic off */ }
+}
+
 function _bootstrap() {
   _initCookieMode().then(() => {
     _handleCookieBanner()
   })
+  _initCosmeticAds().then(() => {
+    _hideAdLabelContainers()
+  })
   _scanAndRequest()
-  // Re-scan on DOM mutations — covers SPA login modals AND lazy-mounted
-  // cookie banners. Debounced so we don't run the scan on every keystroke.
+  // Re-scan on DOM mutations — covers SPA login modals, lazy-mounted
+  // cookie banners, AND late-rendering ad slots (which are usually the
+  // last thing a page paints). Debounced so we don't run the scan on
+  // every keystroke.
   const observer = new MutationObserver(() => {
     clearTimeout(_scanTimer)
     _scanTimer = setTimeout(() => {
       _scanAndRequest()
       _handleCookieBanner()
+      _hideAdLabelContainers()
     }, 250)
   })
   observer.observe(document.documentElement, { childList: true, subtree: true })

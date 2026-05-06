@@ -4,12 +4,15 @@
 <meta charset="utf-8">
 <title>SEOZ Shield popup</title>
 <style>
-  /* Transparent root — the WebContentsView itself is positioned and
-     sized by main; only the .card below paints visible chrome. Same
-     pattern as tooltip.html. Inline dark-theme values because this
-     HTML loads in its own renderer without the design-system tokens. */
+  /* The view bounds fit the card exactly; body bg matches the card
+     so even on edge-pixel rounding errors there's no gray sliver
+     visible. Same pattern as site-info popup. Inline dark theme
+     because this HTML loads in its own renderer without the
+     design-system tokens. */
   html, body {
-    margin: 0; padding: 0; background: transparent; overflow: hidden;
+    margin: 0; padding: 0;
+    background: #1a1d23;
+    overflow: hidden;
     font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
     -webkit-user-select: none; user-select: none;
     color: #f8f8f8;
@@ -19,9 +22,7 @@
     background: #1a1d23;
     border: 1px solid rgba(255,255,255,.08);
     border-radius: 10px;
-    box-shadow: 0 8px 24px rgba(0,0,0,.4);
     padding: 12px;
-    margin: 4px;
     overflow: hidden;
   }
 
@@ -138,11 +139,13 @@
         btn.classList.toggle('reject', active && m === 'reject')
       }
     }
-    // Re-measure card height and tell main so the WebContentsView resizes.
+    // Re-measure card height and tell main so the WebContentsView
+    // resizes. View now fits the card exactly — the +12 buffer used
+    // to compensate for the (now removed) margin/box-shadow gap.
     requestAnimationFrame(() => {
       const r = card.getBoundingClientRect()
       if (window.seoz?.shield?.requestResize) {
-        window.seoz.shield.requestResize(Math.ceil(r.height + 12))
+        window.seoz.shield.requestResize(Math.ceil(r.height))
       }
     })
   }

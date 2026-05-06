@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="dark">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<title>SEOZ Bookmark Folder</title>
+<style>
+  /* Hardcoded tokens kept in lockstep with index.html dark/light vars
+     since this popup is a separate document. */
+  :root {
+    --card: #20242c;
+    --panel: #1a1d24;
+    --border: rgba(255,255,255,.08);
+    --txt: rgba(255,255,255,.88);
+    --head: rgba(255,255,255,.98);
+    --muted: rgba(255,255,255,.42);
+    --hover: rgba(255,255,255,.06);
+    --p: #5b8dff;
+  }
+  [data-theme="light"] {
+    --card: #ffffff;
+    --panel: #f5f5f3;
+    --border: rgba(0,0,0,.08);
+    --txt: #1a1a1a;
+    --head: #0a0a0a;
+    --muted: #8a8a85;
+    --hover: rgba(0,0,0,.04);
+    --p: #3b6fe0;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; }
+  html, body {
+    margin: 0; padding: 0; background: transparent;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    font-size: 12px; color: var(--txt);
+    overflow: hidden; user-select: none;
+  }
+  /* Body has no padding — earlier 4px pad created a transparent halo
+     around the card that showed whatever was under the WebContentsView
+     (e.g. the SEOZ-mgmt row's grey bar bleeding in at the bottom).
+     Without padding the card fills the view exactly; only the rounded
+     corners' tiny triangles remain transparent. */
+
+  .drop {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 4px 0;
+    /* No box-shadow — anything beyond the view bounds gets clipped, and
+       the body has no padding to give a shadow room. Border + the card
+       sitting visually above the page is enough separation. */
+    min-width: 200px;
+    max-width: 380px;
+    width: max-content;
+  }
+
+  .item {
+    display: flex; align-items: center; gap: 8px;
+    padding: 6px 12px; cursor: pointer;
+    font-size: 11.5px; color: var(--txt);
+    transition: background .12s;
+  }
+  .item:hover { background: var(--hover); }
+  .item .ico {
+    width: 14px; height: 14px; flex-shrink: 0;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .item .ico img,
+  .item .ico svg { width: 14px; height: 14px; border-radius: 2px; }
+  .item .ico-fallback { color: var(--muted); }
+  .item .name {
+    flex: 1; overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .empty {
+    padding: 8px 12px; color: var(--muted); font-style: italic; font-size: 11px;
+  }
+</style>
+</head>
+<body>
+  <div class="drop" id="drop"></div>
+  <script>
+    'use strict'
+
+    const root = document.getElementById('drop')
+    let _items = []
+    // Default favicon — same Orbit-S used by the chrome bookmark bar
+    // when a real favicon is missing.
+    const FALLBACK_ICO = '<svg viewBox="0 0 200 200" fill="none" class="ico-fallback" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
+
+    function escHtml(s) {
+      return String(s == null ? '' : s)
+        .replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
+        .replace(/"/g,'&quot;').replace(/'/g,'&#39;')
+    }
+
+    function render() {
+      if (!_items.length) {
+        // Empty state — shorter than the in-DOM version since DnD into
+        // the popup doesn't work across the WebContentsView boundary.
+        // Users can drop on the folder BUTTON (still in chrome) instead.
+        root.innerHTML = '<div class="empty">Tom mapp</div>'
+      } else {
+        root.innerHTML = _items.map(b => {
+          const fav = b.favicon
+            ? '<img src="' + escHtml(b.favicon) + '" onerror="this.outerHTML=\'' + FALLBACK_ICO.replace(/"/g, '&quot;').replace(/'/g, '&#39;') + '\'">'
+            : FALLBACK_ICO
+          return '<div class="item" data-id="' + escHtml(b.id) + '" title="' + escHtml(b.url) + '">'
+               +   '<span class="ico">' + fav + '</span>'
+               +   '<span class="name">' + escHtml(b.title) + '</span>'
+               + '</div>'
+        }).join('')
+      }
+      requestAnimationFrame(() => {
+        // Body has no padding — view bounds match the card exactly so
+        // there's no transparent halo around the rounded corners.
+        const w = root.offsetWidth
+        const h = root.offsetHeight
+        try { window.seoz?.bmFolder?.resize(w, h) } catch (_) {}
+      })
+    }
+
+    // Left-click → open bookmark.
+    document.addEventListener('click', (e) => {
+      const row = e.target.closest('.item[data-id]')
+      if (!row) return
+      const id = row.dataset.id
+      try { window.seoz?.bmFolder?.action('open:' + id) } catch (_) {}
+    })
+
+    // Right-click → bubble through main so renderer can pop the
+    // existing showCtx menu (rename, delete, etc.) at the click point.
+    document.addEventListener('contextmenu', (e) => {
+      e.preventDefault()
+      const row = e.target.closest('.item[data-id]')
+      if (!row) return
+      const id = row.dataset.id
+      try {
+        window.seoz?.bmFolder?.action('ctx:' + id, {
+          anchorX: Math.round(e.clientX),
+          anchorY: Math.round(e.clientY),
+        })
+      } catch (_) {}
+    })
+
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape') {
+        try { window.seoz?.bmFolder?.close() } catch (_) {}
+      }
+    })
+    window.addEventListener('blur', () => {
+      try { window.seoz?.bmFolder?.close() } catch (_) {}
+    })
+
+    if (window.seoz?.bmFolder?.onItems) {
+      window.seoz.bmFolder.onItems((payload) => {
+        _items = Array.isArray(payload.items) ? payload.items : []
+        document.documentElement.dataset.theme = payload.isDark === false ? 'light' : 'dark'
+        render()
+      })
+    }
+  </script>
+</body>
+</html>

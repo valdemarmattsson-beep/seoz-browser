@@ -65,6 +65,60 @@ contextBridge.exposeInMainWorld('seoz', {
   // active tab lands on /v3/signin/rejected.
   clearGoogleAuthData: () => ipcRenderer.invoke('seoz-clear-google-auth-data'),
 
+  // E2E-encrypted sync (BIP-39 mnemonic-derived keys, see sync-engine.js).
+  sync: {
+    getStatus: ()       => ipcRenderer.invoke('sync:get-status'),
+    enable:    ()       => ipcRenderer.invoke('sync:enable'),
+    restore:   (phrase) => ipcRenderer.invoke('sync:restore', { mnemonic: phrase }),
+    disable:   (wipeBucket = false) => ipcRenderer.invoke('sync:disable', { wipeBucket }),
+    pushAll:   ()       => ipcRenderer.invoke('sync:push-all'),
+    pullAll:   ()       => ipcRenderer.invoke('sync:pull-all'),
+    pushOne:   (category) => ipcRenderer.invoke('sync:push-one', { category }),
+    onStatus:  (cb) => ipcRenderer.on('sync:status', (_e, status) => {
+      try { cb(status || {}) } catch (err) { console.error('[sync onStatus]', err) }
+    }),
+    onBookmarksApplied: (cb) => ipcRenderer.on('sync:bookmarks-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onBookmarksApplied]', err) }
+    }),
+    onSettingsApplied: (cb) => ipcRenderer.on('sync:settings-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onSettingsApplied]', err) }
+    }),
+    onTabsApplied: (cb) => ipcRenderer.on('sync:tabs-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onTabsApplied]', err) }
+    }),
+    onPasswordsApplied: (cb) => ipcRenderer.on('sync:passwords-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onPasswordsApplied]', err) }
+    }),
+    onSecretsApplied: (cb) => ipcRenderer.on('sync:secrets-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onSecretsApplied]', err) }
+    }),
+    onMailApplied: (cb) => ipcRenderer.on('sync:mail-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onMailApplied]', err) }
+    }),
+    onNewsApplied: (cb) => ipcRenderer.on('sync:news-applied', () => {
+      try { cb() } catch (err) { console.error('[sync onNewsApplied]', err) }
+    }),
+  },
+
+  // Site Info popup — Strawberry-style site-info panel triggered
+  // by a button beside the bookmark star. Shows TLS state +
+  // per-origin clear-data actions. Sibling WebContentsView, same
+  // z-order trick as the others.
+  siteInfo: {
+    show: (anchorX, anchorY, host, favicon, scheme, origin) =>
+            ipcRenderer.send('site-info:show', { anchorX, anchorY, host, favicon, scheme, origin }),
+    hide: () => ipcRenderer.send('site-info:hide'),
+    onActionDone: (cb) => ipcRenderer.on('site-info:action-done', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[siteInfo onActionDone]', err) }
+    }),
+    // Cert arrives async after a TLS handshake (~100-500ms). Popup
+    // shows "Hämtar..." until this fires. Renderer in popup only —
+    // not used by the chrome renderer.
+    onCert: (cb) => ipcRenderer.on('site-info:cert', (_e, cert) => {
+      try { cb(cert) } catch (err) { console.error('[siteInfo onCert]', err) }
+    }),
+  },
+
   // Generic chrome-label tooltip — single shared WebContentsView used
   // for hover labels on dock icons, etc. Floats above the page like
   // the tab tooltip / Shield popup.
@@ -101,6 +155,58 @@ contextBridge.exposeInMainWorld('seoz', {
     }),
     onAction: (cb) => ipcRenderer.on('shield-popup:action', (_e, payload) => {
       try { cb(payload || {}) } catch (err) { console.error('[shieldPopup onAction]', err) }
+    }),
+  },
+
+  // Chrome kebab-menu — sibling WebContentsView, same pattern as
+  // shieldPopup. Chrome renderer pushes items + state via show(); the
+  // popup renders itself and emits 'chrome-menu:action' when clicked.
+  chromeMenu: {
+    show:         (anchorX, anchorY, items, zoomLevel, isDark) =>
+                    ipcRenderer.send('chrome-menu:show', { anchorX, anchorY, items, zoomLevel, isDark }),
+    hide:         ()              => ipcRenderer.send('chrome-menu:hide'),
+    updateState:  (zoomLevel)     => ipcRenderer.send('chrome-menu:update-state', { zoomLevel }),
+    onAction: (cb) => ipcRenderer.on('chrome-menu:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[chromeMenu onAction]', err) }
+    }),
+    onClosed: (cb) => ipcRenderer.on('chrome-menu:closed', () => {
+      try { cb() } catch (err) { console.error('[chromeMenu onClosed]', err) }
+    }),
+  },
+
+  // Client / project picker — sibling WebContentsView, same shape as
+  // chromeMenu. Renderer pushes the synced.clients / .projects arrays
+  // via show(); popup emits 'client:<id>' / 'project:<id>' / 'refresh'
+  // / 'create-project' / 'project-menu:<id>' as action ids.
+  clientPicker: {
+    show:         (anchorX, anchorY, payload) =>
+                    ipcRenderer.send('client-picker:show', { anchorX, anchorY, ...(payload || {}) }),
+    hide:         ()        => ipcRenderer.send('client-picker:hide'),
+    updateState:  (payload) => ipcRenderer.send('client-picker:update-state', payload || {}),
+    onAction: (cb) => ipcRenderer.on('client-picker:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[clientPicker onAction]', err) }
+    }),
+    onClosed: (cb) => ipcRenderer.on('client-picker:closed', () => {
+      try { cb() } catch (err) { console.error('[clientPicker onClosed]', err) }
+    }),
+  },
+
+  // Bookmark-folder dropdown — sibling WebContentsView. Renderer pushes
+  // a folder's items via show(); popup emits 'open:<id>' on left-click
+  // and 'ctx:<id>' (with anchorX/Y) on right-click for the rename/delete
+  // menu. Drag-and-drop into the popup isn't supported (HTML5 DnD doesn't
+  // cross WebContentsView boundaries); drop on the folder BUTTON in the
+  // chrome bar still works.
+  bmFolder: {
+    show:         (anchorX, anchorY, payload) =>
+                    ipcRenderer.send('bm-folder:show', { anchorX, anchorY, ...(payload || {}) }),
+    hide:         ()        => ipcRenderer.send('bm-folder:hide'),
+    updateState:  (payload) => ipcRenderer.send('bm-folder:update-state', payload || {}),
+    onAction: (cb) => ipcRenderer.on('bm-folder:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[bmFolder onAction]', err) }
+    }),
+    onClosed: (cb) => ipcRenderer.on('bm-folder:closed', () => {
+      try { cb() } catch (err) { console.error('[bmFolder onClosed]', err) }
     }),
   },
 
@@ -233,6 +339,10 @@ contextBridge.exposeInMainWorld('seoz', {
   blockerSetEnabled: v => ipcRenderer.invoke('blocker-set-enabled', v),
   blockerGetStats:   () => ipcRenderer.invoke('blocker-get-stats'),
   blockerResetStats: () => ipcRenderer.send('blocker-reset-stats'),
+  // Per-category toggles (Settings → SEOZ Shield). The popup keeps
+  // the simple master enable/disable; categories are settings-only.
+  blockerGetCategories: ()    => ipcRenderer.invoke('blocker-get-categories'),
+  blockerSetCategories: (cats)=> ipcRenderer.invoke('blocker-set-categories', cats),
 
   // Cookie-banner auto-handler — saves the user from clicking "Accept"/"Reject"
   // on every site. Mode is 'off' | 'accept' | 'reject', stored per profile.

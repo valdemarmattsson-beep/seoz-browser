@@ -262,6 +262,66 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-submit:hover{background:var(--p600)}
 .home-submit:active{transform:scale(.95)}
 .home-submit svg{width:16px;height:16px}
+.home-chat{
+  width:100%;max-height:min(52vh, 520px);
+  margin-bottom:14px;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px 16px 12px;box-shadow:0 1px 2px rgba(0,0,0,.04);
+  display:flex;flex-direction:column;gap:10px;position:relative;
+  overflow:hidden;
+}
+.home-chat-list{
+  flex:1;min-height:0;overflow-y:auto;
+  display:flex;flex-direction:column;gap:10px;padding-right:4px;
+}
+.home-chat-list::-webkit-scrollbar{width:6px}
+.home-chat-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+.home-msg{
+  display:flex;flex-direction:column;max-width:82%;
+  font-size:13px;line-height:1.55;word-break:break-word;white-space:pre-wrap;
+  padding:9px 13px;border-radius:14px;
+}
+.home-msg.user{
+  align-self:flex-end;background:var(--p);color:#fff;
+  border-bottom-right-radius:4px;
+}
+.home-msg.assistant{
+  align-self:flex-start;background:var(--panel);color:var(--txt);
+  border:1px solid var(--border);border-bottom-left-radius:4px;
+}
+.home-msg.assistant strong{color:var(--head)}
+.home-msg code{
+  background:rgba(0,0,0,.18);padding:1px 5px;border-radius:4px;
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:12px;
+}
+.home-msg.thinking{
+  color:var(--muted);font-style:italic;font-size:12px;
+}
+.home-msg.thinking::after{
+  content:'';display:inline-block;width:14px;text-align:left;
+  animation:home-msg-dots 1.2s steps(4,end) infinite;
+}
+@keyframes home-msg-dots{
+  0%{content:''} 25%{content:'.'} 50%{content:'..'} 75%{content:'...'} 100%{content:''}
+}
+.home-chat-clear{
+  position:absolute;top:6px;right:6px;
+  display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;
+  background:transparent;border:1px solid var(--border);border-radius:100px;
+  font:inherit;font-size:10px;font-weight:500;color:var(--muted);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s;
+}
+.home-chat-clear:hover{background:var(--panel);color:var(--head);border-color:var(--p)}
+.home-chat-clear svg{width:11px;height:11px}
+/* When the home chat is active, hide the hero — the chat takes center stage. */
+#homeScreen.chat-active .home-mark,
+#homeScreen.chat-active .home-greet,
+#homeScreen.chat-active .home-sub,
+#homeScreen.chat-active .home-chips,
+#homeScreen.chat-active .home-recent-title,
+#homeScreen.chat-active .home-recent{
+  display:none;
+}
 .home-chips{
   display:flex;flex-wrap:wrap;gap:8px;justify-content:center;margin-top:18px;width:100%;
 }
@@ -468,21 +528,30 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-news-empty{padding:4px 8px 2px;color:var(--muted);font-size:11px;line-height:1.5}
 .home-news-empty a{color:var(--p);cursor:pointer;text-decoration:underline}
 
-/* Narrow-viewport toggle + slide-in overlay. */
+/* "Moduler" toggle — permanently visible at all viewport widths, lets
+   the user switch between a clean home (no rails) and the rails-out
+   layout. State is the .modules-out class on #homeScreen. */
 .home-rail-toggle{
-  position:absolute;top:14px;right:14px;z-index:8;
-  display:none;align-items:center;gap:6px;height:30px;padding:0 12px;
+  position:absolute;top:14px;right:14px;z-index:5;
+  display:inline-flex;align-items:center;gap:6px;height:30px;padding:0 12px;
   background:var(--card);border:1px solid var(--border);border-radius:100px;
   font:inherit;font-size:11px;font-weight:500;color:var(--txt);
-  cursor:pointer;transition:background .12s,border-color .12s;
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;
 }
 .home-rail-toggle:hover{background:var(--panel);border-color:var(--p)}
-.home-rail-toggle svg{width:13px;height:13px;color:var(--muted)}
+.home-rail-toggle svg{width:13px;height:13px;color:var(--muted);transition:color .12s}
+#homeScreen.modules-out .home-rail-toggle{
+  background:var(--p);border-color:var(--p);color:#fff;
+}
+#homeScreen.modules-out .home-rail-toggle svg{color:#fff}
 .home-rail-toggle .hrt-badge{
   display:inline-flex;align-items:center;justify-content:center;
   min-width:18px;height:16px;padding:0 5px;border-radius:8px;
   background:var(--p);color:#fff;font-size:9px;font-weight:700;
   font-variant-numeric:tabular-nums;
+}
+#homeScreen.modules-out .home-rail-toggle .hrt-badge{
+  background:#fff;color:var(--p);
 }
 .home-rail-close{
   display:none;position:absolute;top:14px;right:14px;
@@ -495,6 +564,19 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .home-rail-close svg{width:14px;height:14px}
 .home-rail-backdrop{display:none}
 
+/* Wide viewport (≥1100px): rails inline by default OR hidden when
+   the user collapses them. The 3-column grid track structure stays
+   the same regardless — we just hide the rail content. That way the
+   centre column (and the hero inside it) sits at exactly the same
+   viewport position whether modules are out or hidden. */
+@media (min-width: 1100px){
+  /* Default = clean home: rails hidden, but their grid columns are
+     still reserved so the centre column doesn't reflow. */
+  #homeScreen .home-rail{display:none}
+  /* modules-out: rails visible. Grid is identical, just rails appear. */
+  #homeScreen.modules-out .home-rail{display:contents}
+}
+
 @media (max-width: 1099px){
   /* Layout collapses: hero is the only thing in flow, both rails
      slide in from the right as one shared overlay. */
@@ -506,7 +588,7 @@ body.wv-fullscreen .main{flex:1;height:100vh}
     display:flex;flex-direction:column;
     position:fixed;top:0;right:0;bottom:0;width:320px;max-width:90vw;
     background:var(--bg);border-left:1px solid var(--border);
-    padding:54px 16px 16px;gap:14px;z-index:7;
+    padding:54px 16px 16px;gap:14px;z-index:20;
     transform:translateX(100%);transition:transform .22s ease;
     overflow-y:auto;
   }
@@ -515,12 +597,12 @@ body.wv-fullscreen .main{flex:1;height:100vh}
     display:contents;
     max-height:none;overflow:visible;
   }
-  #homeScreen.show-rail .home-rail{transform:translateX(0)}
-  #homeScreen.show-rail .home-rail-backdrop{
-    display:block;position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:6;
+  #homeScreen.modules-out .home-rail{transform:translateX(0)}
+  #homeScreen.modules-out .home-rail-backdrop{
+    display:block;position:absolute;inset:0;background:rgba(0,0,0,.35);z-index:15;
   }
-  .home-rail-toggle{display:inline-flex}
-  .home-rail-close{display:inline-flex}
+  /* Close button inside the rail, only on narrow when rail is open. */
+  #homeScreen.modules-out .home-rail-close{display:inline-flex;z-index:21}
 }
 
 /* ══════════════════════════════════════════════════════════
@@ -634,6 +716,13 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 .settings-card > .settings-card-h + .settings-row{border-top:none}
 .settings-row.clickable{cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
 .settings-row.clickable:hover{background:var(--hover)}
+/* Selectable row used in Search engine + Language sections — full-row
+   click target with hover and an "active" state matching the rest of
+   the design system. */
+.settings-row.se-row{cursor:pointer;transition:background var(--dur-fast) var(--ease-out)}
+.settings-row.se-row:hover{background:var(--hover)}
+.settings-row.se-row.active{background:rgba(70,128,255,.06)}
+.settings-row.se-row.active .settings-row-title{color:var(--p)}
 .settings-row-icon{
   width:32px;height:32px;border-radius:8px;flex-shrink:0;
   display:flex;align-items:center;justify-content:center;
@@ -746,14 +835,15 @@ body.wv-fullscreen .main{flex:1;height:100vh}
 /* Folder switcher — same skeleton as account switcher, stacks beside it. */
 .mail-folder-wrap{position:relative;display:inline-flex}
 .mail-folder-btn{
-  display:inline-flex;align-items:center;gap:5px;
-  background:none;border:1px solid var(--border);padding:3px 8px 3px 7px;border-radius:999px;
-  font:inherit;font-size:10.5px;font-weight:600;color:var(--txt);letter-spacing:.01em;
+  display:inline-flex;align-items:center;gap:8px;
+  background:none;border:1px solid var(--border);padding:6px 14px 6px 12px;border-radius:999px;
+  font:inherit;font-size:11.5px;font-weight:600;color:var(--txt);letter-spacing:.01em;
   cursor:pointer;transition:background .12s,border-color .12s,color .12s;
 }
 .mail-folder-btn:hover{background:var(--card);border-color:var(--p);color:var(--p)}
-.mail-folder-btn svg.mail-folder-chev{width:10px;height:10px;opacity:.65;flex-shrink:0}
-.mail-folder-btn-icon{width:12px;height:12px;flex-shrink:0;opacity:.85}
+.mail-folder-btn svg.mail-folder-chev{width:12px;height:12px;opacity:.65;flex-shrink:0}
+.mail-folder-btn-icon{width:14px;height:14px;flex-shrink:0;opacity:.85;display:inline-flex;align-items:center;justify-content:center}
+.mail-folder-btn-icon svg{width:14px;height:14px}
 .mail-folder-menu{
   position:absolute;top:calc(100% + 4px);left:0;
   background:var(--card);border:1px solid var(--border);border-radius:6px;
@@ -1408,8 +1498,16 @@ input,textarea,select{user-select:text}
      (used for tab reorder / tear-off) never fire on children. */
   -webkit-app-region:no-drag;
 }
+/* Scroller wrapping the tabs + the "+" button. Clips on overflow so
+   the right-side window controls (.wc-wrap) always stay visible. */
+.tabs-scroll{
+  display:flex;align-items:flex-end;
+  flex:1 1 auto;min-width:0;
+  overflow:hidden;
+  -webkit-app-region:no-drag;
+}
 .tab{
-  height:32px;width:180px;min-width:48px;flex:0 1 180px;
+  height:32px;width:180px;min-width:32px;flex:0 1 180px;
   padding:0 8px;border-radius:7px 7px 0 0;
   display:flex;align-items:center;gap:5px;
   font-size:11px;cursor:pointer;
@@ -1526,6 +1624,7 @@ input,textarea,select{user-select:text}
   transition:background .15s,color .15s,transform .15s;
   -webkit-app-region:no-drag;
 }
+.agent-tab{flex-shrink:0}
 .newtab:hover{background:var(--accent-soft);color:var(--accent)}
 .newtab:active{transform:scale(.92)}
 /* Flex-spacer between last tab and window controls — this is the main
@@ -1534,7 +1633,10 @@ input,textarea,select{user-select:text}
    this child to inherit no-drag too — override it back to drag here.
    min-width is generous (60px) so even when many tabs are open the user
    still has a clearly-grabbable strip. */
-.tsp{flex:1;min-width:60px;-webkit-app-region:drag}
+/* Drag handle between the tabs scroller and the right-side window
+   controls. Fixed width — the tabs scroller already absorbs all
+   available space via flex:1 1 auto on .tabs-scroll. */
+.tsp{flex:0 0 60px;min-width:60px;-webkit-app-region:drag}
 /* Always-available drag strip above the tab bar. Renders as a transparent
    4 px sliver across the full chrome width — invisible but always on top
    of any interactive element, so the user can grab-and-drag the window
@@ -1545,7 +1647,11 @@ input,textarea,select{user-select:text}
 }
 /* Window controls — SEOZ OS chrome spec: circular, 0.5px border, Lucide icons,
    semantic hover tint (min=warn, max=live, close=danger). */
-.wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center;align-self:center;gap:10px;padding-left:16px;margin:0 16px}
+/* Window controls always stay visible. flex-shrink:0 + the tabbar's
+   overflow:hidden + min-width:0 mean tabs clip on the left when the
+   window narrows; profile / minimize / maximize / close stay anchored
+   on the right. */
+.wc-wrap{display:flex;-webkit-app-region:no-drag;align-items:center;align-self:center;gap:10px;padding-left:16px;margin:0 16px;flex-shrink:0}
 .wc{
   width:24px;height:24px;border-radius:50%;
   background:transparent;
@@ -1915,10 +2021,10 @@ input,textarea,select{user-select:text}
   width:34px;height:34px;border-radius:8px;
   display:flex;align-items:center;justify-content:center;
   cursor:pointer;position:relative;font-size:15px;
-  transition:background .15s;flex-shrink:0;color:var(--muted);
+  transition:background .15s, color .15s;flex-shrink:0;color:var(--muted);
 }
-.di:hover{background:rgba(70,128,255,.12)}
-.di.active{background:rgba(70,128,255,.15)}
+.di:hover{background:rgba(70,128,255,.12);color:var(--head)}
+.di.active{background:rgba(70,128,255,.15);color:var(--p)}
 /* Unread-count badge positioned in the upper-right of any .di icon.
    Hidden by default; rendered as a small pill with the count inside. */
 .di-badge{
@@ -2135,6 +2241,104 @@ input,textarea,select{user-select:text}
 /* Action button (panel) */
 .act-btn{width:100%;height:32px;background:var(--panel);border:1px solid var(--border);border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;color:var(--txt);transition:background .15s;display:flex;align-items:center;justify-content:center;gap:5px}
 .act-btn:hover{background:var(--border)}
+
+/* ══════════════════════════════════════════════════════════════════
+   Claude AI panel — mirrors the home-screen chat visually so users
+   feel they're in the same conversation surface, just docked.
+   Card-like message list + rounded input wrapper + square submit.
+   ══════════════════════════════════════════════════════════════════ */
+.claude-panel{
+  display:flex;flex-direction:column;gap:10px;
+  height:calc(100vh - 168px);min-height:320px;
+}
+.claude-panel-list{
+  flex:1;min-height:0;overflow-y:auto;
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:14px;display:flex;flex-direction:column;gap:10px;
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
+}
+.claude-panel-list::-webkit-scrollbar{width:6px}
+.claude-panel-list::-webkit-scrollbar-thumb{background:var(--border);border-radius:6px}
+.claude-msg{
+  display:flex;flex-direction:column;max-width:88%;
+  font-size:12.5px;line-height:1.55;word-break:break-word;white-space:pre-wrap;
+  padding:9px 12px;border-radius:14px;
+}
+.claude-msg.user{
+  align-self:flex-end;background:var(--p);color:#fff;
+  border-bottom-right-radius:4px;
+}
+.claude-msg.assistant{
+  align-self:flex-start;background:var(--panel);color:var(--txt);
+  border:1px solid var(--border);border-bottom-left-radius:4px;
+}
+.claude-msg.assistant strong{color:var(--head)}
+.claude-msg code{
+  background:rgba(0,0,0,.18);padding:1px 5px;border-radius:4px;
+  font-family:'JetBrains Mono',ui-monospace,monospace;font-size:11.5px;
+}
+.claude-panel-welcome{
+  margin:auto;text-align:center;padding:18px 8px;color:var(--muted);
+}
+.claude-panel-welcome .cpw-icon{
+  display:inline-flex;color:var(--muted);margin-bottom:8px;
+}
+.claude-panel-welcome .cpw-title{
+  font-size:13px;font-weight:600;color:var(--head);margin-bottom:6px;
+  font-family:'Inter Tight','Inter',sans-serif;letter-spacing:-0.01em;
+}
+.claude-panel-welcome .cpw-sub{
+  font-size:11px;line-height:1.55;max-width:240px;margin:0 auto;
+}
+.claude-panel-quick{
+  display:flex;flex-wrap:wrap;gap:6px;
+}
+.claude-quick-chip{
+  display:inline-flex;align-items:center;gap:6px;
+  height:28px;padding:0 11px;border-radius:100px;
+  background:var(--card);border:1px solid var(--border);
+  color:var(--txt);font:inherit;font-size:11px;font-weight:500;
+  cursor:pointer;transition:background .12s,border-color .12s,color .12s;
+}
+.claude-quick-chip:hover{background:var(--panel);border-color:var(--p);color:var(--head)}
+.claude-quick-chip svg{width:12px;height:12px;color:var(--muted)}
+.claude-quick-chip:hover svg{color:var(--p)}
+.claude-panel-input-wrap{
+  background:var(--card);border:1px solid var(--border);border-radius:14px;
+  padding:12px 14px;
+  transition:border-color .15s,box-shadow .15s;
+  box-shadow:0 1px 2px rgba(0,0,0,.04);
+}
+.claude-panel-input-wrap:focus-within{
+  border-color:var(--p);box-shadow:0 0 0 3px rgba(70,128,255,.12);
+}
+.claude-panel-input-wrap textarea{
+  width:100%;border:none;outline:none;background:transparent;resize:none;
+  font-family:'Inter',sans-serif;font-size:12.5px;color:var(--head);
+  min-height:24px;max-height:140px;line-height:1.5;padding:0;
+}
+.claude-panel-input-wrap textarea::placeholder{color:var(--muted)}
+.claude-panel-input-foot{
+  display:flex;align-items:center;justify-content:space-between;
+  margin-top:9px;gap:8px;
+}
+.claude-panel-status{font-size:10px;color:var(--muted)}
+.claude-panel-clear{
+  display:inline-flex;align-items:center;gap:5px;height:24px;padding:0 9px;
+  background:transparent;border:1px solid var(--border);border-radius:100px;
+  font:inherit;font-size:10px;font-weight:500;color:var(--muted);
+  cursor:pointer;transition:background .12s,color .12s,border-color .12s;
+}
+.claude-panel-clear:hover{background:var(--panel);color:var(--head);border-color:var(--p)}
+.claude-panel-clear svg{width:11px;height:11px}
+.claude-panel-submit{
+  width:30px;height:30px;border-radius:8px;border:none;cursor:pointer;flex-shrink:0;
+  background:var(--p);color:#fff;display:flex;align-items:center;justify-content:center;
+  transition:background .15s,transform .1s;
+}
+.claude-panel-submit:hover{background:var(--p600)}
+.claude-panel-submit:active{transform:scale(.95)}
+.claude-panel-submit svg{width:15px;height:15px}
 
 /* ══════════════════════════════════════════════════════════════════
    Tracking panel — Klientinsikter-style overview
@@ -3315,9 +3519,26 @@ input,textarea,select{user-select:text}
     }
     .tab.mcp-tab .tab-title { font-style: italic; }
     .tab.mcp-tab:hover { opacity: 1; }
+
+    /* Placeholder div for a TabHandle. Real page content lives in a
+       main-process WebContentsView positioned over this div. We make
+       the placeholder transparent so it doesn't double-paint while
+       the view repaints, but keep pointer-events:auto so DOM hit
+       testing still works for things layered on top. */
+    .tab-handle { background: transparent; }
+    /* When any chrome overlay (dropdown / modal / context menu) is
+       open, hide the tab-handle placeholders so TabHandle's ResizeObserver
+       forwards setVisible(false) to the WebContentsView. Without this,
+       chrome dropdowns render UNDER the page since native WebContentsView
+       child views z-order above the BrowserWindow's renderer. */
+    body.chrome-overlay-active .tab-handle { display: none !important; }
 </style>
 </head>
 <body>
+<!-- TabHandle: drop-in replacement for <webview>, backed by a real
+     WebContentsView in main. Loaded BEFORE the inline app script so
+     window.TabHandle is available when the renderer initialises. -->
+<script src="tab-handle.js"></script>
 
 <!-- PROFILE PICKER -->
 <div id="profilePicker" class="gone">
@@ -3411,7 +3632,16 @@ input,textarea,select{user-select:text}
     <div class="chrome-drag-strip"></div>
     <!-- Tab bar -->
     <div class="tabbar" id="tabbar">
-      <div id="newtabBtn" class="newtab" onclick="newTab()">+</div>
+      <!-- Tabs live inside this scroller so they can clip on the left
+           when the window narrows, without ever pushing the window-
+           control buttons (.wc-wrap) off the right edge. JS inserts
+           new .tab elements before #newtabBtn (i.e. inside #tabsScroller).
+           renderTabs() reads #tabbar but writes via insertBefore(el,
+           ntBtn) — ntBtn now lives inside #tabsScroller, so the new
+           tabs land in the scroller automatically. -->
+      <div class="tabs-scroll" id="tabsScroller">
+        <div id="newtabBtn" class="newtab" onclick="newTab()">+</div>
+      </div>
       <div class="tsp"></div>
       <div class="agent-tab" id="agentTab">
         <div class="agent-tab-dot"></div>
@@ -3449,7 +3679,6 @@ input,textarea,select{user-select:text}
           <button class="zoom-bar-btn" onclick="event.stopPropagation();doZoom(10)" title="Zooma in"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg></button>
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
-        <button class="bm-star" id="openExtBtn" onclick="openCurrentInExternal()" title="Öppna i extern webbläsare (Chrome/Edge) — använd om sajten blockerar inbäddade browsers (t.ex. Google-login)" aria-label="Öppna i extern webbläsare"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/><polyline points="15 3 21 3 21 9"/><line x1="10" y1="14" x2="21" y2="3"/></svg></button>
         <div class="url-suggest" id="urlSuggest"></div>
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow"><img src="../../assets/icon.png" alt="SEOZ"></button>
@@ -3599,10 +3828,11 @@ input,textarea,select{user-select:text}
     <!-- Webview container (holds webview + inspector drawer) -->
     <div style="flex:1;display:flex;flex-direction:column;min-width:0;min-height:0;position:relative" id="wvContainer">
       <div id="wvStack" style="flex:1;min-height:0;position:relative">
-        <webview id="wv" src="about:blank"
-                 useragent="Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36"
-                 allowpopups style="position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none">
-        </webview>
+        <!-- Tab 1's WebContentsView placeholder is injected at runtime by
+             createWebviewForTab(1, ...) using the new TabHandle class.
+             The page itself lives in a top-level WebContentsView in main
+             so Google Auth + bot-detection sees a real Chrome tab, not a
+             <webview> guest. See tab-handle.js + main/tab-manager.js. -->
 
         <!-- Home screen overlay (shown when active tab is on seoz://home) -->
         <div id="homeScreen" role="region" aria-label="Startsida">
@@ -3625,7 +3855,15 @@ input,textarea,select{user-select:text}
                 </svg>
               </div>
               <div class="home-greet" id="homeGreet">God dag</div>
-              <div class="home-sub">Vad vill du göra idag?</div>
+              <div class="home-sub" id="homeSub">Vad vill du göra idag?</div>
+
+              <div class="home-chat" id="homeChat" hidden>
+                <div class="home-chat-list" id="homeChatList"></div>
+                <button class="home-chat-clear" type="button" onclick="clearHomeChat()" title="Rensa konversation">
+                  <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                  <span>Rensa</span>
+                </button>
+              </div>
 
               <div class="home-input-wrap" style="position:relative">
                 <div class="home-slash-hint" id="homeSlashHint"></div>
@@ -3855,60 +4093,52 @@ input,textarea,select{user-select:text}
 
     <!-- DOCK -->
     <div class="dock">
-      <div class="di" id="di-seo" onclick="togglePanel('seo')" style="color:#4680ff">
+      <div class="di" id="di-seo" onclick="togglePanel('seo')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.35-4.35"/></svg>
         <div class="dtt">SEO-analys</div>
       </div>
-      <div class="di" id="di-tracking" onclick="togglePanel('tracking')" style="color:#2ca87f">
+      <div class="di" id="di-tracking" onclick="togglePanel('tracking')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M3 3v18h18"/><path d="M7 16l4-6 4 3 5-7"/></svg>
         <div class="dtt">Insikter</div>
       </div>
-      <div class="di" id="di-agentready" onclick="togglePanel('agentready')" style="color:#7c3aed">
+      <div class="di" id="di-agentready" onclick="togglePanel('agentready')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2a10 10 0 1 0 10 10"/><path d="M22 2 12 12"/><path d="m16 6 6-4-2 6"/></svg>
         <div class="dtt">Agent Ready</div>
       </div>
-      <div class="di" id="di-tasks" onclick="togglePanel('tasks')" style="color:#e58a00">
+      <div class="di" id="di-tasks" onclick="togglePanel('tasks')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>
         <div class="dtt">Tasks</div>
       </div>
       <div class="dock-sep"></div>
-      <div class="di" id="di-cwv" onclick="togglePanel('cwv')" style="color:#f59e0b">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M13 2L3 14h9l-1 8 10-12h-9l1-8z"/></svg>
-        <div class="dtt">Core Web Vitals</div>
-      </div>
-      <div class="di" id="di-creative" onclick="togglePanel('creative')" style="color:#d946ef">
+      <div class="di" id="di-creative" onclick="togglePanel('creative')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 2v4M12 18v4M4.93 4.93l2.83 2.83M16.24 16.24l2.83 2.83M2 12h4M18 12h4M4.93 19.07l2.83-2.83M16.24 7.76l2.83-2.83"/></svg>
         <div class="dtt">Creative AI</div>
       </div>
-      <div class="di" id="di-compads" onclick="togglePanel('compads')" style="color:#06b6d4">
+      <div class="di" id="di-compads" onclick="togglePanel('compads')">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M2 12s3-7 10-7 10 7 10 7-3 7-10 7S2 12 2 12z"/><circle cx="12" cy="12" r="3"/></svg>
         <div class="dtt">Konkurrentannonser</div>
       </div>
-      <div class="di" id="di-claude" onclick="togglePanel('claude')" style="color:#d4a574">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
-        <div class="dtt">Claude AI</div>
-      </div>
-      <div class="di" id="di-voice" onclick="togglePanel('voice')" style="color:#a78bfa">
-        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M9 18V5l12-2v13"/><circle cx="6" cy="18" r="3"/><circle cx="18" cy="16" r="3"/></svg>
-        <div class="dtt">Röstchatt</div>
-      </div>
-      <div class="di" id="di-mail" onclick="openMail()" style="color:#06b6d4">
+      <div class="di" id="di-mail" onclick="openMail()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 6-10 7L2 6"/></svg>
         <span class="di-badge" id="di-mail-badge">0</span>
         <div class="dtt">Mejl</div>
       </div>
       <div class="dock-sep"></div>
-      <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()" style="color:#f472b6">
+      <div class="di" id="di-design" onclick="window.__designMode && window.__designMode.toggle()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M12 19l7-7 3 3-7 7-3-3z"/><path d="M18 13l-1.5-7.5L2 2l3.5 14.5L13 18l5-5z"/><path d="M2 2l7.586 7.586"/><circle cx="11" cy="11" r="2"/></svg>
         <div class="dtt">Design Mode (Ctrl+Shift+D)</div>
       </div>
       <div class="dock-sep"></div>
       <div class="dock-spacer"></div>
-      <div class="di" id="voiceFab" onclick="toggleVoiceRecording()" style="color:#a78bfa">
+      <div class="di" id="di-claude" onclick="togglePanel('claude')">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><path d="M21 15a2 2 0 01-2 2H7l-4 4V5a2 2 0 012-2h14a2 2 0 012 2z"/><path d="M8 9h8M8 13h5"/></svg>
+        <div class="dtt">Claude AI</div>
+      </div>
+      <div class="di" id="voiceFab" onclick="toggleVoiceRecording()">
         <svg id="voiceFabIcon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
         <div class="dtt">Röstsamtal</div>
       </div>
-      <div class="di" id="di-settings" onclick="openSettings()" style="color:#94a3b8">
+      <div class="di" id="di-settings" onclick="openSettings()">
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 01-2.83 2.83l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z"/></svg>
         <div class="dtt">Inställningar</div>
       </div>
@@ -4363,14 +4593,26 @@ const synced = {
   keywords: null,
   aiVisibility: null,
   tasks: null,
+  // Local-only projects (not synced to seoz.io). Same role as clients
+  // for tab-persistence purposes; mutually exclusive with activeClientId.
+  projects: [],
+  activeProjectId: null,
 }
 
 // ══════════════════════════════════════════════════════
-//  WEBVIEW — multi-webview: one per tab, show/hide
+//  TAB CONTAINER — one TabHandle per tab, show/hide
+//
+//  v1.10.54 switched from <webview> tags to TabHandle (a thin
+//  renderer-side wrapper around a real top-level WebContentsView
+//  in the main process). The public surface (loadURL/reload/
+//  addEventListener/etc.) is identical to the old <webview>, so
+//  most call sites in this file remain unchanged. The map below
+//  now stores TabHandle instances; the old _wvStack div still
+//  exists and we append handle.el placeholders into it exactly
+//  the way we used to append <webview> elements.
 // ══════════════════════════════════════════════════════
 const _wvStack = document.getElementById('wvStack')
-const _wvTemplate = document.getElementById('wv') // initial webview (tab 1)
-const _tabWebviews = new Map() // tabId → webview element
+const _tabWebviews = new Map() // tabId → TabHandle
 
 // Lucide globe — used when a tab has no favicon or the favicon fails to load.
 // currentColor inherits from the tab's text color (muted / active).
@@ -4378,42 +4620,43 @@ const _tabWebviews = new Map() // tabId → webview element
 // home-screen recent rows when a real favicon is missing or fails to load.
 window._ORBIT_MARK_INLINE = '<svg viewBox="0 0 200 200" fill="none" style="opacity:.85"><circle cx="100" cy="100" r="10" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg>'
 window._TAB_FAVICON_FALLBACK = window._ORBIT_MARK_INLINE.replace('<svg ', '<svg class="tab-ico" ')
-let wv = _wvTemplate // always points to the active tab's webview
+let wv = null // always points to the active tab's TabHandle
 function getWV() { return wv }
 
-const CHROME_UA_WV = 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/140.0.0.0 Safari/537.36'
+// We deliberately don't set a custom UA here. Electron's default UA
+// already contains the right Chrome string; main strips the "Electron/x"
+// segment before serving it to pages. Strawberry's own code-comments
+// confirm that adding "Edg/" causes Google-Auth issues — so we don't.
 
 function createWebviewForTab(tabId, url) {
-  const el = document.createElement('webview')
-  el.setAttribute('useragent', CHROME_UA_WV)
-  el.setAttribute('allowpopups', '')
-  // Note: do NOT set partition. Without an explicit partition the
-  // webview uses Electron's session.defaultSession — the same one
-  // user tabs have always used. Setting partition='persist:default'
-  // (which I tried in v1.10.15) actually moves the webview to a
-  // separate NAMED partition called "default" — that's why all
-  // logins disappeared and the SEOZ portal chat went blank.
-  // MCP tabs use this same code path so they automatically share
-  // the user's session without needing explicit partition setup.
-  // Attach the password autofill / login-form detection script. Must
-  // be set BEFORE src so the preload registers before the first
-  // navigation. SE.webviewPreloadUrl is provided by preload.js.
-  if (SE.webviewPreloadUrl) el.setAttribute('preload', SE.webviewPreloadUrl)
-  el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none'
-  el.src = url || 'about:blank'
-  _wvStack.appendChild(el)
-  _tabWebviews.set(tabId, el)
-  _attachWebviewListeners(el, tabId)
-  return el
+  if (!window.TabHandle) {
+    console.error('[TabHandle] not loaded — make sure tab-handle.js is included before this script')
+    return null
+  }
+  const handle = new window.TabHandle({ url: url || 'about:blank' })
+  handle.el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none;display:none'
+  _wvStack.appendChild(handle.el)
+  _tabWebviews.set(tabId, handle)
+  _attachWebviewListeners(handle, tabId)
+  return handle
 }
 
+// Initial tab (id = 1) — the inline <webview> element used to live in the
+// HTML; we now create the TabHandle here and append its placeholder into
+// #wvStack. Visibility starts hidden; layoutActiveTab() shows it once
+// the renderer activates the tab.
+const _wvTemplate = createWebviewForTab(1, 'about:blank')
+
 function showWebview(tabId) {
-  // Hide every webview except the active tab's main + (optionally) its split.
+  // Hide every tab except the active tab's main + (optionally) its split.
+  // _tabWebviews stores TabHandle instances (not DOM elements); the
+  // visible flag is mirrored to the WebContentsView via the placeholder
+  // div's display style + ResizeObserver inside TabHandle.
   _tabWebviews.forEach((el, id) => {
-    el.style.display = id === tabId ? '' : 'none'
+    if (el && el.el) el.el.style.display = id === tabId ? '' : 'none'
   })
   _splitWebviews.forEach((data, id) => {
-    data.wv.style.display = id === tabId ? '' : 'none'
+    if (data?.wv?.el) data.wv.el.style.display = id === tabId ? '' : 'none'
   })
   layoutActiveTab()
 }
@@ -4431,16 +4674,16 @@ function _splitDomain(u) {
 function layoutActiveTab() {
   const tabId = activeId
   const mainWv = _tabWebviews.get(tabId)
-  if (!mainWv) return
+  if (!mainWv || !mainWv.el) return
   const split = _splitWebviews.get(tabId)
   // Always wipe stale toolbars before re-rendering.
   document.querySelectorAll('.split-pane-toolbar').forEach(t => t.remove())
-  if (split) {
-    mainWv.style.cssText = 'position:absolute;top:22px;bottom:0;left:0;width:50%;border:none;outline:none'
-    split.wv.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
+  if (split && split.wv?.el) {
+    mainWv.el.style.cssText = 'position:absolute;top:22px;bottom:0;left:0;width:50%;border:none;outline:none'
+    split.wv.el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
     _renderSplitToolbars(tabId)
   } else {
-    mainWv.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none'
+    mainWv.el.style.cssText = 'position:absolute;inset:0;width:100%;height:100%;border:none;outline:none'
   }
 }
 
@@ -4506,12 +4749,13 @@ function openSplitView(rawUrl) {
   }
   if (!url) url = 'about:blank'
 
-  const el = document.createElement('webview')
-  el.setAttribute('useragent', CHROME_UA_WV)
-  el.setAttribute('allowpopups', '')
-  el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
-  el.src = url
-  _wvStack.appendChild(el)
+  if (!window.TabHandle) {
+    console.error('[TabHandle] not loaded — cannot open split view')
+    return
+  }
+  const el = new window.TabHandle({ url })
+  el.el.style.cssText = 'position:absolute;top:22px;bottom:0;left:50%;width:50%;border:none;outline:none'
+  _wvStack.appendChild(el.el)
 
   _splitWebviews.set(tabId, { wv: el, url })
   _splitFocused.set(tabId, 'split')
@@ -4573,13 +4817,131 @@ function _attachSplitWebviewListeners(el, tabId) {
 window.openSplitView = openSplitView
 window.closeSplitView = closeSplitView
 
-// Register initial webview (tab 1) and attach the autofill preload —
-// can't be set in the static HTML because the file:// URL is profile-
-// dependent (computed in preload.js).
-if (SE.webviewPreloadUrl && !_wvTemplate.getAttribute('preload')) {
-  _wvTemplate.setAttribute('preload', SE.webviewPreloadUrl)
+// ══════════════════════════════════════════════════════
+//  Z-ORDER FIX — auto-hide tab WebContentsView while
+//  any chrome overlay is open
+//
+//  v1.10.54 switched tabs from <webview> tags to native
+//  WebContentsView. Native child views are z-ordered ABOVE
+//  the BrowserWindow's renderer (where this chrome HTML
+//  lives), so chrome dropdowns / modals / context menus
+//  appeared underneath the page content.
+//
+//  The proper fix is the Strawberry-style "Layers"
+//  architecture (chrome itself in a fullscreen
+//  WebContentsView added LAST so it renders on top, with
+//  click-event forwarding for transparent regions). Big
+//  refactor.
+//
+//  Band-aid (v1.10.67): when ANY known overlay opens, set
+//  the active tab WebContentsView to invisible — the page
+//  briefly disappears but the dropdown is now unobstructed.
+//  When the overlay closes, restore. UX trade-off but
+//  avoids the architectural rewrite.
+// ══════════════════════════════════════════════════════
+// Explicit overlay selector list — opt-in to keep predictable. v1.10.82
+// tried a catch-all "any position:fixed with z-index>=50" heuristic
+// but matched permanently-visible chrome elements (URL-bar hint, etc.)
+// and pinned the page invisible. Going back to the explicit list with
+// ALL known overlay triggers from the renderer.
+//
+// To add a new overlay: include `.classname.open` or `#id.open` (or
+// `.show`) below. Look for `classList.add('open')` / `.show` in JS or
+// `*.open { display: ... }` in CSS to find them.
+const _OVERLAY_OPEN_SELECTOR = [
+  // Modal/dialog backgrounds (full-screen)
+  '#bmModal.open',
+  '#promptModal.open',
+  '#mailComposeBg.open',
+  '#ssEditor.open',
+  '#pwModal.open',
+  '#pwAuthModal.open',
+  '#legalModal.open',
+  '#saveTabsModal.open',
+  // Side panels / drawers
+  '#seozPanel.open',
+  '#inspectorDrawer.open',
+  '#historyOverlay.open',
+  // Dropdowns / menus
+  '.bm-drop.open',
+  '#chromeDd.open',
+  '#blockerPopup.open',
+  '#ppForm.open',
+  '#ctxMenu.open',
+  '.client-sel-drop.open',
+  // .show-modifier overlays (visible-state class)
+  '.toast.show',
+  '.mail-acct-menu.show',
+  '.mail-folder-menu.show',
+  '.mail-compose-tpl-menu.show',
+  '.mail-schedule-popup.show',
+  '.home-mail-results.show',
+  // NB: .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
+  // included — they're always-visible chrome (favicon, find-bar that
+  // overlays the top band) or false-positive triggers (tab-tip-fav
+  // gets .show on every favicon load even when the parent tooltip
+  // is hidden).
+].join(', ')
+
+let _overlayActive = false
+
+// querySelectorAll matches even hidden elements (display:none parents).
+// We double-check actual rendered visibility — a stale `.open` class on
+// an off-screen modal must not pin the page invisible.
+function _isElementActuallyVisible(el) {
+  if (!el) return false
+  const r = el.getBoundingClientRect()
+  if (r.width <= 0 || r.height <= 0) return false
+  const cs = getComputedStyle(el)
+  if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false
+  return true
 }
-_tabWebviews.set(1, _wvTemplate)
+
+function _isOverlayOpen() {
+  try {
+    const els = document.querySelectorAll(_OVERLAY_OPEN_SELECTOR)
+    for (const el of els) if (_isElementActuallyVisible(el)) return true
+    return false
+  } catch (_) { return false }
+}
+
+function _refreshOverlayState() {
+  const open = _isOverlayOpen()
+  if (open === _overlayActive) return
+  _overlayActive = open
+  // Toggle a body class. CSS hides tab-handle placeholder divs while
+  // it's set; TabHandle's ResizeObserver picks up the resulting 0×0
+  // computed rect and forwards setVisible(false) to the WebContentsView.
+  // When the class is removed, the placeholder reverts to its previous
+  // display rule (set by showWebview / layoutActiveTab) and visibility
+  // is restored automatically — no explicit "remember and restore"
+  // logic needed.
+  document.body.classList.toggle('chrome-overlay-active', open)
+}
+
+// MutationObserver fires whenever any class attribute changes in the
+// chrome DOM. The chrome doesn't include tab page content (that lives
+// in separate WebContentsViews), so the observer only sees chrome's
+// own UI mutations — cheap.
+;(function _watchOverlays() {
+  try {
+    const obs = new MutationObserver(_refreshOverlayState)
+    obs.observe(document.body, {
+      subtree: true,
+      attributes: true,
+      attributeFilter: ['class'],
+    })
+  } catch (_) {}
+})()
+
+// Initial tab (id=1) is already in _tabWebviews via createWebviewForTab()
+// at the top of this section. Preload script is wired in main when the
+// WebContentsView is created — no DOM attribute needed.
+//
+// `wv` (the global active-tab pointer) gets set to _wvTemplate so the
+// rest of the renderer can call wv.loadURL/etc before the user has
+// switched tabs. Same role _wvTemplate played in the old code.
+wv = _wvTemplate
 
 // Batched tab rendering — coalesce rapid events into one paint
 let _tabRenderPending = false
@@ -4646,26 +5008,16 @@ const CHROME_SPOOF_SCRIPT = `
   }
 `
 
-// Context menu + zoom script — injected into webview pages
+// Page-injected helpers — zoom, click-tracking, hover URL preview.
+//
+// v1.10.76 removed the contextmenu listener that lived here. It used
+// to console.log a [SEOZ-CTX] payload that the renderer caught and
+// turned into the custom HTML context menu, but it ALSO called
+// e.preventDefault() — which silently suppressed Electron's native
+// context-menu event. Now that we use Electron's native Menu.popup()
+// in main (always renders on top of WebContentsView, no z-order
+// band-aid needed), we let the contextmenu event propagate untouched.
 const WV_CONTEXT_MENU_SCRIPT = `
-  // Right-click context menu — prevent default and send data via console
-  document.addEventListener('contextmenu', (e) => {
-    e.preventDefault()
-    const sel = window.getSelection().toString()
-    const a = e.target.closest('a')
-    const img = e.target.closest('img')
-    const input = e.target.closest('input, textarea, [contenteditable="true"]')
-    console.log('[SEOZ-CTX]' + JSON.stringify({
-      x: e.screenX,
-      y: e.screenY,
-      selectedText: sel || '',
-      linkUrl: a ? a.href : '',
-      linkText: a ? (a.textContent || '').trim().slice(0, 100) : '',
-      imgSrc: img ? img.src : '',
-      isEditable: !!(input || e.target.isContentEditable),
-    }))
-  })
-
   // Ctrl+scroll zoom — prevent default and send via console
   document.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return
@@ -4969,7 +5321,8 @@ function _showWebviewContextMenu(el, ctx) {
   if (ctx.selectedText) {
     const short = ctx.selectedText.length > 40 ? ctx.selectedText.slice(0, 37) + '...' : ctx.selectedText
     items.push({ label: 'Kopiera', action: () => el.executeJavaScript('document.execCommand("copy")') })
-    items.push({ label: 'Sök "' + short + '" på Google', action: () => newTab('https://www.google.com/search?q=' + encodeURIComponent(ctx.selectedText)) })
+    const _engName = (SEARCH_ENGINES[_defaultSearchEngine] || SEARCH_ENGINES.google).name
+    items.push({ label: 'Sök "' + short + '" på ' + _engName, action: () => newTab(typeof _searchUrl === 'function' ? _searchUrl(ctx.selectedText) : ('https://www.google.com/search?q=' + encodeURIComponent(ctx.selectedText))) })
     items.push('---')
   }
 
@@ -4996,14 +5349,32 @@ function _showWebviewContextMenu(el, ctx) {
   // Remove trailing separator
   while (items.length && items[items.length - 1] === '---') items.pop()
 
-  // Position menu at screen coords converted to client coords
-  const wvRect = el.getBoundingClientRect()
-  const fakeEvent = {
-    clientX: ctx.x - window.screenX - (window.outerWidth - window.innerWidth),
-    clientY: ctx.y - window.screenY - (window.outerHeight - window.innerHeight),
+  // Position menu in window-client coords. Electron's context-menu
+  // event reports x/y as SCREEN-relative pixels for WebContentsView
+  // webContents (verified empirically v1.10.74 — clicking at window
+  // (210,150) reported (700,410) on a window placed at screen (490,260)).
+  // Convert: subtract the window's screen position. For our frameless
+  // BrowserWindow window.outerWidth === innerWidth so no border math
+  // needed; we keep the half-frame fallback for robustness.
+  const px = (typeof ctx.pageX === 'number') ? ctx.pageX : (ctx.x || 0)
+  const py = (typeof ctx.pageY === 'number') ? ctx.pageY : (ctx.y || 0)
+  const frameLR = Math.max(0, window.outerWidth  - window.innerWidth)  // 0 frameless
+  const frameTB = Math.max(0, window.outerHeight - window.innerHeight) // 0 frameless
+  let clientX = px - window.screenX - (frameLR / 2)
+  let clientY = py - window.screenY - frameTB
+  // If the conversion lands off-screen the screen-relative assumption
+  // was wrong (older Electron behaviour reported page-relative). Fall
+  // back to placeholder-rect-based offset.
+  if (clientX < 0 || clientY < 0 || clientX > window.innerWidth || clientY > window.innerHeight) {
+    const wvRect = el.el ? el.el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 }
+    clientX = wvRect.left + px
+    clientY = wvRect.top  + py
   }
-  // Fallback: center of webview if coords are off
+  const fakeEvent = { clientX, clientY }
+  // Last-resort fallback: centre of placeholder if both interpretations
+  // gave bogus coords.
   if (fakeEvent.clientX < 0 || fakeEvent.clientY < 0) {
+    const wvRect = el.el ? el.el.getBoundingClientRect() : { left: 0, top: 0, width: 0, height: 0 }
     fakeEvent.clientX = wvRect.left + wvRect.width / 2
     fakeEvent.clientY = wvRect.top + wvRect.height / 2
   }
@@ -5023,12 +5394,10 @@ function _attachWebviewListeners(el, tabId) {
     // and was breaking the in-portal chat overlay (rendering gray
     // because some chat-client feature detection didn't like our
     // navigator shims).
-    let host = ''
-    try { host = new URL(el.getURL() || '').hostname.toLowerCase() } catch (_) {}
-    const isOurOwnDomain = /(^|\.)(seoz\.io|seoz\.se|flow\.seoz\.io)$/.test(host)
-    if (!isOurOwnDomain) {
-      el.executeJavaScript(CHROME_SPOOF_SCRIPT).catch(() => {})
-    }
+    // v1.10.54: dropped CHROME_SPOOF_SCRIPT injection. With WebContentsView
+    // each tab is a real top-level Chrome WebContents — the page sees plain
+    // Chrome's navigator.* and doesn't need our shims. Strawberry (the
+    // working reference) ships zero such patches.
     el.executeJavaScript(WV_CONTEXT_MENU_SCRIPT).catch(() => {})
   })
 
@@ -5172,15 +5541,11 @@ function _attachWebviewListeners(el, tabId) {
       hideCtx()
       return
     }
-    // ── Right-click context menu from webview ──
-    if (e.message && e.message.startsWith('[SEOZ-CTX]')) {
-      if (!_isActive()) return
-      try {
-        const ctx = JSON.parse(e.message.slice(10))
-        _showWebviewContextMenu(el, ctx)
-      } catch(_) {}
-      return
-    }
+    // ── Right-click context menu from webview (LEGACY) ──
+    // Native Electron Menu.popup() handles this in v1.10.76+. Listener
+    // kept as a no-op in case any in-page script still emits the
+    // message — we just swallow it so the HTML menu doesn't double-pop.
+    if (e.message && e.message.startsWith('[SEOZ-CTX]')) return
     // ── Link hover preview ──
     if (e.message && e.message.startsWith('[SEOZ-HOVER]')) {
       if (!_isActive()) return
@@ -5335,7 +5700,7 @@ function doNav(raw) {
   else if (/^localhost(:\d+)?/i.test(u)) u = 'http://' + u
   else if (/^127\.0\.0\.1(:\d+)?/.test(u)) u = 'http://' + u
   else if (!u.includes(' ') && u.includes('.')) u = 'https://' + u
-  else u = 'https://www.google.com/search?q=' + encodeURIComponent(u)
+  else u = (typeof _searchUrl === 'function') ? _searchUrl(u) : ('https://www.google.com/search?q=' + encodeURIComponent(u))
   // If the active tab is still on the home sentinel, promote it to a real
   // page so the overlay hides and tab.url reflects the destination.
   const active = tabs.find(t => t.id === activeId)
@@ -5392,10 +5757,12 @@ function _restoreTabs() {
     if (!raw) return false
     const data = JSON.parse(raw)
     if (!data || !Array.isArray(data.tabs) || !data.tabs.length) return false
-    // Replace the default tab array. Remove the inline <webview id="wv">
-    // so each persisted tab gets a fresh webview.
-    const initial = document.getElementById('wv')
-    if (initial && initial.parentNode) initial.parentNode.removeChild(initial)
+    // Replace the default tab array. Destroy the auto-created tab-1
+    // TabHandle so each persisted tab gets a fresh WebContentsView.
+    const initial = _tabWebviews.get(1)
+    if (initial && typeof initial.remove === 'function') {
+      try { initial.remove() } catch (_) {}
+    }
     _tabWebviews.clear()
     tabs = data.tabs.map(t => ({
       id: t.id, url: t.url, title: t.title || 'SEOZ',
@@ -5433,8 +5800,6 @@ function isOverlayUrl(u)  { return isHomeUrl(u) || isMailUrl(u) || isSettingsUrl
 // What the URL bar should render for a given tab. Internal SEOZ pages
 // expose their seoz:// URL (settings appends the active sub-section)
 // so the user can tell at a glance that they're on an internal surface.
-// Home stays empty since it's the default tab state and showing
-// seoz://home in every fresh tab would be noisy.
 function _displayUrlForBar(tab) {
   if (!tab) return ''
   const u = tab.url || ''
@@ -5443,7 +5808,7 @@ function _displayUrlForBar(tab) {
     return SETTINGS_URL + '/' + section
   }
   if (u === MAIL_URL) return MAIL_URL
-  if (isHomeUrl(u)) return ''
+  if (isHomeUrl(u)) return HOME_URL
   return u
 }
 // Refresh the URL bar from whatever the active tab currently is. Cheap;
@@ -5453,6 +5818,13 @@ function _refreshUrlBar() {
   if (!inp) return
   const active = tabs.find(t => t.id === activeId)
   inp.value = _displayUrlForBar(active)
+  // Internal SEOZ pages (home/mail/settings) — clear the URL favicon so
+  // the lock icon takes over instead of a stale Google-favicon for
+  // whatever site was visible before. setUrlFavicon(null) hides the
+  // <img> and reveals the lock per setUrlFavicon's contract.
+  if (active && isOverlayUrl(active.url)) {
+    if (typeof setUrlFavicon === 'function') setUrlFavicon(null)
+  }
 }
 
 // Recent-closed ring buffer (persisted). Populated by closeTab().
@@ -5471,13 +5843,24 @@ function _pushRecentClosed(tab) {
 
 function _greet() {
   const h = new Date().getHours()
-  if (h >= 5 && h < 11)  return 'God morgon'
-  if (h >= 11 && h < 17) return 'God dag'
-  if (h >= 17 && h < 22) return 'God kväll'
-  return 'Hej'
+  // _t is hoisted (function declaration) but _appLanguage may still be in
+  // its initial 'sv' state — both are fine. Falls back to Swedish if the
+  // active language has no entry for the key.
+  const t = (typeof _t === 'function') ? _t : ((k, fb) => fb)
+  if (h >= 5 && h < 11)  return t('home.greet.morning',   'God morgon')
+  if (h >= 11 && h < 17) return t('home.greet.day',       'God dag')
+  if (h >= 17 && h < 22) return t('home.greet.evening',   'God kväll')
+  return t('home.greet.short', 'Hej')
 }
+// Alias used by _refreshHomeStaticStrings — kept separate so future
+// tooling can swap the greeting source without touching home renderer.
+function _greetingForNow() { return _greet() }
 
 async function renderHomeScreen() {
+  // Sync the static (markup-baked) strings to the active language first
+  // so a freshly opened home tab shows the right language even before
+  // any user interaction.
+  if (typeof _refreshHomeStaticStrings === 'function') _refreshHomeStaticStrings()
   // Greeting — prepend profile name if available
   let name = ''
   try {
@@ -5491,7 +5874,7 @@ async function renderHomeScreen() {
   const chips = [
     { label: 'Analysera aktuell sida', icon: _BTN.search,    action: () => togglePanel('seo') },
     { label: 'Fråga Claude',            icon: _L('<path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/>'), action: () => togglePanel('claude') },
-    { label: 'Core Web Vitals',         icon: _BTN.zap,       action: () => togglePanel('cwv') },
+    { label: 'Core Web Vitals',         icon: _BTN.zap,       action: () => { window._seoTab = 'cwv'; togglePanel('seo') } },
     { label: 'Synka SEOZ',              icon: _BTN.refresh,   action: () => (typeof syncNow === 'function') && syncNow() },
   ]
   const chipsEl = document.getElementById('homeChips')
@@ -5704,9 +6087,26 @@ window.newsAddCustom = async function() {
   }
 }
 
+// Single permanent button toggles the modules-rail at any viewport.
+// Persists per-profile so the user's preferred home-screen state
+// survives reloads. Default state is rails HIDDEN (clean hero) — the
+// user opts into modules with a click.
 window.toggleHomeRail = function() {
   const el = document.getElementById('homeScreen')
-  if (el) el.classList.toggle('show-rail')
+  if (!el) return
+  el.classList.toggle('modules-out')
+  const visible = el.classList.contains('modules-out')
+  try { SE.storeSet('homeModulesOut', visible) } catch (_) {}
+}
+
+// Restore saved preference. Called once during init() so the home
+// screen renders in the user's last-chosen state.
+async function _restoreHomeModulesPref() {
+  try {
+    const v = await SE.storeGet('homeModulesOut', false)
+    const el = document.getElementById('homeScreen')
+    if (el) el.classList.toggle('modules-out', !!v)
+  } catch (_) {}
 }
 
 function syncHomeVisibility() {
@@ -5726,9 +6126,11 @@ function syncOverlayVisibility() {
   if (home) home.classList.toggle('show', onHome)
   if (mailEl) mailEl.classList.toggle('show', onMail)
   if (settingsEl) settingsEl.classList.toggle('show', onSettings)
-  // Hide active webview while any overlay owns the tab area.
+  // Hide active tab while any overlay owns the tab area. wvEl is a
+  // TabHandle now (placeholder div lives in wvEl.el); the WebContentsView
+  // visibility is mirrored from el.style.display via ResizeObserver.
   const wvEl = _tabWebviews.get(activeId)
-  if (wvEl) wvEl.style.display = (onHome || onMail || onSettings) ? 'none' : ''
+  if (wvEl?.el) wvEl.el.style.display = (onHome || onMail || onSettings) ? 'none' : ''
   if (onHome) {
     renderHomeScreen()
     if (typeof _homeLoadInboxPreview === 'function') _homeLoadInboxPreview()
@@ -5974,16 +6376,171 @@ async function handleHomeSubmit() {
   const anthropicKey = await SE.storeGet('anthropicApiKey', '')
   inp.value = ''; inp.style.height = 'auto'
   if (anthropicKey) {
-    _routeQuestionToClaude(raw)
+    _askHomeClaude(raw)
   } else {
-    doNav('https://www.google.com/search?q=' + encodeURIComponent(raw))
+    doNav(typeof _searchUrl === 'function' ? _searchUrl(raw) : ('https://www.google.com/search?q=' + encodeURIComponent(raw)))
   }
 }
 
-// Open the Claude panel and pre-send a question.
+// ─────────────────────────────────────────────────────────────────────
+// Inline Claude chat on the home screen.
+//
+// Conversations live in `_claudeMessages` (the same buffer the side panel
+// uses), so opening the side Claude panel after chatting on home shows the
+// same history. The home chat just renders bubbles into #homeChatList and
+// fades the hero (mark/greet/sub/chips) out via the .chat-active class on
+// #homeScreen. There is no separate "home log" buffer.
+// ─────────────────────────────────────────────────────────────────────
+async function _askHomeClaude(text) {
+  if (!text) return
+  if (_claudeStreaming) return
+
+  // Push user message into the shared buffer + render
+  if (typeof addClaudeMessage === 'function') addClaudeMessage('user', text)
+  _renderHomeChat()
+  if (typeof renderClaudeMessages === 'function') renderClaudeMessages()
+
+  // Show a thinking placeholder
+  _setHomeThinking(true)
+
+  // Resolve API key
+  const anthropicKey = await SE.storeGet('anthropicApiKey', '')
+  if (!anthropicKey) {
+    _setHomeThinking(false)
+    if (typeof addClaudeMessage === 'function') addClaudeMessage('assistant', 'Du behöver ange en Anthropic API-nyckel först. Gå till **Inställningar → AI & integrationer**.')
+    _renderHomeChat()
+    if (typeof renderClaudeMessages === 'function') renderClaudeMessages()
+    return
+  }
+
+  // Build context from active non-home tab if available
+  let ctx = null
+  try {
+    const candidate = [...tabs].reverse().find(t => !isOverlayUrl(t.url))
+    const wvEl = candidate ? _tabWebviews.get(candidate.id) : null
+    if (wvEl && typeof wvEl.executeJavaScript === 'function') {
+      ctx = await wvEl.executeJavaScript(`(function(){
+        const metas = {};
+        document.querySelectorAll('meta[name],meta[property]').forEach(m => {
+          metas[m.name || m.getAttribute('property')] = m.content
+        });
+        const h1s = Array.from(document.querySelectorAll('h1')).map(h => h.textContent.trim()).slice(0, 5);
+        const h2s = Array.from(document.querySelectorAll('h2')).map(h => h.textContent.trim()).slice(0, 10);
+        return { url: location.href, title: document.title, meta: metas, h1s, h2s,
+                 text: document.body ? document.body.innerText.slice(0, 8000) : '' }
+      }())`).catch(() => null)
+    }
+  } catch (_) { ctx = null }
+
+  const systemPrompt = `Du är Claude, en AI-assistent inbyggd i SEOZ — en SEO-fokuserad webbläsare. Svara på svenska om inte användaren skriver på ett annat språk. Var koncis och handlingsinriktad.
+
+${ctx ? `AKTUELL SIDA:
+URL: ${ctx.url}
+Titel: ${ctx.title}
+Meta description: ${ctx.meta?.description || 'Saknas'}
+H1: ${ctx.h1s?.join(', ') || 'Inga'}
+H2: ${ctx.h2s?.join(', ') || 'Inga'}
+OG title: ${ctx.meta?.['og:title'] || ''}
+OG description: ${ctx.meta?.['og:description'] || ''}
+
+SIDINNEHÅLL (utdrag):
+${ctx.text?.slice(0, 4000) || '(ej tillgängligt)'}` : 'Ingen sida är laddad just nu.'}`
+
+  const apiMessages = _claudeMessages.map(m => ({ role: m.role, content: m.content }))
+
+  _claudeStreaming = true
+  try {
+    const res = await SE.claudeChat({ messages: apiMessages, systemPrompt, apiKey: anthropicKey })
+    _setHomeThinking(false)
+    if (res && res.error) {
+      addClaudeMessage('assistant', 'Fel: ' + res.error)
+    } else {
+      addClaudeMessage('assistant', (res && res.content) || '(tomt svar)')
+    }
+  } catch (err) {
+    _setHomeThinking(false)
+    addClaudeMessage('assistant', 'Kunde inte nå Claude: ' + (err.message || err))
+  } finally {
+    _claudeStreaming = false
+  }
+
+  _renderHomeChat()
+  if (typeof renderClaudeMessages === 'function') renderClaudeMessages()
+}
+
+function _setHomeThinking(on) {
+  const list = document.getElementById('homeChatList')
+  if (!list) return
+  // Make sure chat shell is visible
+  _showHomeChat()
+  let t = document.getElementById('homeThinking')
+  if (on) {
+    if (!t) {
+      t = document.createElement('div')
+      t.id = 'homeThinking'
+      t.className = 'home-msg assistant thinking'
+      t.textContent = 'Tänker'
+      list.appendChild(t)
+    }
+    list.scrollTop = list.scrollHeight
+  } else if (t) {
+    t.remove()
+  }
+}
+
+function _showHomeChat() {
+  const wrap = document.getElementById('homeChat')
+  const screen = document.getElementById('homeScreen')
+  if (wrap) wrap.hidden = false
+  if (screen) screen.classList.add('chat-active')
+}
+
+function _renderHomeChat() {
+  const list = document.getElementById('homeChatList')
+  if (!list) return
+  // No messages → hide and restore hero
+  if (!_claudeMessages.length) {
+    const wrap = document.getElementById('homeChat')
+    const screen = document.getElementById('homeScreen')
+    if (wrap) wrap.hidden = true
+    if (screen) screen.classList.remove('chat-active')
+    list.innerHTML = ''
+    return
+  }
+  _showHomeChat()
+  list.innerHTML = ''
+  _claudeMessages.forEach(m => {
+    const div = document.createElement('div')
+    div.className = 'home-msg ' + (m.role === 'user' ? 'user' : 'assistant')
+    let html = esc(m.content)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
+    div.innerHTML = html
+    list.appendChild(div)
+  })
+  list.scrollTop = list.scrollHeight
+}
+
+function clearHomeChat() {
+  if (Array.isArray(_claudeMessages)) _claudeMessages.length = 0
+  _renderHomeChat()
+  if (typeof renderClaudeMessages === 'function') renderClaudeMessages()
+  // Refocus the input so the user can start over immediately
+  const inp = document.getElementById('homeInput')
+  if (inp) inp.focus()
+}
+window.clearHomeChat = clearHomeChat
+
+// Legacy entry-points. Now route to the inline home chat.
 function _routeQuestionToClaude(text) {
+  // If we're already on the home screen, render inline. Otherwise fall back
+  // to opening the side panel (e.g. when triggered from a deep tab).
+  const screen = document.getElementById('homeScreen')
+  if (screen && screen.classList.contains('show')) {
+    _askHomeClaude(text)
+    return
+  }
   togglePanel('claude')
-  // Wait for the panel to render, then fill + send
   setTimeout(() => {
     const ci = document.getElementById('claudeInput')
     if (ci) {
@@ -6005,11 +6562,17 @@ async function _askClaudeAboutActiveTab(prompt) {
   try {
     const url = wvEl.getURL ? wvEl.getURL() : candidate.url
     const content = await wvEl.executeJavaScript('document.body ? document.body.innerText.slice(0, 12000) : ""')
+    const composed = `${prompt}\n\n---\nKälla: ${url}\n\n${content}`
+    const screen = document.getElementById('homeScreen')
+    if (screen && screen.classList.contains('show')) {
+      _askHomeClaude(composed)
+      return
+    }
     togglePanel('claude')
     setTimeout(() => {
       const ci = document.getElementById('claudeInput')
       if (ci) {
-        ci.value = `${prompt}\n\n---\nKälla: ${url}\n\n${content}`
+        ci.value = composed
         if (typeof sendClaudeMessage === 'function') sendClaudeMessage()
       }
     }, 250)
@@ -8450,7 +9013,11 @@ function renderTabs() {
         showCtx(e, tabCtxItems(tab.id))
       })
       attachTabDnD(el)
-      bar.insertBefore(el, ntBtn)
+      // Insert relative to ntBtn's actual parent — v1.10.84 wrapped
+      // ntBtn inside #tabsScroller, so `bar.insertBefore(el, ntBtn)`
+      // would throw NotFoundError because ntBtn is not a direct child
+      // of #tabbar anymore.
+      ;(ntBtn.parentNode || bar).insertBefore(el, ntBtn)
     }
 
     // Update active state
@@ -8467,18 +9034,37 @@ function renderTabs() {
 
     // Update icon (only if changed)
     const icoWrap = el.querySelector('.tab-ico-wrap')
-    if (tab.isMcp) {
+    // Internal-page icons. SEOZ overlay tabs (seoz://home / mail /
+    // settings) get distinct Lucide-style SVGs instead of the generic
+    // globe fallback so the user can spot them at a glance — useful
+    // when several internal tabs are open and titles get truncated.
+    const internalIco = (() => {
+      if (isHomeUrl(tab.url))     return { kind: 'home',     svg: '<svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M3 9l9-7 9 7v11a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/><polyline points="9 22 9 12 15 12 15 22"/></svg>' }
+      if (isMailUrl(tab.url))     return { kind: 'mail',     svg: '<svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="2" y="4" width="20" height="16" rx="2"/><path d="m22 7-10 5L2 7"/></svg>' }
+      if (isSettingsUrl(tab.url)) return { kind: 'settings', svg: '<svg class="tab-ico" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>' }
+      return null
+    })()
+    if (internalIco) {
+      // Cache by kind so we only re-render when the kind actually changes.
+      if (icoWrap.dataset.internal !== internalIco.kind) {
+        icoWrap.dataset.internal = internalIco.kind
+        icoWrap.innerHTML = internalIco.svg
+      }
+    } else if (tab.isMcp) {
       // MCP tabs get a robot/Claude icon
+      if (icoWrap.dataset.internal) delete icoWrap.dataset.internal
       if (!icoWrap.querySelector('.mcp-ico')) {
         icoWrap.innerHTML = '<span class="mcp-ico" style="font-size:11px;filter:none;">&#x1F916;</span>'
       }
     } else if (tab.favicon) {
+      if (icoWrap.dataset.internal) delete icoWrap.dataset.internal
       const img = icoWrap.querySelector('img.tab-ico')
       if (!img || img.src !== tab.favicon) {
         // If the favicon fails to load, fall back to a Lucide globe icon.
         icoWrap.innerHTML = `<img class="tab-ico" src="${esc(tab.favicon)}" onerror="this.style.display='none';this.parentNode.innerHTML=window._TAB_FAVICON_FALLBACK">`
       }
     } else {
+      if (icoWrap.dataset.internal) delete icoWrap.dataset.internal
       if (!icoWrap.querySelector('svg.tab-ico')) icoWrap.innerHTML = window._TAB_FAVICON_FALLBACK
     } // end icon update
 
@@ -8717,9 +9303,11 @@ function reorderTab(srcId, dstId, insertBefore) {
   // Reflect new order in the DOM without recreating elements
   const bar = document.getElementById('tabbar')
   const ntBtn = document.getElementById('newtabBtn')
+  // ntBtn lives inside #tabsScroller (v1.10.84+), so use its parent.
+  const tabsContainer = ntBtn.parentNode || bar
   tabs.forEach(t => {
     const el = bar.querySelector('.tab[data-tab-id="' + CSS.escape(String(t.id)) + '"]')
-    if (el) bar.insertBefore(el, ntBtn)
+    if (el) tabsContainer.insertBefore(el, ntBtn)
   })
 
   // Persist if the app has a session-save hook
@@ -9061,6 +9649,18 @@ async function renderSeoSubTab(tab) {
         <button class="act-btn" onclick="runLighthousePanel()">${_BTN.zap}Kör Lighthouse-analys</button>
       </div>
     `
+  } else if (tab === 'cwv') {
+    // Moved here from its own dock icon. Same buttons + result holders
+    // as before; #cwvResults / #cwvHistory ids preserved so measureCWV
+    // and startCWVMonitor keep working without changes.
+    el.innerHTML = `
+      <div class="sh">LIVE MÄTNING</div>
+      <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Mäter CWV i realtid på aktiv sida. Påverkar Google Ads Quality Score och ranking.</p>
+      <div id="cwvResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att mäta</div></div>
+      <button class="act-btn" style="margin-top:10px" onclick="measureCWV()">${_BTN.zap}Mät Core Web Vitals</button>
+      <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">${_BTN.barChart}Live-övervakning (auto)</button>
+      <div id="cwvHistory" style="margin-top:14px"></div>
+    `
   }
 }
 
@@ -9306,10 +9906,11 @@ async function renderPanelContent(name) {
     // Sub-tab state
     if (!window._seoTab) window._seoTab = 'onpage'
     body.innerHTML = `
-      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px">
+      <div style="display:flex;gap:0;border-bottom:1px solid var(--border);margin:-2px -14px 10px;padding:0 14px;flex-wrap:wrap">
         <div class="seo-sub-tab ${window._seoTab==='onpage'?'active':''}" onclick="window._seoTab='onpage';renderPanelContent('seo')">On-Page</div>
         <div class="seo-sub-tab ${window._seoTab==='crawl'?'active':''}" onclick="window._seoTab='crawl';renderPanelContent('seo')">Crawl</div>
         <div class="seo-sub-tab ${window._seoTab==='lighthouse'?'active':''}" onclick="window._seoTab='lighthouse';renderPanelContent('seo')">Lighthouse</div>
+        <div class="seo-sub-tab ${window._seoTab==='cwv'?'active':''}" onclick="window._seoTab='cwv';renderPanelContent('seo')">Core Web Vitals</div>
       </div>
       <div id="seoPanelContent"><div style="text-align:center;padding:20px;color:var(--muted)">Laddar...</div></div>
     `
@@ -9547,16 +10148,6 @@ async function renderPanelContent(name) {
     } else {
       body.innerHTML = '<p style="font-size:11px;color:var(--muted);text-align:center;padding:24px 0">Inga klienter hittade. Synka ditt konto.</p>'
     }
-  } else if (name === 'cwv') {
-    icon.innerHTML = _PANEL_ICONS.zap; title.textContent = 'Core Web Vitals'
-    body.innerHTML = `
-      <div class="sh">LIVE MÄTNING</div>
-      <p style="font-size:10px;color:var(--muted);margin-bottom:10px">Mäter CWV i realtid på aktiv sida. Påverkar Google Ads Quality Score och ranking.</p>
-      <div id="cwvResults"><div style="text-align:center;padding:16px;color:var(--muted)">Klicka nedan för att mäta</div></div>
-      <button class="act-btn" style="margin-top:10px" onclick="measureCWV()">${_BTN.zap}Mät Core Web Vitals</button>
-      <button class="act-btn" style="margin-top:6px" onclick="startCWVMonitor()">${_BTN.barChart}Live-övervakning (auto)</button>
-      <div id="cwvHistory" style="margin-top:14px"></div>
-    `
   } else if (name === 'creative') {
     icon.innerHTML = _PANEL_ICONS.sparkles; title.textContent = 'Creative Intelligence'
     body.innerHTML = `
@@ -9595,22 +10186,33 @@ async function renderPanelContent(name) {
     scanAdNetworks()
   } else if (name === 'claude') {
     icon.innerHTML = _PANEL_ICONS.chat; title.textContent = 'Claude AI'
+    // Side-panel Claude — same visual language as the home-screen chat:
+    // a card-like rounded container around the message list and a matching
+    // rounded input wrapper with a square primary submit button. Quick
+    // actions appear as chips above the input, status + clear-chat sit in
+    // a discreet footer below.
     body.innerHTML = `
-      <div id="claudeChat" style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:300px">
-        <div id="claudeMessages" style="flex:1;overflow-y:auto;padding:4px 0;display:flex;flex-direction:column;gap:6px"></div>
-        <div style="border-top:1px solid var(--border);padding:8px 0 0">
-          <div style="display:flex;gap:4px;margin-bottom:6px">
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('seo')">${_BTN.search}SEO-analys</button>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('improve')">${_BTN.sparkles}Förbättra</button>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px;flex:1" onclick="claudeQuickAction('summary')">${_BTN.edit}Sammanfatta</button>
-          </div>
-          <div style="display:flex;gap:4px">
-            <textarea id="claudeInput" placeholder="Fråga Claude om sidan..." style="flex:1;min-height:36px;max-height:120px;resize:vertical;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:6px 8px;font-size:11px;font-family:inherit;color:var(--txt);outline:none" onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendClaudeMessage()}"></textarea>
-            <button onclick="sendClaudeMessage()" style="width:36px;height:36px;border-radius:6px;border:1px solid var(--border);background:var(--p);color:#fff;cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:14px;flex-shrink:0">↑</button>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px">
-            <span style="font-size:9px;color:var(--muted)" id="claudeStatus">Redo</span>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearClaudeChat()">Rensa chatt</button>
+      <div class="claude-panel">
+        <div class="claude-panel-list" id="claudeMessages"></div>
+        <div class="claude-panel-quick">
+          <button class="claude-quick-chip" onclick="claudeQuickAction('seo')">${_BTN.search}<span>SEO-analys</span></button>
+          <button class="claude-quick-chip" onclick="claudeQuickAction('improve')">${_BTN.sparkles}<span>Förbättra</span></button>
+          <button class="claude-quick-chip" onclick="claudeQuickAction('summary')">${_BTN.edit}<span>Sammanfatta</span></button>
+        </div>
+        <div class="claude-panel-input-wrap">
+          <textarea id="claudeInput" rows="1" placeholder="Fråga Claude om sidan…"
+            onkeydown="if(event.key==='Enter'&&!event.shiftKey){event.preventDefault();sendClaudeMessage()}"></textarea>
+          <div class="claude-panel-input-foot">
+            <span class="claude-panel-status" id="claudeStatus">Redo</span>
+            <div style="display:flex;align-items:center;gap:8px">
+              <button type="button" class="claude-panel-clear" onclick="clearClaudeChat()" title="Rensa konversation">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3 6h18"/><path d="M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6"/><path d="M8 6V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2"/></svg>
+                <span>Rensa</span>
+              </button>
+              <button class="claude-panel-submit" onclick="sendClaudeMessage()" aria-label="Skicka">
+                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+              </button>
+            </div>
           </div>
         </div>
       </div>
@@ -9618,106 +10220,23 @@ async function renderPanelContent(name) {
     // Show welcome if empty
     if (!_claudeMessages.length) {
       document.getElementById('claudeMessages').innerHTML = `
-        <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-          <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
-          <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
-          <div style="font-size:10px;line-height:1.5">Ställ frågor om sidan du besöker, få SEO-tips, eller be Claude analysera innehållet. Claude har tillgång till sidans HTML, meta-data och mer.</div>
+        <div class="claude-panel-welcome">
+          <div class="cpw-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
+          <div class="cpw-title">Claude AI</div>
+          <div class="cpw-sub">Ställ frågor om sidan du besöker, få SEO-tips eller låt Claude analysera innehållet. Claude har tillgång till sidans HTML, meta-data och brödtext.</div>
         </div>
       `
     } else {
       renderClaudeMessages()
     }
   } else if (name === 'voice') {
-    icon.innerHTML = _PANEL_ICONS.mic; title.textContent = 'Röstchatt'
-    const elKey = await SE.storeGet('elevenlabsApiKey', '')
-    const openaiKey = await SE.storeGet('openaiApiKey', '')
-    const anthropicKey = await SE.storeGet('anthropicApiKey', '')
-    const selectedProvider = await SE.storeGet('voiceAiProvider', 'claude')
-    const selectedVoiceId = await SE.storeGet('voiceElevenlabsVoiceId', '')
-    const hasEL = !!elKey
-    const hasAI = selectedProvider === 'claude' ? !!anthropicKey : !!openaiKey
-    body.innerHTML = `
-      <div id="voicePanel" style="display:flex;flex-direction:column;height:calc(100vh - 200px);min-height:300px">
-        <!-- Voice messages -->
-        <div id="voiceMessages" style="flex:1;overflow-y:auto;padding:4px 0;display:flex;flex-direction:column;gap:6px"></div>
-
-        <!-- Visualizer + mic button -->
-        <div style="border-top:1px solid var(--border);padding:12px 0 0;display:flex;flex-direction:column;align-items:center;gap:8px">
-          <canvas id="voiceVisualizer" width="240" height="40" style="border-radius:8px;background:var(--panel);width:100%;height:40px"></canvas>
-          <div style="display:flex;align-items:center;gap:10px">
-            <button id="voiceMicBtn" onclick="toggleVoiceRecording()" style="width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--panel);color:var(--p);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:20px;transition:all .2s">
-              <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 00-3 3v8a3 3 0 006 0V4a3 3 0 00-3-3z"/><path d="M19 10v2a7 7 0 01-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
-            </button>
-            <button id="voiceStopTTSBtn" onclick="stopVoiceTTS()" style="display:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--r);cursor:pointer;font-size:14px" title="Stoppa uppläsning">◼</button>
-          </div>
-          <div id="voiceStatus" style="font-size:10px;color:var(--muted);text-align:center">Tryck för att starta ett samtal</div>
-        </div>
-
-        <!-- Settings row -->
-        <div style="border-top:1px solid var(--border);padding:8px 0 0;margin-top:8px">
-          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
-            <select id="voiceProviderSelect" onchange="onVoiceProviderChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
-              <option value="claude" ${selectedProvider === 'claude' ? 'selected' : ''}>Claude (Anthropic)</option>
-              <option value="openai" ${selectedProvider === 'openai' ? 'selected' : ''}>OpenAI (GPT-4o)</option>
-            </select>
-            <select id="voiceTTSSelect" onchange="onVoiceTTSChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
-              <option value="browser">TTS: Webbläsare (gratis)</option>
-              <option value="elevenlabs" ${hasEL ? 'selected' : ''}>TTS: ElevenLabs</option>
-            </select>
-          </div>
-          <div style="display:flex;gap:4px;align-items:center;margin-bottom:6px">
-            <select id="voiceELVoiceSelect" onchange="onVoiceELVoiceChange(this.value)" style="flex:1;height:26px;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;color:var(--txt);padding:0 4px">
-              <option value="1Iztu4UHnTb9SUjJcpS1">Anna</option>
-              <option value="oQV06a7Gn8pbCJh5DXcO">David</option>
-            </select>
-          </div>
-          <div style="display:flex;align-items:center;justify-content:space-between">
-            <span style="font-size:9px;color:var(--muted)" id="voiceKeyStatus">${!openaiKey ? 'Saknar OpenAI-nyckel (krävs för Whisper)' : !hasAI ? 'Saknar AI-nyckel' : hasEL ? 'Redo' : 'Redo (browser-TTS)'}</span>
-            <button class="act-btn" style="font-size:9px;padding:2px 8px" onclick="clearVoiceChat()">Rensa</button>
-          </div>
-          <div style="margin-top:6px;padding:4px 6px;background:var(--bg);border-radius:4px;border:1px solid var(--border);display:flex;justify-content:space-between;align-items:center">
-            <span id="voiceCostDisplay" style="font-size:9px;color:var(--muted)">Senaste: — · Session: $0.000</span>
-            <span id="voiceCostMonthly" style="font-size:9px;font-weight:600;color:var(--blue,#4680ff)">Månad: $0.00</span>
-          </div>
-        </div>
-
-        <!-- Meeting transcription (Teams / Zoom / any tab with audio) -->
-        <div style="border-top:1px solid var(--border);padding:10px 0 0;margin-top:8px">
-          <div class="sh" style="margin-bottom:6px">TRANSKRIBERA MÖTE</div>
-          <label style="display:flex;align-items:flex-start;gap:6px;font-size:10px;color:var(--muted);cursor:pointer;line-height:1.4;margin-bottom:8px">
-            <input type="checkbox" id="mtConsent" style="margin-top:2px;flex-shrink:0" onchange="document.getElementById('mtStartBtn').disabled = !this.checked">
-            <span>Alla deltagare är informerade och samtycker till transkribering. Du ansvarar för samtycke enligt lokala lagar (GDPR / inspelningslagar).</span>
-          </label>
-          <div style="display:flex;gap:4px">
-            <button class="act-btn" id="mtStartBtn" style="flex:1;height:30px;font-size:11px" onclick="startMeetingTranscription()" disabled>Starta transkribering</button>
-            <button class="act-btn" id="mtStopBtn" style="flex:1;height:30px;font-size:11px;display:none;color:var(--r)" onclick="stopMeetingTranscription()">Stoppa</button>
-            <button class="act-btn" id="mtCopyBtn" style="width:52px;height:30px;font-size:10px;display:none" onclick="copyMeetingTranscript()" title="Kopiera hela transkriptet">Kopiera</button>
-          </div>
-          <div id="mtStatus" style="font-size:9px;color:var(--muted);margin-top:5px">Kräver OpenAI-nyckel · fångar systemaudio (tysta Spotify o.d. under mötet)</div>
-          <div id="mtTranscript" style="display:none;margin-top:8px;max-height:240px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px;font-size:11px;line-height:1.55"></div>
-        </div>
-      </div>
-    `
-    // Sync TTS mode to store based on what's actually selected
-    if (hasEL) await SE.storeSet('voiceTTSMode', 'elevenlabs')
-    // Load ElevenLabs voices
-    if (hasEL) loadElevenLabsVoices()
-    // Load monthly cost display
-    updateCostDisplay()
-
-    // Show welcome if empty
-    if (!_voiceMessages.length) {
-      document.getElementById('voiceMessages').innerHTML = `
-        <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-          <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg></div>
-          <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Röstchatt</div>
-          <div style="font-size:10px;line-height:1.5">Tryck på mikrofonen för att aktivera. Säg sedan assistentens namn (<strong>"Anna"</strong> eller <strong>"David"</strong>) följt av din fråga — precis som Siri.</div>
-          <div style="font-size:9px;color:var(--muted);margin-top:6px">Exempel: "Anna, vad tycker du om SEO:n?" eller "David, kör en audit"</div>
-        </div>
-      `
-    } else {
-      renderVoiceMessages()
-    }
+    // Legacy entry-point — Röstchatt now lives under Inställningar →
+    // Röstchatt. Redirect any code that still calls togglePanel('voice')
+    // (e.g. older renderer caches, the home chip, etc.) to open settings
+    // on the rostchatt section instead.
+    closePanel()
+    if (typeof openSettings === 'function') openSettings('rostchatt')
+    return
   } else if (name === 'settings') {
     icon.innerHTML = _PANEL_ICONS.settings; title.textContent = 'Inställningar'
     const { profile: activeProfile } = await SE.profileGetActive()
@@ -10084,37 +10603,43 @@ const SETTINGS_NAV_ICONS = {
   juridiskt:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8z"/><polyline points="14 2 14 8 20 8"/></svg>',
   nyheter:      '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M4 4h12a2 2 0 0 1 2 2v14H6a2 2 0 0 1-2-2V4z"/><path d="M18 8h2a2 2 0 0 1 2 2v8a2 2 0 0 1-2 2"/><line x1="8" y1="9" x2="14" y2="9"/><line x1="8" y1="13" x2="14" y2="13"/><line x1="8" y1="17" x2="11" y2="17"/></svg>',
   system:       '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="16.5" y1="9.4" x2="7.55" y2="4.24"/><path d="M21 16V8a2 2 0 0 0-1-1.73l-7-4a2 2 0 0 0-2 0l-7 4A2 2 0 0 0 3 8v8a2 2 0 0 0 1 1.73l7 4a2 2 0 0 0 2 0l7-4A2 2 0 0 0 21 16z"/><polyline points="3.27 6.96 12 12.01 20.73 6.96"/><line x1="12" y1="22.08" x2="12" y2="12"/></svg>',
+  rostchatt:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
+  sokmotor:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
+  sprak:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>',
 }
 
 // Section list — rendered into the left nav. Order matters.
 function _settingsSectionList() {
   return [
-    { group: 'Konto' },
-    { id: 'konto',       label: 'Konto',                icon: SETTINGS_NAV_ICONS.konto },
-    { id: 'profiler',    label: 'Profiler',             icon: SETTINGS_NAV_ICONS.profiler },
+    { group: _t('settings.group.konto','Konto') },
+    { id: 'konto',       label: _t('settings.nav.konto','Konto'),                  icon: SETTINGS_NAV_ICONS.konto },
+    { id: 'profiler',    label: _t('settings.nav.profiler','Profiler'),            icon: SETTINGS_NAV_ICONS.profiler },
 
-    { group: 'Data' },
-    { id: 'losenord',    label: 'Lösenord',             icon: SETTINGS_NAV_ICONS.losenord },
-    { id: 'bokmarken',   label: 'Bokmärken',            icon: SETTINGS_NAV_ICONS.bokmarken },
-    { id: 'historik',    label: 'Historik',             icon: SETTINGS_NAV_ICONS.historik },
-    { id: 'nedladdningar', label: 'Nedladdningar',      icon: SETTINGS_NAV_ICONS.nedladdningar },
+    { group: _t('settings.group.data','Data') },
+    { id: 'losenord',    label: _t('settings.nav.losenord','Lösenord'),            icon: SETTINGS_NAV_ICONS.losenord },
+    { id: 'bokmarken',   label: _t('settings.nav.bokmarken','Bokmärken'),          icon: SETTINGS_NAV_ICONS.bokmarken },
+    { id: 'historik',    label: _t('settings.nav.historik','Historik'),            icon: SETTINGS_NAV_ICONS.historik },
+    { id: 'nedladdningar', label: _t('settings.nav.nedladdningar','Nedladdningar'),icon: SETTINGS_NAV_ICONS.nedladdningar },
 
-    { group: 'Browser' },
-    { id: 'utseende',    label: 'Utseende',             icon: SETTINGS_NAV_ICONS.utseende },
-    { id: 'nyheter',     label: 'Nyheter',              icon: SETTINGS_NAV_ICONS.nyheter },
-    { id: 'shield',      label: 'SEOZ Shield',          icon: SETTINGS_NAV_ICONS.shield },
-    { id: 'permissions', label: 'Webbplatsbehörigheter',icon: SETTINGS_NAV_ICONS.permissions },
-    { id: 'default',     label: 'Standardwebbläsare',   icon: SETTINGS_NAV_ICONS.default },
+    { group: _t('settings.group.browser','Browser') },
+    { id: 'utseende',    label: _t('settings.nav.utseende','Utseende'),             icon: SETTINGS_NAV_ICONS.utseende },
+    { id: 'sprak',       label: _t('settings.nav.sprak','Språk'),                   icon: SETTINGS_NAV_ICONS.sprak },
+    { id: 'sokmotor',    label: _t('settings.nav.sokmotor','Sökmotor'),             icon: SETTINGS_NAV_ICONS.sokmotor },
+    { id: 'nyheter',     label: _t('settings.nav.nyheter','Nyheter'),               icon: SETTINGS_NAV_ICONS.nyheter },
+    { id: 'shield',      label: _t('settings.nav.shield','SEOZ Shield'),            icon: SETTINGS_NAV_ICONS.shield },
+    { id: 'permissions', label: _t('settings.nav.permissions','Webbplatsbehörigheter'), icon: SETTINGS_NAV_ICONS.permissions },
+    { id: 'default',     label: _t('settings.nav.default','Standardwebbläsare'),    icon: SETTINGS_NAV_ICONS.default },
 
-    { group: 'AI & integrationer' },
-    { id: 'ai',          label: 'AI-nycklar',           icon: SETTINGS_NAV_ICONS.ai },
+    { group: _t('settings.group.ai','AI & integrationer') },
+    { id: 'ai',          label: _t('settings.nav.ai','AI-nycklar'),                icon: SETTINGS_NAV_ICONS.ai },
+    { id: 'rostchatt',   label: _t('settings.nav.rostchatt','Röstchatt'),          icon: SETTINGS_NAV_ICONS.rostchatt },
 
-    { group: 'Diagnostik' },
-    { id: 'diagnostik',  label: 'Kraschrapporter',      icon: SETTINGS_NAV_ICONS.diagnostik },
+    { group: _t('settings.group.diagnostik','Diagnostik') },
+    { id: 'diagnostik',  label: _t('settings.nav.diagnostik','Kraschrapporter'),   icon: SETTINGS_NAV_ICONS.diagnostik },
 
-    { group: 'Om' },
-    { id: 'juridiskt',   label: 'Juridiskt',            icon: SETTINGS_NAV_ICONS.juridiskt },
-    { id: 'system',      label: 'System',               icon: SETTINGS_NAV_ICONS.system },
+    { group: _t('settings.group.om','Om') },
+    { id: 'juridiskt',   label: _t('settings.nav.juridiskt','Juridiskt'),          icon: SETTINGS_NAV_ICONS.juridiskt },
+    { id: 'system',      label: _t('settings.nav.system','System'),                icon: SETTINGS_NAV_ICONS.system },
   ]
 }
 
@@ -10138,12 +10663,15 @@ function renderSettingsScreen() {
 
   // Per-section post-render hooks (fill in async data, status badges, etc.)
   if (window._settingsSection === 'ai')         _settingsPostAi()
+  if (window._settingsSection === 'rostchatt')  _settingsPostRostchatt()
   if (window._settingsSection === 'permissions') renderSitePermissions()
   if (window._settingsSection === 'diagnostik')  refreshCrashStatus()
   if (window._settingsSection === 'system')     _settingsPostSystem()
   if (window._settingsSection === 'default')    _settingsPostDefault()
   if (window._settingsSection === 'losenord')   _settingsPostLosenord()
   if (window._settingsSection === 'nyheter')    _settingsPostNyheter()
+  if (window._settingsSection === 'sprak')      _settingsPostSprak()
+  if (window._settingsSection === 'sokmotor')   _settingsPostSokmotor()
 
   // Some sections need extra horizontal room for multi-column layouts.
   // Default settings-content max-width is 760px which is too narrow for
@@ -10168,10 +10696,13 @@ const SETTINGS_RENDERERS = {
   historik:     () => _renderSettingsHistorik(),
   nedladdningar:() => _renderSettingsNedladdningar(),
   utseende:     () => _renderSettingsUtseende(),
+  sprak:        () => _renderSettingsSprak(),
+  sokmotor:     () => _renderSettingsSokmotor(),
   shield:       () => _renderSettingsShield(),
   permissions:  () => _renderSettingsPermissions(),
   default:      () => _renderSettingsDefault(),
   ai:           () => _renderSettingsAi(),
+  rostchatt:    () => _renderSettingsRostchatt(),
   diagnostik:   () => _renderSettingsDiagnostik(),
   juridiskt:    () => _renderSettingsJuridiskt(),
   system:       () => _renderSettingsSystem(),
@@ -10548,6 +11079,231 @@ function closeSettings() {
   scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
 }
 
+// ─────────────────────────────────────────────────────────────────────
+//  SEARCH ENGINE — user-pickable default for URL-bar fallback + home submit
+//  Persisted as `defaultSearchEngine` (key) in electron-store. The
+//  query gets `{q}` substituted with the encoded user query. Cached in
+//  memory at boot so doNav() doesn't have to await on every keystroke.
+// ─────────────────────────────────────────────────────────────────────
+const SEARCH_ENGINES = {
+  google:     { name: 'Google',     url: 'https://www.google.com/search?q={q}',                  domain: 'google.com' },
+  bing:       { name: 'Bing',       url: 'https://www.bing.com/search?q={q}',                    domain: 'bing.com' },
+  duckduckgo: { name: 'DuckDuckGo', url: 'https://duckduckgo.com/?q={q}',                        domain: 'duckduckgo.com' },
+  startpage:  { name: 'Startpage',  url: 'https://www.startpage.com/do/search?query={q}',        domain: 'startpage.com' },
+  ecosia:     { name: 'Ecosia',     url: 'https://www.ecosia.org/search?q={q}',                  domain: 'ecosia.org' },
+  brave:      { name: 'Brave Search', url: 'https://search.brave.com/search?q={q}',              domain: 'search.brave.com' },
+  qwant:      { name: 'Qwant',      url: 'https://www.qwant.com/?q={q}',                         domain: 'qwant.com' },
+  yandex:     { name: 'Yandex',     url: 'https://yandex.com/search/?text={q}',                  domain: 'yandex.com' },
+  baidu:      { name: 'Baidu',      url: 'https://www.baidu.com/s?wd={q}',                       domain: 'baidu.com' },
+  perplexity: { name: 'Perplexity', url: 'https://www.perplexity.ai/search?q={q}',               domain: 'perplexity.ai' },
+}
+let _defaultSearchEngine = 'google'
+SE.storeGet('defaultSearchEngine', 'google').then(v => {
+  if (v && SEARCH_ENGINES[v]) _defaultSearchEngine = v
+}).catch(() => {})
+
+function _searchUrl(query) {
+  const eng = SEARCH_ENGINES[_defaultSearchEngine] || SEARCH_ENGINES.google
+  return eng.url.replace('{q}', encodeURIComponent(query))
+}
+async function _setDefaultSearchEngine(id) {
+  if (!SEARCH_ENGINES[id]) return
+  _defaultSearchEngine = id
+  await SE.storeSet('defaultSearchEngine', id)
+  toast(_t('toast.searchEngineSet','Sökmotor: ') + SEARCH_ENGINES[id].name, '#4680ff')
+  if (window._settingsSection === 'sokmotor') renderSettingsScreen()
+}
+window._setDefaultSearchEngine = _setDefaultSearchEngine
+
+// ─────────────────────────────────────────────────────────────────────
+//  LANGUAGE / I18N — simple key→string map keyed by `appLanguage`.
+//  Currently Swedish is the source of truth and English is a partial
+//  overlay covering the most user-visible surfaces (settings nav,
+//  home greet, common buttons). Strings without a translation fall
+//  back to the default passed at the call site, which is always the
+//  Swedish original — so missing keys never break the UI.
+// ─────────────────────────────────────────────────────────────────────
+const SUPPORTED_LANGS = [
+  { code: 'sv', name: 'Svenska',  native: 'Svenska',  flag: '🇸🇪' },
+  { code: 'en', name: 'English',  native: 'English',  flag: '🇬🇧' },
+]
+const _I18N_DICT = {
+  en: {
+    'settings.group.konto':     'Account',
+    'settings.group.data':      'Data',
+    'settings.group.browser':   'Browser',
+    'settings.group.ai':        'AI & integrations',
+    'settings.group.diagnostik':'Diagnostics',
+    'settings.group.om':        'About',
+    'settings.nav.konto':         'Account',
+    'settings.nav.profiler':      'Profiles',
+    'settings.nav.losenord':      'Passwords',
+    'settings.nav.bokmarken':     'Bookmarks',
+    'settings.nav.historik':      'History',
+    'settings.nav.nedladdningar': 'Downloads',
+    'settings.nav.utseende':      'Appearance',
+    'settings.nav.sprak':         'Language',
+    'settings.nav.sokmotor':      'Search engine',
+    'settings.nav.nyheter':       'News',
+    'settings.nav.shield':        'SEOZ Shield',
+    'settings.nav.permissions':   'Site permissions',
+    'settings.nav.default':       'Default browser',
+    'settings.nav.ai':            'AI keys',
+    'settings.nav.rostchatt':     'Voice chat',
+    'settings.nav.diagnostik':    'Crash reports',
+    'settings.nav.juridiskt':     'Legal',
+    'settings.nav.system':        'System',
+    'home.greet.morning':         'Good morning',
+    'home.greet.day':             'Good day',
+    'home.greet.afternoon':       'Good afternoon',
+    'home.greet.evening':         'Good evening',
+    'home.sub':                   'What do you want to do today?',
+    'home.input.placeholder':     'Ask, type a URL, or try /summarize …',
+    'home.hint':                  'Enter = send · Shift+Enter = new line · / for commands',
+    'home.modules':               'Modules',
+    'home.chatClear':             'Clear',
+    'sokmotor.h1':                'Search engine',
+    'sokmotor.sub':               'Used when you type a search term in the URL bar or on the home screen.',
+    'sokmotor.current':           'Current',
+    'sokmotor.preview':           'Preview',
+    'sprak.h1':                   'Language',
+    'sprak.sub':                  'Choose the interface language. Some surfaces are not yet translated and stay in Swedish.',
+    'sprak.experimental':         'Experimental — only the most visible parts are translated so far.',
+    'toast.searchEngineSet':      'Search engine: ',
+    'toast.languageSet':          'Language: ',
+    'common.save':                'Save',
+    'common.remove':              'Remove',
+    'common.cancel':              'Cancel',
+    'common.close':               'Close',
+  }
+}
+let _appLanguage = 'sv'
+SE.storeGet('appLanguage', 'sv').then(v => {
+  if (v && (_I18N_DICT[v] || v === 'sv')) {
+    _appLanguage = v
+    document.documentElement.lang = v
+  }
+}).catch(() => {})
+
+function _t(key, fallback) {
+  const dict = _I18N_DICT[_appLanguage]
+  if (!dict) return fallback
+  return Object.prototype.hasOwnProperty.call(dict, key) ? dict[key] : fallback
+}
+window._t = _t
+
+async function _setAppLanguage(code) {
+  if (!SUPPORTED_LANGS.some(l => l.code === code)) return
+  _appLanguage = code
+  document.documentElement.lang = code
+  await SE.storeSet('appLanguage', code)
+  // Re-render the surfaces that read from _t() at render time
+  try { if (window._settingsSection) renderSettingsScreen() } catch (_) {}
+  try { if (typeof renderHomeScreen === 'function') renderHomeScreen() } catch (_) {}
+  try { if (typeof _refreshHomeStaticStrings === 'function') _refreshHomeStaticStrings() } catch (_) {}
+  const lbl = SUPPORTED_LANGS.find(l => l.code === code)
+  toast(_t('toast.languageSet','Språk: ') + (lbl?.native || code), '#4680ff')
+}
+window._setAppLanguage = _setAppLanguage
+
+// Refresh static (non-templated) strings on the home screen DOM after
+// the user changes language. The home screen markup is in index.html
+// rather than rendered by JS, so we patch the visible text nodes.
+function _refreshHomeStaticStrings() {
+  const sub = document.getElementById('homeSub')
+  if (sub) sub.textContent = _t('home.sub','Vad vill du göra idag?')
+  const inp = document.getElementById('homeInput')
+  if (inp) inp.placeholder = _t('home.input.placeholder','Fråga, skriv en URL, eller prova /sammanfatta …')
+  const hint = document.querySelector('#homeScreen .home-hint')
+  if (hint) hint.textContent = _t('home.hint','Enter = skicka · Shift+Enter = ny rad · / för kommandon')
+  const modBtn = document.querySelector('#homeScreen .home-rail-toggle span:not(.hrt-badge)')
+  if (modBtn) modBtn.textContent = _t('home.modules','Moduler')
+  const greet = document.getElementById('homeGreet')
+  if (greet && typeof _greetingForNow === 'function') greet.textContent = _greetingForNow()
+}
+window._refreshHomeStaticStrings = _refreshHomeStaticStrings
+
+function _renderSettingsSokmotor() {
+  const cur = SEARCH_ENGINES[_defaultSearchEngine] || SEARCH_ENGINES.google
+  const opts = Object.entries(SEARCH_ENGINES).map(([id, eng]) => {
+    const active = id === _defaultSearchEngine
+    const icon = `https://www.google.com/s2/favicons?domain=${eng.domain}&sz=32`
+    return `
+      <div class="settings-row se-row${active ? ' active' : ''}" onclick="_setDefaultSearchEngine('${esc(id)}')" style="cursor:pointer">
+        <div class="settings-row-icon" style="background:var(--panel);overflow:hidden;padding:0">
+          <img src="${esc(icon)}" alt="" style="width:18px;height:18px;border-radius:4px" onerror="this.style.display='none'">
+        </div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(eng.name)}</div>
+          <div class="settings-row-sub" style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10px">${esc(eng.url)}</div>
+        </div>
+        <div class="settings-row-action">
+          ${active
+            ? '<span class="set-badge set-badge-green" style="background:rgba(44,168,127,.10);color:var(--g);padding:4px 10px;border-radius:7px;font-size:10.5px;font-weight:600">✓ ' + esc(_t('sokmotor.current','Aktuell')) + '</span>'
+            : '<button class="settings-btn" onclick="event.stopPropagation();_setDefaultSearchEngine(\'' + esc(id) + '\')">' + esc(_t('common.save','Välj')) + '</button>'}
+        </div>
+      </div>
+    `
+  }).join('')
+  return `
+    <div class="settings-section-h1">${esc(_t('sokmotor.h1','Sökmotor'))}</div>
+    <div class="settings-section-sub">${esc(_t('sokmotor.sub','Används när du skriver en söktext i URL-fältet eller på startsidan.'))}</div>
+
+    <div class="settings-card">
+      <div class="settings-row">
+        <div class="settings-row-icon blue">${SETTINGS_NAV_ICONS.sokmotor}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(_t('sokmotor.current','Aktuell'))}: ${esc(cur.name)}</div>
+          <div class="settings-row-sub">${esc(_t('sokmotor.preview','Förhandsvisning'))}: <span style="font-family:'JetBrains Mono',ui-monospace,monospace;font-size:10.5px;color:var(--p)">${esc(cur.url.replace('{q}','seoz'))}</span></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="settings-card" style="padding:0">
+      ${opts}
+    </div>
+  `
+}
+function _settingsPostSokmotor() { /* no async work, intentional */ }
+
+function _renderSettingsSprak() {
+  const opts = SUPPORTED_LANGS.map(l => {
+    const active = l.code === _appLanguage
+    return `
+      <div class="settings-row se-row${active ? ' active' : ''}" onclick="_setAppLanguage('${esc(l.code)}')" style="cursor:pointer">
+        <div class="settings-row-icon" style="background:var(--panel);font-size:18px;display:flex;align-items:center;justify-content:center">${l.flag}</div>
+        <div class="settings-row-content">
+          <div class="settings-row-title">${esc(l.native)}</div>
+          <div class="settings-row-sub">${esc(l.name)} · ${esc(l.code)}</div>
+        </div>
+        <div class="settings-row-action">
+          ${active
+            ? '<span class="set-badge set-badge-green" style="background:rgba(44,168,127,.10);color:var(--g);padding:4px 10px;border-radius:7px;font-size:10.5px;font-weight:600">✓ ' + esc(_t('sokmotor.current','Aktuell')) + '</span>'
+            : '<button class="settings-btn" onclick="event.stopPropagation();_setAppLanguage(\'' + esc(l.code) + '\')">' + esc(_t('common.save','Välj')) + '</button>'}
+        </div>
+      </div>
+    `
+  }).join('')
+  return `
+    <div class="settings-section-h1">${esc(_t('sprak.h1','Språk'))}</div>
+    <div class="settings-section-sub">${esc(_t('sprak.sub','Välj språk för gränssnittet. En del ytor är ännu inte översatta och förblir på svenska.'))}</div>
+
+    <div class="settings-card" style="padding:0">
+      ${opts}
+    </div>
+
+    <div class="settings-card" style="background:var(--panel);border-style:dashed">
+      <div class="settings-row">
+        <div class="settings-row-icon orange"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 9v4"/><path d="M12 17h.01"/><circle cx="12" cy="12" r="10"/></svg></div>
+        <div class="settings-row-content">
+          <div class="settings-row-sub">${esc(_t('sprak.experimental','Experimentellt — endast de mest synliga ytorna är översatta tills vidare.'))}</div>
+        </div>
+      </div>
+    </div>
+  `
+}
+function _settingsPostSprak() { /* no async work */ }
+
 function _renderSettingsUtseende() {
   const cur = (document.documentElement.dataset.theme || 'light')
   return `
@@ -10704,6 +11460,132 @@ function _settingsPostAi() {
   SE.storeGet('anthropicApiKey', '').then(k => setStatus('settingsAnthropicKey', !!k))
   SE.storeGet('openaiApiKey',    '').then(k => setStatus('settingsOpenaiKey',    !!k))
   SE.storeGet('elevenlabsApiKey','').then(k => setStatus('settingsElevenlabsKey',!!k))
+}
+
+// ─── Röstchatt ──────────────────────────────────────────────
+// Was its own dock panel before v1.10.92; lives under Inställningar
+// → AI & integrationer now. Same DOM ids (#voiceMessages, #voiceMicBtn,
+// #voiceProviderSelect, etc.) preserved so toggleVoiceRecording,
+// onVoiceProviderChange, renderVoiceMessages, loadElevenLabsVoices,
+// updateCostDisplay all keep working unchanged.
+function _renderSettingsRostchatt() {
+  return `
+    <div class="settings-section-h1">Röstchatt</div>
+    <div class="settings-section-sub">Talsamtal med AI direkt i browsern. Säg <strong>"Anna"</strong> eller <strong>"David"</strong> följt av din fråga, precis som Siri. Kräver OpenAI-nyckel (Whisper för STT) + en AI-nyckel (Anthropic eller OpenAI) — se <a onclick="window._settingsSection='ai';renderSettingsContent()" style="color:var(--p);cursor:pointer">AI-nycklar</a>.</div>
+
+    <div id="voicePanel" style="display:flex;flex-direction:column;gap:14px">
+
+      <!-- Conversation log -->
+      <div class="settings-card">
+        <div class="settings-card-h">Konversation</div>
+        <div id="voiceMessages" style="min-height:120px;max-height:340px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;padding:4px 0"></div>
+      </div>
+
+      <!-- Mic + visualizer -->
+      <div class="settings-card" style="align-items:center">
+        <canvas id="voiceVisualizer" width="240" height="40" style="border-radius:8px;background:var(--panel);width:100%;height:40px"></canvas>
+        <div style="display:flex;align-items:center;gap:10px;margin-top:10px">
+          <button id="voiceMicBtn" onclick="toggleVoiceRecording()" style="width:56px;height:56px;border-radius:50%;border:2px solid var(--border);background:var(--panel);color:var(--p);cursor:pointer;display:flex;align-items:center;justify-content:center;transition:all .2s">
+            <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>
+          </button>
+          <button id="voiceStopTTSBtn" onclick="stopVoiceTTS()" style="display:none;width:36px;height:36px;border-radius:50%;border:1px solid var(--border);background:var(--panel);color:var(--r);cursor:pointer" title="Stoppa uppläsning">◼</button>
+        </div>
+        <div id="voiceStatus" style="font-size:11px;color:var(--muted);margin-top:8px;text-align:center">Tryck på mikrofonen för att starta ett samtal</div>
+      </div>
+
+      <!-- Provider + voice settings -->
+      <div class="settings-card">
+        <div class="settings-card-h">Modell & röst</div>
+        <div class="settings-row" style="gap:8px">
+          <select id="voiceProviderSelect" onchange="onVoiceProviderChange(this.value)" class="settings-input" style="flex:1">
+            <option value="claude">Claude (Anthropic)</option>
+            <option value="openai">OpenAI (GPT-4o)</option>
+          </select>
+          <select id="voiceTTSSelect" onchange="onVoiceTTSChange(this.value)" class="settings-input" style="flex:1">
+            <option value="browser">TTS: Webbläsare (gratis)</option>
+            <option value="elevenlabs">TTS: ElevenLabs</option>
+          </select>
+        </div>
+        <div class="settings-row" style="gap:8px;margin-top:8px">
+          <select id="voiceELVoiceSelect" onchange="onVoiceELVoiceChange(this.value)" class="settings-input" style="flex:1">
+            <option value="1Iztu4UHnTb9SUjJcpS1">Anna</option>
+            <option value="oQV06a7Gn8pbCJh5DXcO">David</option>
+          </select>
+        </div>
+        <div class="settings-row" style="margin-top:8px;justify-content:space-between;align-items:center">
+          <span id="voiceKeyStatus" style="font-size:11px;color:var(--muted)">Kollar nycklar…</span>
+          <button class="settings-btn" onclick="clearVoiceChat()">Rensa konversation</button>
+        </div>
+        <div class="settings-row" style="margin-top:8px;padding:6px 10px;background:var(--bg);border-radius:6px;border:1px solid var(--border);justify-content:space-between">
+          <span id="voiceCostDisplay" style="font-size:11px;color:var(--muted)">Senaste: — · Session: $0.000</span>
+          <span id="voiceCostMonthly" style="font-size:11px;font-weight:600;color:var(--p)">Månad: $0.00</span>
+        </div>
+      </div>
+
+      <!-- Meeting transcription -->
+      <div class="settings-card">
+        <div class="settings-card-h">Transkribera möte</div>
+        <div class="settings-section-sub" style="margin:0 0 8px">Spelar in systemaudio (Teams / Zoom / valfri tab) och transkriberar via Whisper. Du ansvarar för samtycke enligt lokala lagar (GDPR / inspelning).</div>
+        <label style="display:flex;align-items:flex-start;gap:8px;font-size:11px;color:var(--muted);cursor:pointer;line-height:1.4;margin-bottom:8px">
+          <input type="checkbox" id="mtConsent" style="margin-top:2px;flex-shrink:0" onchange="document.getElementById('mtStartBtn').disabled = !this.checked">
+          <span>Alla deltagare är informerade och samtycker till transkribering.</span>
+        </label>
+        <div class="settings-row" style="gap:6px">
+          <button class="settings-btn primary" id="mtStartBtn" onclick="startMeetingTranscription()" disabled style="flex:1">Starta transkribering</button>
+          <button class="settings-btn danger" id="mtStopBtn" style="display:none;flex:1" onclick="stopMeetingTranscription()">Stoppa</button>
+          <button class="settings-btn" id="mtCopyBtn" style="display:none" onclick="copyMeetingTranscript()" title="Kopiera transkriptet">Kopiera</button>
+        </div>
+        <div id="mtStatus" style="font-size:11px;color:var(--muted);margin-top:6px">Kräver OpenAI-nyckel · fångar systemaudio</div>
+        <div id="mtTranscript" style="display:none;margin-top:10px;max-height:280px;overflow-y:auto;background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:10px;font-size:12px;line-height:1.55"></div>
+      </div>
+    </div>
+  `
+}
+
+async function _settingsPostRostchatt() {
+  try {
+    const elKey = await SE.storeGet('elevenlabsApiKey', '')
+    const openaiKey = await SE.storeGet('openaiApiKey', '')
+    const anthropicKey = await SE.storeGet('anthropicApiKey', '')
+    const selectedProvider = await SE.storeGet('voiceAiProvider', 'claude')
+    const hasEL = !!elKey
+    const hasAI = selectedProvider === 'claude' ? !!anthropicKey : !!openaiKey
+
+    // Reflect saved selections in the live <select>s.
+    const provSel = document.getElementById('voiceProviderSelect')
+    if (provSel) provSel.value = selectedProvider
+    const ttsSel = document.getElementById('voiceTTSSelect')
+    if (ttsSel) ttsSel.value = hasEL ? 'elevenlabs' : 'browser'
+
+    const status = document.getElementById('voiceKeyStatus')
+    if (status) {
+      status.textContent = !openaiKey
+        ? 'Saknar OpenAI-nyckel (krävs för Whisper)'
+        : !hasAI
+          ? 'Saknar AI-nyckel'
+          : hasEL ? 'Redo' : 'Redo (browser-TTS)'
+    }
+    if (hasEL) await SE.storeSet('voiceTTSMode', 'elevenlabs')
+    if (hasEL && typeof loadElevenLabsVoices === 'function') loadElevenLabsVoices()
+    if (typeof updateCostDisplay === 'function') updateCostDisplay()
+
+    // Welcome screen if no messages yet, else replay them.
+    if (!_voiceMessages || !_voiceMessages.length) {
+      const wrap = document.getElementById('voiceMessages')
+      if (wrap) {
+        wrap.innerHTML = `
+          <div style="text-align:center;padding:18px 8px;color:var(--muted)">
+            <div style="font-size:11px;line-height:1.5">Tryck på mikrofonen för att aktivera. Säg sedan <strong>"Anna"</strong> eller <strong>"David"</strong> följt av din fråga.</div>
+            <div style="font-size:10px;color:var(--muted);margin-top:6px">Exempel: "Anna, vad tycker du om SEO:n?" eller "David, kör en audit"</div>
+          </div>
+        `
+      }
+    } else if (typeof renderVoiceMessages === 'function') {
+      renderVoiceMessages()
+    }
+  } catch (err) {
+    console.warn('[settings/rostchatt] post-render failed:', err)
+  }
 }
 
 function _renderSettingsDiagnostik() {
@@ -10917,14 +11799,21 @@ async function _settingsPostNyheter() {
 
 async function selectClient(clientId) {
   // ── Per-client tab spaces ──
-  // Save the OUTGOING client's tabs first so we can come back to
+  // Save the OUTGOING context's tabs first so we can come back to
   // them later, then restore the INCOMING client's tab set (or open
   // a fresh home tab if this client has never been used). This
   // gives each SEOZ client its own browsing space — no more 30
   // tabs from 5 different clients fighting for screen real estate.
+  // Mutually exclusive with active project — switching to a client
+  // clears any active project context.
   const oldClientId = synced.activeClientId
+  const oldProjectId = synced.activeProjectId
   if (oldClientId && oldClientId !== clientId) {
     await _saveTabsForClient(oldClientId)
+  } else if (oldProjectId) {
+    await _saveTabsForProject(oldProjectId)
+    synced.activeProjectId = null
+    await SE.storeSet('activeProjectId', null)
   }
 
   synced.activeClientId = clientId
@@ -10948,6 +11837,175 @@ async function selectClient(clientId) {
   } else {
     toast('Klient vald: ' + name, '#4680ff')
   }
+}
+
+// ── Defensive filter for deleted/archived clients ──
+// The /clients API endpoint historically has returned soft-deleted
+// rows (deleted_at set, archived flag, etc.) for some accounts. Filter
+// those out client-side so the picker doesn't show stale customers.
+// Covers the common deletion-marker conventions across REST APIs.
+function _filterActiveClients(clients) {
+  if (!Array.isArray(clients)) return []
+  return clients.filter(c => {
+    if (!c) return false
+    if (c.deletedAt || c.deleted_at) return false
+    if (c.archivedAt || c.archived_at || c.archived === true) return false
+    if (c.is_deleted || c.isDeleted) return false
+    if (c.status === 'deleted' || c.status === 'archived' || c.status === 'inactive') return false
+    return true
+  })
+}
+
+// ── Local Projects (work-area shortcuts not synced to the SEOZ API) ──
+// Projects behave like clients: selecting one is the active "context"
+// that tabs are saved against. Stored in electron-store under
+// 'localProjects': [{ id, name, color, createdAt }]. Tabs persisted
+// per project in 'tabsByProject' (mirror of tabsByClient).
+//
+// Mutually exclusive with active client: switching to a project
+// clears synced.activeClientId, and switching to a client clears
+// synced.activeProjectId.
+const _PROJECT_COLORS = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
+
+async function _loadProjects() {
+  try {
+    const list = await SE.storeGet('localProjects', [])
+    return Array.isArray(list) ? list : []
+  } catch (_) { return [] }
+}
+
+async function _saveProjects(list) {
+  try { await SE.storeSet('localProjects', list || []) } catch (_) {}
+}
+
+async function _createProjectPrompt() {
+  // Electron suppresses native window.prompt(); use the in-app modal.
+  const raw = await seozPrompt('Namn på projekt')
+  const name = (raw || '').trim()
+  if (!name) return null
+  const list = await _loadProjects()
+  // Pick a color we haven't used yet, falling back to round-robin.
+  const used = new Set(list.map(p => p.color))
+  const free = _PROJECT_COLORS.find(c => !used.has(c))
+  const color = free || _PROJECT_COLORS[list.length % _PROJECT_COLORS.length]
+  const project = {
+    id: 'p_' + Date.now().toString(36) + Math.random().toString(36).slice(2, 6),
+    name, color, createdAt: Date.now(),
+  }
+  list.push(project)
+  await _saveProjects(list)
+  synced.projects = list
+  return project
+}
+
+async function _deleteProject(projectId) {
+  if (!projectId) return
+  const list = (await _loadProjects()).filter(p => p.id !== projectId)
+  await _saveProjects(list)
+  synced.projects = list
+  // Clear active and stored tabs for the gone project.
+  if (synced.activeProjectId === projectId) {
+    synced.activeProjectId = null
+    await SE.storeSet('activeProjectId', null)
+  }
+  try {
+    const all = (await SE.storeGet('tabsByProject', null)) || {}
+    delete all[projectId]
+    await SE.storeSet('tabsByProject', all)
+  } catch (_) {}
+}
+
+async function _renameProject(projectId) {
+  const list = await _loadProjects()
+  const p = list.find(x => x.id === projectId)
+  if (!p) return
+  const raw = await seozPrompt('Nytt namn', p.name)
+  const next = (raw || '').trim()
+  if (!next) return
+  p.name = next
+  await _saveProjects(list)
+  synced.projects = list
+}
+
+async function selectProject(projectId) {
+  if (!projectId) return
+  // Save the outgoing context (client OR project) before swapping.
+  if (synced.activeClientId) {
+    await _saveTabsForClient(synced.activeClientId)
+    synced.activeClientId = null
+    await SE.storeSet('activeClientId', null)
+  } else if (synced.activeProjectId && synced.activeProjectId !== projectId) {
+    await _saveTabsForProject(synced.activeProjectId)
+  }
+  synced.activeProjectId = projectId
+  await SE.storeSet('activeProjectId', projectId)
+  const restored = await _restoreTabsForProject(projectId)
+  renderBmBar()
+  if (currentPanel) renderPanelContent(currentPanel)
+  const proj = (synced.projects || []).find(p => p.id === projectId)
+  const name = proj?.name || ''
+  if (restored.count > 0) toast(`${name} — ${restored.count} flikar återställda`, '#4680ff')
+  else                    toast('Projekt valt: ' + name, '#4680ff')
+}
+
+async function _saveTabsForProject(projectId) {
+  if (!projectId) return
+  const tabData = tabs
+    .filter(t => t.url && t.url !== 'about:blank' && !isOverlayUrl(t.url))
+    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon }))
+  const activeTab = tabs.find(t => t.id === activeId)
+  const activeUrl = activeTab && !isOverlayUrl(activeTab.url) ? activeTab.url : ''
+  const all = (await SE.storeGet('tabsByProject', null)) || {}
+  all[projectId] = { tabs: tabData, activeUrl, savedAt: Date.now() }
+  await SE.storeSet('tabsByProject', all)
+}
+
+async function _restoreTabsForProject(projectId) {
+  if (!projectId) return { count: 0 }
+  const all = (await SE.storeGet('tabsByProject', null)) || {}
+  const saved = all[projectId]
+  const targetTabs = (saved?.tabs?.length) ? saved.tabs.slice() : []
+  // Tear down all current tabs except slot 0.
+  for (let i = tabs.length - 1; i >= 1; i--) {
+    const t = tabs[i]
+    const wvEl = _tabWebviews.get(t.id)
+    if (wvEl) { try { wvEl.remove() } catch (_) {}; _tabWebviews.delete(t.id) }
+    const split = _splitWebviews.get(t.id)
+    if (split?.wv) { try { split.wv.remove() } catch (_) {} }
+    _splitWebviews.delete(t.id)
+    _splitFocused.delete(t.id)
+    tabs.splice(i, 1)
+  }
+  if (targetTabs.length === 0) {
+    if (tabs[0]) { tabs[0].url = HOME_URL; tabs[0].title = 'SEOZ' }
+    activeId = tabs[0]?.id || activeId
+    wv = _tabWebviews.get(activeId)
+    if (wv) wv.loadURL('about:blank')
+    syncOverlayVisibility()
+    renderTabs()
+    _refreshUrlBar()
+    return { count: 0 }
+  }
+  // First saved tab → reuse slot 0; rest → spawn new tabs.
+  const first = targetTabs.shift()
+  if (tabs[0]) { tabs[0].url = first.url; tabs[0].title = first.title || 'Ny flik'; tabs[0].favicon = first.favicon || null }
+  activeId = tabs[0].id
+  wv = _tabWebviews.get(activeId)
+  if (wv) wv.loadURL(first.url)
+  for (const t of targetTabs) {
+    nextId += 1
+    const newTabObj = { id: nextId, url: t.url, title: t.title || 'Ny flik', favicon: t.favicon || null, loading: false, _zoom: 100 }
+    tabs.push(newTabObj)
+    createWebviewForTab(nextId, t.url)
+  }
+  if (saved.activeUrl) {
+    const want = tabs.find(t => t.url === saved.activeUrl)
+    if (want) { activeId = want.id; wv = _tabWebviews.get(activeId) }
+  }
+  syncOverlayVisibility()
+  renderTabs()
+  _refreshUrlBar()
+  return { count: 1 + targetTabs.length }
 }
 
 // ── Tab spaces per client (workspaces) ──
@@ -11080,6 +12138,20 @@ async function fetchClientData(clientId) {
 //  AUTH & SYNC
 // ══════════════════════════════════════════════════════
 async function init() {
+  // Detect tear-off launch: main spawns a new BrowserWindow with the
+  // dragged URL passed via location.hash. The renderer's normal
+  // startup would restore the active client's saved tab set and end
+  // up with multiple tabs — tear-off must produce exactly ONE tab
+  // (the one the user dragged), so we record the URL here and have
+  // syncNow / restore code-paths short-circuit on it below.
+  try {
+    const m = /^#tearoff=(.+)$/.exec(window.location.hash || '')
+    if (m) {
+      const u = decodeURIComponent(m[1])
+      if (/^https?:\/\//i.test(u)) window._tearoffURL = u
+    }
+  } catch (_) {}
+
   // ── Theme: HTML defaults to light. If the user has saved 'dark'
   //    explicitly, restore that here (otherwise stay on light). ──
   try {
@@ -11136,6 +12208,23 @@ async function init() {
     }
   }
   renderTabs()
+  // Restore home-screen modules-out preference (rails visible vs
+  // clean hero). Default is rails hidden.
+  _restoreHomeModulesPref()
+  // Tear-off fallback: if syncNow didn't consume the URL (e.g. no API
+  // key, sync skipped), open it here as the lone tab so we still get
+  // the "exactly one tab" tear-off behaviour.
+  if (window._tearoffURL) {
+    const u = window._tearoffURL
+    window._tearoffURL = null
+    if (tabs[0]) { tabs[0].url = u; tabs[0].title = 'Laddar...'; tabs[0].favicon = null }
+    activeId = tabs[0]?.id || activeId
+    wv = _tabWebviews.get(activeId)
+    if (wv) wv.loadURL(u)
+    syncOverlayVisibility()
+    renderTabs()
+    _refreshUrlBar()
+  }
   // Pre-populate the tab-tooltip password cache once on startup so
   // hover-cards work without an IPC round-trip on every render.
   _refreshPwCacheForTabs().catch(() => {})
@@ -11221,7 +12310,7 @@ async function doConnect(mode) {
       try { await SE.storeSet('skippedAuth', false) } catch (_) {}
       synced.user = res.user
       synced.workspace = res.workspace
-      synced.clients = res.clients || []
+      synced.clients = _filterActiveClients(res.clients || [])
       // Update profile name/email/avatar from the SEOZ account
       if (currentProfileId && res.user) {
         await SE.profileUpdate(currentProfileId, {
@@ -11277,22 +12366,55 @@ async function syncNow() {
     if (res.ok) {
       synced.user = res.user
       synced.workspace = res.workspace
-      synced.clients = res.clients || []
+      synced.clients = _filterActiveClients(res.clients || [])
       updateSyncUI()
       // Pull theme from platform on every sync but only re-apply
       // when it has actually changed since the last sync (see
       // _maybeApplySyncedTheme). Avoids the v1.7-era loop where
       // every 30s sync forced dark mode.
       _maybeApplySyncedTheme(res.user?.theme)
-      // Restore active client
+      // Load local projects (not synced from API).
+      try {
+        synced.projects = await _loadProjects()
+        const savedProj = await SE.storeGet('activeProjectId')
+        if (savedProj && synced.projects.find(p => p.id === savedProj)) {
+          synced.activeProjectId = savedProj
+        }
+      } catch (_) {}
+      // Tear-off window: open only the dragged URL, skip all
+      // workspace/client tab restoration.
+      if (window._tearoffURL) {
+        const u = window._tearoffURL
+        window._tearoffURL = null
+        synced.activeClientId = null
+        synced.activeProjectId = null
+        renderBmBar()
+        if (tabs[0]) { tabs[0].url = u; tabs[0].title = 'Laddar...'; tabs[0].favicon = null }
+        activeId = tabs[0]?.id || activeId
+        wv = _tabWebviews.get(activeId)
+        if (wv) wv.loadURL(u)
+        syncOverlayVisibility()
+        renderTabs()
+        _refreshUrlBar()
+        if (currentPanel) renderPanelContent(currentPanel)
+        return
+      }
+      // Restore active client (skipped if a project is already active —
+      // a project takes precedence as the chosen workspace).
       const saved = await SE.storeGet('activeClientId')
-      if (saved && synced.clients.find(c => c.id === saved)) {
+      if (synced.activeProjectId) {
+        renderBmBar()
+        await _restoreTabsForProject(synced.activeProjectId)
+      } else if (saved && synced.clients.find(c => c.id === saved)) {
         synced.activeClientId = saved
-        const cl = synced.clients.find(c => c.id === saved)
         renderBmBar()
         await fetchClientData(saved)
       } else if (synced.clients.length) {
         await selectClient(synced.clients[0].id)
+      } else if (synced.projects.length === 0) {
+        renderBmBar()
+      } else {
+        renderBmBar()
       }
       if (currentPanel) renderPanelContent(currentPanel)
     } else {
@@ -11370,7 +12492,7 @@ SE.on('sync-data', data => {
   if (!data || !data.ok) return
   synced.user = data.user
   synced.workspace = data.workspace
-  synced.clients = data.clients || []
+  synced.clients = _filterActiveClients(data.clients || [])
 
   // If the active client got deleted upstream, fall back to the first
   // available one (or null) so the picker doesn't show a stale name.
@@ -11628,12 +12750,23 @@ function renderClientSelector(bar) {
   wrap.className = 'client-sel'
 
   const colors = ['#4680ff','#2ca87f','#e58a00','#dc2626','#7c3aed','#06b6d4','#d946ef','#f59e0b']
-  const active = synced.clients.find(c => c.id === synced.activeClientId)
-  const col = active ? colors[synced.clients.indexOf(active) % colors.length] : 'var(--muted)'
+  const activeClient = synced.clients.find(c => c.id === synced.activeClientId)
+  const activeProject = (synced.projects || []).find(p => p.id === synced.activeProjectId)
+  let col, label
+  if (activeProject) {
+    col = activeProject.color || 'var(--muted)'
+    label = activeProject.name + ' · projekt'
+  } else if (activeClient) {
+    col = colors[synced.clients.indexOf(activeClient) % colors.length]
+    label = activeClient.name
+  } else {
+    col = 'var(--muted)'
+    label = 'Välj klient'
+  }
 
   const btn = document.createElement('button')
   btn.className = 'client-sel-btn'
-  btn.innerHTML = `<div class="client-sel-dot" style="background:${col}"></div><span class="client-sel-name">${active ? esc(active.name) : 'Välj klient'}</span><span class="client-sel-arrow">▾</span>`
+  btn.innerHTML = `<div class="client-sel-dot" style="background:${col}"></div><span class="client-sel-name">${esc(label)}</span><span class="client-sel-arrow">▾</span>`
   btn.onclick = (e) => { e.stopPropagation(); toggleClientDrop(wrap) }
   wrap.appendChild(btn)
 
@@ -11666,8 +12799,55 @@ function renderClientSelector(bar) {
     drop.appendChild(empty)
   }
 
+  // ── Projects section ──────────────────────────────────────
+  const projects = synced.projects || []
+  const projHdr = document.createElement('div')
+  projHdr.className = 'client-sel-drop-hdr'
+  projHdr.style.marginTop = '6px'
+  projHdr.innerHTML = '<span style="flex:1">Projekt</span>'
+  drop.appendChild(projHdr)
+
+  projects.forEach(p => {
+    const item = document.createElement('div')
+    item.className = 'client-sel-drop-item' + (p.id === synced.activeProjectId ? ' active' : '')
+    item.innerHTML = `<div class="client-sel-dot" style="background:${p.color}"></div><span style="flex:1">${esc(p.name)}</span><button class="client-sel-refresh" style="margin-left:auto" onclick="event.stopPropagation();_projectMenu('${p.id}', this)" title="Hantera projekt"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="5" r="1.5"/><circle cx="12" cy="12" r="1.5"/><circle cx="12" cy="19" r="1.5"/></svg></button>`
+    item.onclick = (e) => {
+      if (e.target.closest('button')) return
+      e.stopPropagation(); selectProject(p.id); closeClientDrop()
+    }
+    drop.appendChild(item)
+  })
+
+  // "Skapa projekt"-knapp längst ner
+  const create = document.createElement('div')
+  create.className = 'client-sel-drop-item'
+  create.style.cssText = 'color:var(--p);font-weight:600;font-size:11px;justify-content:center'
+  create.innerHTML = '+ Skapa projekt'
+  create.onclick = async (e) => {
+    e.stopPropagation()
+    const proj = await _createProjectPrompt()
+    if (proj) {
+      // Activate the new project immediately so the user sees it.
+      await selectProject(proj.id)
+      closeClientDrop()
+    }
+  }
+  drop.appendChild(create)
+
   wrap.appendChild(drop)
   bar.appendChild(wrap)
+}
+
+// Tiny per-project menu — rename / delete. Triggered by the dot-icon
+// button next to each project in the picker dropdown.
+function _projectMenu(projectId, anchor) {
+  const rect = anchor.getBoundingClientRect()
+  const fakeEvent = { clientX: rect.left, clientY: rect.bottom + 4 }
+  showCtx(fakeEvent, [
+    { label: 'Byt namn', action: () => _renameProject(projectId).then(renderBmBar) },
+    '---',
+    { label: 'Ta bort projekt', danger: true, action: () => _deleteProject(projectId).then(renderBmBar) },
+  ])
 }
 
 function toggleClientDrop(wrap) {
@@ -11697,7 +12877,7 @@ async function refreshClientsKeepDropOpen(opts = {}) {
     const beforeNames = synced.clients.map(c => c.name).sort()
     synced.user = res.user
     synced.workspace = res.workspace
-    synced.clients = res.clients || []
+    synced.clients = _filterActiveClients(res.clients || [])
     if (synced.activeClientId && !synced.clients.find(c => c.id === synced.activeClientId)) {
       synced.activeClientId = synced.clients[0]?.id || null
       SE.storeSet('activeClientId', synced.activeClientId).catch(() => {})
@@ -12219,6 +13399,107 @@ SE.on('navigate-current', url => {
   }
 })
 
+// ══════════════════════════════════════════════════════
+//  Tab keyboard / right-click forwarding from main
+//
+//  WebContentsView is a separate webContents from the chrome's
+//  renderer, so keypresses inside the page (Ctrl+F, Ctrl+H, etc.)
+//  never bubble up to the chrome's keydown handlers. Main intercepts
+//  them via wc.on('before-input-event'), preventDefault's the page's
+//  default, and forwards a 'chrome-shortcut' IPC here. We dispatch a
+//  matching keydown CustomEvent on document so existing renderer
+//  shortcut code keeps working as if the chrome had focus.
+//
+//  Same for right-click: main hooks wc.on('context-menu') and forwards
+//  the params here, where we open the SEOZ context menu.
+// ══════════════════════════════════════════════════════
+SE.on('chrome-shortcut', ({ which, shift, alt }) => {
+  try {
+    switch (which) {
+      case 'find':
+        if (typeof openFindBar === 'function') openFindBar()
+        else document.getElementById('findInput')?.focus()
+        return
+      case 'history':
+        if (typeof openHistory === 'function') openHistory()
+        return
+      case 'new-tab':
+        if (typeof newTab === 'function') newTab()
+        return
+      case 'close-tab':
+        if (typeof closeTab === 'function') closeTab(activeId)
+        return
+      case 'focus-url':
+        const inp = document.getElementById('urlInput')
+        if (inp) { inp.focus(); inp.select() }
+        return
+      case 'next-tab':
+        if (typeof nextTab === 'function') nextTab()
+        else { const idx = tabs.findIndex(t => t.id === activeId); if (idx >= 0 && tabs[idx + 1]) switchTab(tabs[idx + 1].id) }
+        return
+      case 'prev-tab':
+        if (typeof prevTab === 'function') prevTab()
+        else { const idx = tabs.findIndex(t => t.id === activeId); if (idx > 0) switchTab(tabs[idx - 1].id) }
+        return
+      case 'open-settings':
+        if (typeof openSettingsPage === 'function') openSettingsPage()
+        return
+      case 'add-bookmark':
+        if (typeof bmAddCurrent === 'function') bmAddCurrent()
+        return
+      case 'zoom-in':
+        if (typeof doZoom === 'function') doZoom(10)
+        return
+      case 'zoom-out':
+        if (typeof doZoom === 'function') doZoom(-10)
+        return
+      case 'zoom-reset':
+        if (typeof doZoom === 'function') doZoom(0)
+        else if (wv && wv.setZoomFactor) wv.setZoomFactor(1)
+        return
+    }
+    // Ctrl+1..9 → switch to tab by index
+    const m = /^switch-tab-([1-9])$/.exec(which || '')
+    if (m) {
+      const n = parseInt(m[1], 10)
+      const target = (n === 9) ? tabs[tabs.length - 1] : tabs[n - 1]
+      if (target) switchTab(target.id)
+    }
+  } catch (err) {
+    console.warn('[chrome-shortcut] handler failed:', which, err)
+  }
+})
+
+// Native context menu items dispatch this IPC. We just route the
+// action to the same renderer-side functions the old custom HTML
+// context menu used to call.
+SE.on('tab-context-action', ({ action, payload }) => {
+  try {
+    switch (action) {
+      case 'new-tab':
+        if (payload?.url) newTab(payload.url)
+        return
+      case 'clipboard-write':
+        try { navigator.clipboard.writeText(payload?.text || '') } catch (_) {}
+        return
+      case 'capture-full-page':
+        if (typeof captureFullPage === 'function') captureFullPage()
+        return
+      case 'capture-area':
+        if (typeof captureArea === 'function') captureArea()
+        return
+      case 'view-source':
+        if (payload?.url) newTab('view-source:' + payload.url)
+        return
+      case 'toggle-inspector':
+        if (typeof toggleInspector === 'function') toggleInspector()
+        return
+    }
+  } catch (err) {
+    console.warn('[tab-context-action] handler failed:', action, err)
+  }
+})
+
 // Close popup on outside click
 document.addEventListener('click', e => {
   if (!e.target.closest('#blockerWrap')) {
@@ -12275,7 +13556,6 @@ function buildChromeMenu() {
     { icon: ico.link,      label:'Ny flik med URL', shortcut:'', action: () => { newTab(); setTimeout(() => { document.getElementById('urlInput').focus(); document.getElementById('urlInput').select() }, 100) } },
     '---',
     { icon: ico.copy,      label:'Kopiera URL', shortcut:'', action: () => copyUrl() },
-    { icon: ico.external,  label:'Öppna i extern webbläsare', shortcut:'', action: () => SE.openExternal(document.getElementById('urlInput').value) },
     '---',
     'zoom',
     '---',
@@ -14094,18 +15374,21 @@ async function sendClaudeMessage() {
   const text = input.value.trim()
   if (!text || _claudeStreaming) return
   input.value = ''
+  input.style.height = 'auto'
 
   // Get Anthropic API key
   const anthropicKey = await SE.storeGet('anthropicApiKey', '')
   if (!anthropicKey) {
     addClaudeMessage('assistant', 'Du behöver ange en Anthropic API-nyckel först. Gå till **Inställningar** i docken och lägg till din nyckel under "Claude AI".')
     renderClaudeMessages()
+    if (typeof _renderHomeChat === 'function') _renderHomeChat()
     return
   }
 
   // Add user message
   addClaudeMessage('user', text)
   renderClaudeMessages()
+  if (typeof _renderHomeChat === 'function') _renderHomeChat()
 
   // Get page context
   const ctx = await getPageContext()
@@ -14143,6 +15426,7 @@ ${ctx.text?.slice(0, 4000) || '(ej tillgängligt)'}` : 'Ingen sida är laddad ju
   _claudeStreaming = false
   updateClaudeStatus('Redo')
   renderClaudeMessages()
+  if (typeof _renderHomeChat === 'function') _renderHomeChat()
 }
 
 function addClaudeMessage(role, content) {
@@ -14153,12 +15437,14 @@ function clearClaudeChat() {
   _claudeMessages.length = 0
   const el = document.getElementById('claudeMessages')
   if (el) el.innerHTML = `
-    <div style="text-align:center;padding:20px 8px;color:var(--muted)">
-      <div style="margin-bottom:6px;color:var(--muted);display:inline-flex"><svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
-      <div style="font-size:12px;font-weight:600;color:var(--head);margin-bottom:4px">Claude AI</div>
-      <div style="font-size:10px;line-height:1.5">Chatt rensad. Ställ en ny fråga!</div>
+    <div class="claude-panel-welcome">
+      <div class="cpw-icon"><svg width="32" height="32" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 0 1-.9 3.8 8.5 8.5 0 0 1-7.6 4.7 8.38 8.38 0 0 1-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 0 1-.9-3.8 8.5 8.5 0 0 1 4.7-7.6 8.38 8.38 0 0 1 3.8-.9h.5a8.48 8.48 0 0 1 8 8v.5z"/></svg></div>
+      <div class="cpw-title">Claude AI</div>
+      <div class="cpw-sub">Chatt rensad. Ställ en ny fråga.</div>
     </div>
   `
+  // Keep the home chat in sync (the buffer is shared)
+  if (typeof _renderHomeChat === 'function') _renderHomeChat()
 }
 
 function updateClaudeStatus(text) {
@@ -14173,16 +15459,10 @@ function renderClaudeMessages() {
 
   _claudeMessages.forEach(m => {
     const div = document.createElement('div')
-    const isUser = m.role === 'user'
-    div.style.cssText = `padding:8px 10px;border-radius:8px;font-size:11px;line-height:1.6;max-width:95%;word-break:break-word;white-space:pre-wrap;${
-      isUser
-        ? 'background:var(--p);color:#fff;align-self:flex-end;border-bottom-right-radius:2px'
-        : 'background:var(--panel);color:var(--txt);border:1px solid var(--border);align-self:flex-start;border-bottom-left-radius:2px'
-    }`
-    // Simple markdown: **bold**, `code`, \n
+    div.className = 'claude-msg ' + (m.role === 'user' ? 'user' : 'assistant')
     let html = esc(m.content)
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/`([^`]+)`/g, '<code style="background:rgba(0,0,0,.2);padding:1px 4px;border-radius:3px;font-size:10px">$1</code>')
+      .replace(/`([^`]+)`/g, '<code>$1</code>')
     div.innerHTML = html
     container.appendChild(div)
   })
@@ -15233,7 +16513,7 @@ async function executeVoiceAction(action) {
 
       case 'search':
         if (action.query) {
-          const url = 'https://www.google.com/search?q=' + encodeURIComponent(action.query)
+          const url = typeof _searchUrl === 'function' ? _searchUrl(action.query) : ('https://www.google.com/search?q=' + encodeURIComponent(action.query))
           document.getElementById('urlInput').value = url
           wv.loadURL(url)
           console.log('[Voice] Searching:', action.query)
@@ -16151,10 +17431,10 @@ document.addEventListener('keydown', (e) => {
 const _mcpConsoleLogs = []
 const _MCP_MAX_LOGS = 200
 
-// Capture console messages for MCP
+// Capture console messages for MCP — listen on tab 1's TabHandle.
 ;(function() {
-  const wvEl = document.getElementById('wv')
-  if (!wvEl) return
+  const wvEl = _tabWebviews.get(1)
+  if (!wvEl || typeof wvEl.addEventListener !== 'function') return
   wvEl.addEventListener('console-message', e => {
     if (e.message && e.message.startsWith('[SEOZ-PICK]')) return
     _mcpConsoleLogs.push({ level: e.level, message: e.message, line: e.line, source: e.sourceId })
@@ -17825,10 +19105,14 @@ function setUpdateBannerVisible(visible) {
   const banner = document.getElementById('updateBanner')
   if (visible) {
     banner.classList.add('show')
-    _tabWebviews.forEach(el => el.style.pointerEvents = 'none')
+    // _tabWebviews values are TabHandle instances; the placeholder div
+    // lives at handle.el. Setting pointerEvents on the placeholder is
+    // largely cosmetic now (the WebContentsView itself ignores CSS) —
+    // but kept for consistency with the old <webview> behaviour.
+    _tabWebviews.forEach(h => { if (h?.el) h.el.style.pointerEvents = 'none' })
   } else {
     banner.classList.remove('show')
-    _tabWebviews.forEach(el => el.style.pointerEvents = '')
+    _tabWebviews.forEach(h => { if (h?.el) h.el.style.pointerEvents = '' })
   }
 }
 

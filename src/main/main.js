@@ -41,6 +41,13 @@ try {
 const PM = require('./profile-manager')
 const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')
+const { TabManager } = require('./tab-manager')
+
+// Holds the TabManager instance for the main window. Created in
+// createWindow() once `win` exists, then read by feature code that
+// needs to look up a tab's webContents (e.g. for permission routing
+// from a tab's preload). Renderer talks to it directly via IPC.
+let tabManager = null
 
 // Cap stdout/stderr so we don't blow the JSON-RPC payload, but make it
 // visible to Claude when output was actually truncated (silently dropped
@@ -649,38 +656,117 @@ function isDomainBlocked(hostname) {
   return false
 }
 
-// Chrome User-Agent — used globally so all requests look like real Chrome
-// NOTE: keep in sync with CHROME_MAJOR below for Sec-CH-UA client hints.
-const CHROME_MAJOR = '140'
-const CHROME_UA = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROME_MAJOR}.0.0.0 Safari/537.36`
-
-// Sec-CH-UA client hints — modern bot detectors (Cloudflare, Akamai, hCaptcha)
-// compare these against the UA string. They MUST match or the request is flagged.
-const SEC_CH_UA = `"Chromium";v="${CHROME_MAJOR}", "Not=A?Brand";v="24", "Google Chrome";v="${CHROME_MAJOR}"`
-const SEC_CH_UA_PLATFORM = '"Windows"'
-const SEC_CH_UA_MOBILE = '?0'
+// Real Chromium version we're shipping (e.g. "138.0.0.0"). Pulled from
+// process.versions so UA + Sec-CH-UA stay consistent with what
+// navigator.userAgentData.getHighEntropyValues() reports — that
+// consistency is what Google's accounts.google.com bot-detection
+// actually checks. v1.10.53 hardcoded "140" while Electron 41 ships
+// Chromium 138, which is the version mismatch that triggered the
+// "Webbläsaren kanske inte är säker" rejection.
+const CHROMIUM_VERSION = process.versions.chrome || '138.0.0.0'
+const CHROMIUM_MAJOR   = String(CHROMIUM_VERSION.split('.')[0] || '138')
+const CHROME_UA        = `Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/${CHROMIUM_VERSION} Safari/537.36`
 
 function setupContentBlocker() {
   // Intercept requests in the webview's partition
   // Webviews use the default session unless a partition is set
   const ses = session.defaultSession
 
-  // Override User-Agent at session level (removes "Electron/..." from UA)
+  // Override User-Agent at session level (removes "Electron/..." from UA).
+  // We deliberately do NOT override Sec-CH-UA here — Chromium synthesises
+  // it from its built-in branding which on Electron 41 already reports
+  // ("Chromium", "Not.A/Brand", "Google Chrome") with no "Electron" brand.
+  // Strawberry confirmed this: their `intercept-rules.ts` rewrites only
+  // user-agent and lets Chromium emit Sec-CH-UA natively, and Google
+  // login works for them.
   ses.setUserAgent(CHROME_UA)
 
-  // Normalize request headers so they match a real Chrome install
+  // Normalize all UA + Client-Hint headers. We override only headers
+  // that Chromium would send anyway (no header injection from scratch),
+  // because Chromium decides which high-entropy hints to send based on
+  // server-side Accept-CH negotiation. We merely strip any "Electron"
+  // brand from the values when present.
+  //
+  // Pre-built brand strings — keep one definitive copy so all hints
+  // tell the same story. Real Chrome 138 sends GREASE values like
+  // "Not.A/Brand" or ";Not A Brand" — we use "Not.A/Brand" to match
+  // navigator.userAgentData (the JS shim lives in tab-manager.js).
+  const CH_UA           = `"Chromium";v="${CHROMIUM_MAJOR}", "Google Chrome";v="${CHROMIUM_MAJOR}", "Not.A/Brand";v="24"`
+  const CH_UA_FULL_LIST = `"Chromium";v="${CHROMIUM_VERSION}", "Google Chrome";v="${CHROMIUM_VERSION}", "Not.A/Brand";v="24.0.0.0"`
+
   ses.webRequest.onBeforeSendHeaders((details, callback) => {
     const h = details.requestHeaders
-    // Strip any Electron fingerprint
     delete h['Electron']
-    // Force a consistent modern Chrome UA (some sites re-send old UA header)
+
+    // Header keys may arrive in any case. Build a lowercased index so
+    // we can find existing keys and override them in place (preserving
+    // original casing).
+    const lower = {}
+    for (const k of Object.keys(h)) lower[k.toLowerCase()] = k
+
+    const setIf = (lkey, value) => {
+      const orig = lower[lkey]
+      if (orig) h[orig] = value
+    }
+
+    // User-Agent — we always force this; same as session.setUserAgent
+    // but redundant in case some intermediate code re-attaches the
+    // original Electron UA on a per-request basis.
     h['User-Agent'] = CHROME_UA
-    // Add/override client hints — only for navigations & top-level resources
-    h['sec-ch-ua'] = SEC_CH_UA
-    h['sec-ch-ua-mobile'] = SEC_CH_UA_MOBILE
-    h['sec-ch-ua-platform'] = SEC_CH_UA_PLATFORM
+
+    // Client Hints. Only override what Chromium decided to send.
+    setIf('sec-ch-ua',                  CH_UA)
+    setIf('sec-ch-ua-mobile',           '?0')
+    setIf('sec-ch-ua-platform',         '"Windows"')
+    setIf('sec-ch-ua-platform-version', '"15.0.0"')
+    setIf('sec-ch-ua-arch',             '"x86"')
+    setIf('sec-ch-ua-bitness',          '"64"')
+    setIf('sec-ch-ua-model',            '""')
+    setIf('sec-ch-ua-wow64',            '?0')
+    setIf('sec-ch-ua-full-version',     `"${CHROMIUM_VERSION}"`)
+    setIf('sec-ch-ua-full-version-list', CH_UA_FULL_LIST)
+
     callback({ requestHeaders: h })
   })
+
+  // CSP-strip experiment (v1.10.69):
+  //
+  // v1.10.66 shipped both nonce-discovery AND a blanket CSP header
+  // strip in the same release without testing them separately, so we
+  // never confirmed which one actually unblocked Google sign-in. The
+  // suspicion is that nonce-discovery alone is sufficient: Google's
+  // CSP uses `'strict-dynamic'`, which lets a script with a valid
+  // nonce dynamically load further scripts without nonces. Since the
+  // tab-manager's injection now copies an existing nonce from the
+  // page, our injected <script> tag should pass CSP without needing
+  // the header stripped.
+  //
+  // Stripping CSP across every site is a security regression — if any
+  // visited site has an XSS bug, CSP is often the last layer keeping
+  // injected attacker scripts from running. Real Chrome respects CSP.
+  //
+  // We're disabling the strip here. If the user reports Google login
+  // breaks again, the next iteration will re-enable it but scoped to
+  // a small explicit allowlist (accounts.google.com, login.live.com,
+  // etc.) instead of every navigation.
+  /* DISABLED — see comment above
+  ses.webRequest.onHeadersReceived((details, callback) => {
+    if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
+      callback({}); return
+    }
+    const headers = { ...details.responseHeaders }
+    for (const k of Object.keys(headers)) {
+      const lk = k.toLowerCase()
+      if (lk === 'content-security-policy' ||
+          lk === 'content-security-policy-report-only' ||
+          lk === 'x-content-security-policy' ||
+          lk === 'x-webkit-csp') {
+        delete headers[k]
+      }
+    }
+    callback({ responseHeaders: headers })
+  })
+  */
 
   // Never block these domains
   const whitelist = ['seoz.io', 'flow.seoz.io', 'api.seoz.io']
@@ -758,13 +844,16 @@ function createWindow() {
       preload: path.join(__dirname, '../preload/preload.js'),
       contextIsolation: true,        // page JS can't reach preload internals
       nodeIntegration: false,        // page JS can't require() Node modules
-      webviewTag: true,              // we use <webview> for tabs
+      // webviewTag intentionally OFF — v1.10.54 switched to per-tab
+      // WebContentsView (see tab-manager.js). The <webview> guest
+      // architecture leaks OOPIF artifacts that Google Auth uses to
+      // detect non-Chrome browsers; WebContentsView is a real top-level
+      // WebContents, indistinguishable from a Chrome tab to the page.
+      webviewTag: false,
       // sandbox: false because preload.js does require('electron') for
-      // ipcRenderer + contextBridge. Enabling sandbox would force a preload
-      // rewrite to the limited renderer-process Electron API. Tracked as
-      // hardening task — preload still runs in an isolated world and
-      // contextIsolation is on, so page → preload escape is the only
-      // realistic remaining threat surface.
+      // ipcRenderer + contextBridge. Enabling sandbox would force a
+      // preload rewrite. The chrome renderer here is the host UI only —
+      // tab pages run in their own sandboxed WebContentsViews.
       sandbox: false,
     },
     show: false,
@@ -865,6 +954,40 @@ function createWindow() {
     }
   })
 
+  // ── TabManager — owns one WebContentsView per browser tab.
+  //
+  // Each tab is a real top-level Chromium WebContents (not a <webview>
+  // OOPIF guest) so Google Auth + other bot-detection sees us as a
+  // normal Chrome tab. Renderer drives this via tab:* IPC calls
+  // dispatched in `tab-manager.js`; nothing else in this file needs
+  // to talk to it except cleanup-on-close.
+  if (!tabManager) {
+    try {
+      tabManager = new TabManager({
+        hostWindow: win,
+        preloadPath: path.join(__dirname, '..', 'preload', 'webview-preload.js'),
+        // Same Chrome UA we set on the default session, derived from the
+        // real Chromium version (process.versions.chrome). Keeps each
+        // tab's UA in lockstep with what navigator.userAgentData reports.
+        defaultUserAgent: CHROME_UA,
+        // Wire keyboard shortcuts, native context menu, fullscreen
+        // forwarding, and OAuth window-open routing. Electron 41's
+        // app.on('web-contents-created') event doesn't fire for
+        // WebContentsView, so TabManager invokes this directly.
+        onContentsCreated: _setupTabContents,
+      })
+      _startupLog('TabManager: created')
+    } catch (err) {
+      _startupLog('TabManager init failed: ' + (err?.message || err))
+    }
+  } else {
+    // Already exists from a previous window. Re-bind the host window so
+    // new tabs get attached as children of the new BrowserWindow's
+    // contentView. (Multi-window support is currently single-window in
+    // practice, but tab-tear-off creates a fresh BrowserWindow.)
+    try { tabManager.hostWindow = win } catch (_) {}
+  }
+
   win.on('resize', () => {
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
   })
@@ -872,7 +995,13 @@ function createWindow() {
     // Spara position också så vi kan validera vid nästa start
     if (!win.isMaximized()) store.set('bounds', win.getBounds())
   })
-  win.on('closed', () => { win = null; stopSync(); clearTimeout(fallbackShowTimer) })
+  win.on('closed', () => {
+    try { tabManager?.destroyAll() } catch (_) {}
+    tabManager = null
+    win = null
+    stopSync()
+    clearTimeout(fallbackShowTimer)
+  })
 }
 
 // ── Window controls ──
@@ -895,16 +1024,23 @@ ipcMain.on('tab-tear-off', (_evt, payload) => {
         preload: path.join(__dirname, '../preload/preload.js'),
         contextIsolation: true,
         nodeIntegration: false,
-        webviewTag: true,
+        webviewTag: false,             // see createWindow() — tabs use WebContentsView
         sandbox: false,
       },
       icon: APP_ICON,
       show: false,
     })
-    newWin.loadFile(path.join(__dirname, '../renderer/index.html'))
+    // Pass the torn-off URL via hash so the renderer can detect it
+    // BEFORE startup runs. Without this, the new window would also
+    // restore the active client's saved tab set + the open-url —
+    // user expects exactly one tab in a tear-off, the one they dragged.
+    newWin.loadFile(path.join(__dirname, '../renderer/index.html'), {
+      hash: 'tearoff=' + encodeURIComponent(url),
+    })
     newWin.once('ready-to-show', () => {
       newWin.show()
-      newWin.webContents.send('open-url', url)
+      // No IPC fallback needed — renderer reads location.hash and
+      // navigates the initial tab to the URL during startup.
     })
   } catch (err) {
     console.error('[tab-tear-off] failed:', err)
@@ -2825,73 +2961,227 @@ ipcMain.on('update-jump-list', () => {
   jumpListTimer = setTimeout(() => updateJumpList(), 2000)
 })
 
-// ── <webview> guest setup (popups + keyboard shortcuts) ──
-// Without this, Electron creates default popup windows with the yellow
-// Electron icon, native Windows menu (File/Edit/View/...) and standard
-// chrome — visually disconnected from SEOZ. We hand-roll the popup
-// options so they pick up our icon and a SEOZ-coloured title bar overlay.
-// We ALSO intercept Ctrl+R / Ctrl+Shift+R / F5 here because keyboard
-// events that originate inside a guest webview never bubble up to the
-// host renderer's document — the host's keydown handler can't see them.
-// Stealth-koden lazy-loadas från delad fil så main + webview-preload
-// använder samma sträng. Cachas vid första use så vi inte läser disken
-// vid varje page-load.
-let _stealthCodeCache = null
-function _getStealthCode() {
-  if (_stealthCodeCache) return _stealthCodeCache
-  try {
-    _stealthCodeCache = require('../preload/stealth-code.js')
-  } catch (_) { _stealthCodeCache = '' }
-  return _stealthCodeCache
-}
-
-app.on('web-contents-created', (_e, contents) => {
-  const contentsType = contents.getType()
-
-  // ── Stealth injection (alla webContents utom vår egen chrome-renderer) ──
-  // Anropas från main för att vinna timing-racet mot t.ex. Googles
-  // detection-script. webview-preloaden kör samma kod via webFrame.
-  // executeJavaScript men det är async — main-process-vägen kör tidigare
-  // i navigation-livcykeln. Belt-and-suspenders.
+// ── Tab + popup webContents setup (keyboard shortcuts, fullscreen,
+//    OAuth window-open routing) ──
+// Hooks the same per-WebContents lifecycle events for both:
+//   - tab WebContentsViews (contentsType === 'browserView')
+//   - popup.html's nested <webview> (contentsType === 'webview')
+// Without these hooks Ctrl+R / F5 reload, HTML5-fullscreen propagation,
+// and the OAuth-vs-wrapped-popup routing all break. The stealth-code
+// path that used to live here was deleted in v1.10.70 — Strawberry's
+// approach (which we copy) ships zero JS-stealth patches and Google
+// Auth works on plain WebContentsView without any.
+// Per-tab webContents setup — keyboard shortcuts, native context menu,
+// HTML5-fullscreen forwarding, OAuth window-open routing.
+//
+// v1.10.79: extracted from app.on('web-contents-created') because that
+// event does NOT fire for child WebContentsView's webContents in
+// Electron 41 (verified by the absence of any 'context-menu fired'
+// entries in tab-shim.log even though TabManager.createTab attached
+// CDP successfully). TabManager now calls this directly per tab.
+//
+// Still wired via app.on('web-contents-created') below for popup.html's
+// nested <webview> (contentsType === 'webview'), which the event does
+// fire for.
+function _setupTabContents(contents) {
+  // Keyboard shortcut interception. With WebContentsView, keyboard
+  // events fire in the tab's renderer (not the chrome's renderer where
+  // our custom keydown handlers live), so chrome shortcuts like Ctrl+H
+  // and Ctrl+F never reach the chrome unless we forward them here.
   //
-  // Filtrerar bort vår egen UI-renderer (file:// + about:) — vill inte
-  // spoof:a för vårt eget chrome.
-  if (contentsType === 'webview' || contentsType === 'window') {
-    contents.on('did-start-loading', () => {
-      try {
-        const url = contents.getURL()
-        if (!url || url.startsWith('file://') || url.startsWith('about:') || url.startsWith('chrome-extension:')) return
-        const code = _getStealthCode()
-        if (!code) return
-        contents.executeJavaScript(code, false).catch(() => {})
-      } catch (_) {}
-    })
-  }
-
-  if (contentsType !== 'webview') return
-
-  // Ctrl+R / F5 → reload the guest. Ctrl+Shift+R → reload bypassing cache.
+  // Two paths:
+  //   - "Tab-native" shortcuts (reload, devtools, back/forward, print):
+  //     handle directly on the tab's webContents.
+  //   - "Chrome shortcuts" (find-bar, history, new tab, etc.):
+  //     event.preventDefault() + send IPC to renderer so the chrome's
+  //     existing keydown handlers can fire as if focus were on chrome.
   contents.on('before-input-event', (event, input) => {
     if (input.type !== 'keyDown') return
-    const ctrl = input.control || input.meta
-    const key = (input.key || '').toLowerCase()
+    const ctrl  = input.control || input.meta
+    const shift = input.shift
+    const alt   = input.alt
+    const key   = (input.key || '').toLowerCase()
+
+    // ── Tab-native: reload ─────────────────────────────────────
     if (input.key === 'F5' || (ctrl && key === 'r')) {
       event.preventDefault()
-      if (ctrl && input.shift && key === 'r') contents.reloadIgnoringCache()
+      if (ctrl && shift && key === 'r') contents.reloadIgnoringCache()
       else contents.reload()
+      return
     }
-    // ESC → exit HTML5 fullscreen if guest is in it. Belt-and-braces: the
-    // guest normally handles this itself, but some pages swallow ESC.
+    // ── Tab-native: DevTools ───────────────────────────────────
+    if (input.key === 'F12' || (ctrl && shift && (key === 'i' || key === 'j'))) {
+      event.preventDefault()
+      try {
+        if (contents.isDevToolsOpened()) contents.closeDevTools()
+        else contents.openDevTools({ mode: 'detach' })
+      } catch (_) {}
+      return
+    }
+    // ── Tab-native: back / forward ─────────────────────────────
+    if (alt && input.key === 'ArrowLeft') {
+      event.preventDefault()
+      try { contents.navigationHistory.goBack() } catch (_) { try { contents.goBack() } catch (_) {} }
+      return
+    }
+    if (alt && input.key === 'ArrowRight') {
+      event.preventDefault()
+      try { contents.navigationHistory.goForward() } catch (_) { try { contents.goForward() } catch (_) {} }
+      return
+    }
+    // ── Tab-native: print ──────────────────────────────────────
+    if (ctrl && key === 'p') {
+      event.preventDefault()
+      try { contents.print({}, () => {}) } catch (_) {}
+      return
+    }
+    // ── ESC: exit HTML5 fullscreen ─────────────────────────────
     if (input.key === 'Escape' && contents.isFullScreen?.()) {
       event.preventDefault()
       contents.executeJavaScript('document.exitFullscreen && document.exitFullscreen()').catch(() => {})
+      return
+    }
+    // ── Chrome shortcuts: forward to renderer over IPC ─────────
+    // The chrome renderer has keydown handlers wired for Ctrl+T/W/L/F/H/+/-
+    // etc. We need to fire those even when the tab page has focus.
+    if (ctrl) {
+      const fwd = (which) => {
+        event.preventDefault()
+        if (win && !win.isDestroyed()) {
+          win.webContents.send('chrome-shortcut', { which, shift, alt })
+        }
+      }
+      switch (key) {
+        case 'f': return fwd('find')
+        case 'h': return fwd('history')
+        case 't': return fwd('new-tab')
+        case 'w': return fwd('close-tab')
+        case 'l': return fwd('focus-url')
+        case 'tab': return fwd(shift ? 'prev-tab' : 'next-tab')
+        case ',': return fwd('open-settings')
+        case 'd': return fwd('add-bookmark')
+        case 'shift+s':
+        case 's': return shift ? fwd('save-as') : null
+        case '+': case '=': return fwd('zoom-in')
+        case '-': return fwd('zoom-out')
+        case '0': return fwd('zoom-reset')
+      }
+      // Ctrl+1..9 → switch to tab N
+      if (/^[1-9]$/.test(key)) return fwd('switch-tab-' + key)
     }
   })
 
-  // HTML5 fullscreen requested by guest content (e.g. SEOZ platform's
-  // expand-chart button). The webview tag's events don't always propagate
-  // up to the host renderer, so we wire it on the guest's webContents
-  // here in main and forward to the renderer over IPC.
+  // ── Right-click context menu ─────────────────────────────────
+  // The old <webview> path used a JS-injected document.addEventListener
+  // ('contextmenu') that console.log'd a [SEOZ-CTX] message; with
+  // WebContentsView the page's main world is fully isolated and that
+  // approach no longer works. Use Electron's built-in context-menu
+  // event instead — fires for any right-click on a webContents,
+  // regardless of world / sandbox / contextIsolation.
+  contents.on('context-menu', (_e, params) => {
+    try {
+      const fs = require('fs')
+      const path = require('path')
+      const logPath = path.join(app.getPath('userData'), 'tab-shim.log')
+      fs.appendFileSync(logPath, '[' + new Date().toISOString() + '] context-menu fired tab=' + contents.id + ' x=' + params.x + ' y=' + params.y + ' editable=' + !!params.isEditable + '\n')
+    } catch (_) {}
+    if (!win || win.isDestroyed()) return
+    // Native Menu.popup() — renders as an OS-level popup window
+    // ALWAYS on top of the WebContentsView. No z-order band-aid
+    // needed (the page doesn't black out anymore). Looks like a
+    // normal browser context menu, which is what users expect.
+    //
+    // Each menu item dispatches a renderer IPC so the existing
+    // action implementations (captureFullPage, toggleInspector,
+    // execCommand for clipboard, etc.) live in one place.
+    const isImg = params.hasImageContents || params.mediaType === 'image'
+    const linkUrl      = params.linkURL || ''
+    const imgSrc       = isImg ? (params.srcURL || '') : ''
+    const selectedText = params.selectionText || ''
+    const isEditable   = !!params.isEditable
+    const pageURL      = params.pageURL || ''
+
+    const send = (action, payload) => {
+      try { win.webContents.send('tab-context-action', { tabId: contents.id, action, payload }) } catch (_) {}
+    }
+
+    const template = []
+    // Navigation
+    template.push({
+      label: '← Tillbaka',
+      enabled: (() => { try { return contents.navigationHistory.canGoBack() } catch (_) { try { return contents.canGoBack() } catch (_) { return false } } })(),
+      click: () => { try { contents.navigationHistory.goBack() } catch (_) { try { contents.goBack() } catch (_) {} } },
+    })
+    template.push({
+      label: '→ Framåt',
+      enabled: (() => { try { return contents.navigationHistory.canGoForward() } catch (_) { try { return contents.canGoForward() } catch (_) { return false } } })(),
+      click: () => { try { contents.navigationHistory.goForward() } catch (_) { try { contents.goForward() } catch (_) {} } },
+    })
+    template.push({
+      label: '↻ Ladda om',
+      click: () => { try { contents.reload() } catch (_) {} },
+    })
+
+    if (linkUrl) {
+      template.push({ type: 'separator' })
+      template.push({ label: 'Öppna länk i ny flik', click: () => send('new-tab', { url: linkUrl }) })
+      template.push({ label: 'Kopiera länkadress', click: () => send('clipboard-write', { text: linkUrl }) })
+    }
+    if (imgSrc) {
+      template.push({ type: 'separator' })
+      template.push({ label: 'Öppna bild i ny flik', click: () => send('new-tab', { url: imgSrc }) })
+      template.push({ label: 'Kopiera bildadress', click: () => send('clipboard-write', { text: imgSrc }) })
+    }
+    if (selectedText) {
+      const short = selectedText.length > 40 ? selectedText.slice(0, 37) + '...' : selectedText
+      template.push({ type: 'separator' })
+      template.push({ label: 'Kopiera', click: () => contents.copy() })
+      template.push({ label: 'Sök "' + short + '" på Google', click: () => send('new-tab', { url: 'https://www.google.com/search?q=' + encodeURIComponent(selectedText) }) })
+    }
+    if (isEditable) {
+      template.push({ type: 'separator' })
+      if (!selectedText) {
+        template.push({ label: 'Klipp ut', click: () => contents.cut() })
+        template.push({ label: 'Kopiera', click: () => contents.copy() })
+      }
+      template.push({ label: 'Klistra in', click: () => contents.paste() })
+      template.push({ label: 'Markera allt', click: () => contents.selectAll() })
+    }
+
+    template.push({ type: 'separator' })
+    template.push({ label: 'Skärmbild — hela sidan', click: () => send('capture-full-page') })
+    template.push({ label: 'Skärmbild — markera område', click: () => send('capture-area') })
+    template.push({ type: 'separator' })
+    template.push({ label: 'Visa sidkälla', click: () => send('view-source', { url: pageURL }) })
+    template.push({ label: 'SEOZ Inspector', click: () => send('toggle-inspector') })
+
+    try {
+      const menu = Menu.buildFromTemplate(template)
+      // No explicit x/y — Electron's Menu.popup defaults to the
+      // current mouse cursor position, which is what we want and
+      // what every other browser does. v1.10.74-78 tried to compute
+      // window-client coords from params.x/y but those came back in
+      // an inconsistent coordinate space across Electron versions
+      // (screen-relative for <webview>, page-relative for
+      // WebContentsView, off-by-some-offset in v1.10.79). The cursor
+      // is always known correctly by the OS, so just use it.
+      menu.popup({ window: win })
+    } catch (err) {
+      try {
+        const fs = require('fs')
+        const path = require('path')
+        const logPath = path.join(app.getPath('userData'), 'tab-shim.log')
+        fs.appendFileSync(logPath, '[' + new Date().toISOString() + '] context-menu popup FAILED: ' + (err?.message || err) + '\n')
+      } catch (_) {}
+    }
+  })
+
+  // HTML5 fullscreen requested by page content (e.g. SEOZ platform's
+  // expand-chart button, or YouTube's fullscreen button). We toggle the
+  // BrowserWindow into native fullscreen and forward an IPC ping to the
+  // renderer so it can hide chrome/dock/sidebar via the .wv-fullscreen
+  // body class. Same shape as the old <webview> path so renderer JS
+  // doesn't need to change.
   contents.on('enter-html-full-screen', () => {
     if (!win) return
     if (!win.isFullScreen()) {
@@ -2966,6 +3256,17 @@ app.on('web-contents-created', (_e, contents) => {
     if (win) win.webContents.send('open-url', url)
     return { action: 'deny' }
   })
+} // end _setupTabContents
+
+// Top-level webContents fan-out. WebContentsView's webContents do NOT
+// fire this event in Electron 41, so TabManager calls _setupTabContents
+// directly when it creates each tab. This hook still catches:
+//   - 'webview' contentsType — popup.html's nested <webview> tag
+//   - 'window' contentsType — popup BrowserWindows (createSeozPopup)
+// so they get the same shortcuts/context-menu/fullscreen behaviour.
+app.on('web-contents-created', (_e, contents) => {
+  const t = contents.getType()
+  if (t === 'webview') _setupTabContents(contents)
 })
 
 // Heuristic: does the URL look like an OAuth / SSO / federated-login

@@ -1,74 +1,56 @@
 'use strict'
 // ════════════════════════════════════════════════════════════════════
-//  Login-form preload — runs inside every guest page (both <webview>
-//  tags AND native OAuth popup BrowserWindows). Detects login forms,
+//  Login-form preload — runs inside every tab page (WebContentsView)
+//  AND inside native OAuth popup BrowserWindows. Detects login forms,
 //  asks the host renderer for matching saved credentials, and offers
 //  to save new ones on form submit.
 //
 //  Channels:
 //    seoz-autofill-request {site, pageUrl}     → host
-//    seoz-autofill-fill    {username, password} → guest (from host)
+//    seoz-autofill-fill    {username, password} → tab (from host)
 //    seoz-autofill-save    {site, username, password} → host
 //
-//  In <webview> guests we use ipcRenderer.sendToHost() — the message
-//  goes to the parent renderer (host page). In native popup
-//  BrowserWindows there's no host page, so we send to main with a
-//  'popup-' prefix and main relays to the main-window renderer.
+//  Transport differs by context:
+//    - Tabs (WebContentsView): use ipcRenderer.send('tab:relay-from-
+//      preload', channel, payload). main forwards to the host renderer
+//      as a `tab:event` ipc-message so existing addEventListener
+//      ('ipc-message') call sites still work.
+//    - OAuth popups (BrowserWindow): use ipcRenderer.send with a
+//      'popup-' prefix. main relays to the main-window renderer the
+//      same way it always did.
 // ════════════════════════════════════════════════════════════════════
 
 const { ipcRenderer, webFrame } = require('electron')
 
-// ════════════════════════════════════════════════════════════════════
-//  STEALTH — make the page-side runtime indistinguishable from real
-//  Chrome so Google's "Webbläsaren eller appen kanske inte är säker"-
-//  block doesn't fire on accounts.google.com / OAuth flows.
-//
-//  We already spoof the User-Agent and Sec-CH-UA at the request layer
-//  (in main.js). What's left is the in-page JS fingerprint that Google
-//  inspects: navigator.webdriver, navigator.plugins, the chrome global,
-//  WebGL renderer, Permissions API quirks, etc. Real Chrome has all of
-//  those; default Electron has none of them, which is the signal.
-//
-//  Patches run in the page's main world via webFrame.executeJavaScript
-//  AT preload time — meaning they take effect before any page script
-//  reads the patched globals. This is the same approach the well-known
-//  puppeteer-extra-plugin-stealth library uses for Puppeteer.
-//
-//  This is best-effort. Bot detectors evolve. Some sites (e.g. Cloud-
-//  flare's Turnstile) may still block. We accept that as the cost of
-//  being a third-party browser; the goal here is to fix Google login.
-// ════════════════════════════════════════════════════════════════════
-;(function applyStealth() {
-  let STEALTH_PATCHES
+// Tab-vs-popup detection — used by _send() below to pick the right
+// relay channel. TabManager passes --seoz-tab=1 in additionalArguments
+// when it spawns a WebContentsView. We also fall back to detecting the
+// presence of `process.guestInstanceId` (legacy <webview> path) for
+// safety during the migration window.
+const _IN_TAB = (() => {
   try {
-    STEALTH_PATCHES = require('./stealth-code.js')
-  } catch (_) {
-    // Minimal fallback om require failar (paketerad app, ASAR-glitch, …)
-    // Fixar bara de mest kritiska signalerna så vi åtminstone inte
-    // blir omedelbart blockerade av t.ex. Google.
-    STEALTH_PATCHES = '(function(){try{Object.defineProperty(Navigator.prototype,"webdriver",{get:()=>undefined,configurable:true});if(!window.chrome)window.chrome={runtime:{},loadTimes:function(){return {}},csi:function(){return {}},app:{isInstalled:false}}}catch(_){}})();'
-  }
-  // webFrame.executeJavaScript kör i page-mainvärlden. Async men
-  // räcker som första-parti-injection — om main.js också injicerar
-  // via did-start-loading har vi belt-and-suspenders.
+    if (Array.isArray(process?.argv) && process.argv.includes('--seoz-tab=1')) return true
+  } catch (_) {}
   try {
-    webFrame.executeJavaScript(STEALTH_PATCHES, false).catch(() => {})
-  } catch (_) {
-    // Äldre Electron / ovanlig kontekst — ignore.
-  }
+    if (typeof process !== 'undefined' && process.guestInstanceId !== undefined) return true
+  } catch (_) {}
+  return false
 })()
 
+// NOTE: Chrome-shim injection moved to src/main/tab-manager.js as of
+// v1.10.58. Preload only runs once at initial about:blank load — by
+// the time the user navigates to a real page, the page main world has
+// been recycled and any patches we set are gone. Main-process injection
+// on did-start-navigation re-runs on every navigation.
 
-// In webview guests `process.guestInstanceId` is set. In a native
-// popup BrowserWindow it's undefined. We pick the right transport
-// once at startup so the rest of the script doesn't have to care.
-const _IN_WEBVIEW = (() => {
-  try { return typeof process !== 'undefined' && process.guestInstanceId !== undefined }
-  catch (_) { return false }
-})()
+// Keep webFrame imported so other code that uses it (autofill scripting)
+// still works.
+void webFrame
+
+
 function _send(channel, payload) {
   try {
-    if (_IN_WEBVIEW) ipcRenderer.sendToHost(channel, payload)
+    if (_IN_TAB) ipcRenderer.send('tab:relay-from-preload', channel, payload)
     else ipcRenderer.send('popup-' + channel, payload)
   } catch (err) {
     // Best-effort logging — visible in the page's devtools console

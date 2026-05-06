@@ -192,6 +192,70 @@ contextBridge.exposeInMainWorld('seoz', {
   // Tab tear-off (drag a tab out of the window to create a new window)
   tabTearOff: (url, x, y) => ipcRenderer.send('tab-tear-off', { url, x, y }),
 
+  // ── Tab API (WebContentsView-backed) ───────────────────
+  //
+  // Each tab in the renderer is a thin handle whose actual page
+  // lives in a top-level WebContentsView in main. The renderer
+  // creates one with `tab.create()`, drives it through the methods
+  // below, and listens for events via `tab.onEvent`.
+  //
+  // The TabHandle class in the renderer wraps these calls to mimic
+  // Electron's <webview> element API surface (loadURL/reload/etc),
+  // so we don't have to rewrite the hundreds of `wv.foo()` call
+  // sites scattered across the renderer.
+  tab: {
+    create:               (opts)         => ipcRenderer.invoke('tab:create', opts || {}),
+    destroy:              (id)           => ipcRenderer.send('tab:destroy', id),
+    setBounds:            (id, b, vis)   => ipcRenderer.send('tab:set-bounds', { tabId: id, bounds: b, visible: vis }),
+    setVisible:           (id, vis)      => ipcRenderer.send('tab:set-visible', { tabId: id, visible: !!vis }),
+
+    loadURL:              (id, url, opts)=> ipcRenderer.invoke('tab:loadURL', { tabId: id, url, opts: opts || {} }),
+    reload:               (id)           => ipcRenderer.send('tab:reload', id),
+    reloadIgnoringCache:  (id)           => ipcRenderer.send('tab:reload-ignoring-cache', id),
+    stop:                 (id)           => ipcRenderer.send('tab:stop', id),
+    goBack:               (id)           => ipcRenderer.send('tab:go-back', id),
+    goForward:            (id)           => ipcRenderer.send('tab:go-forward', id),
+
+    getURL:               (id)           => ipcRenderer.invoke('tab:get-url', id),
+    getTitle:             (id)           => ipcRenderer.invoke('tab:get-title', id),
+    canGoBack:            (id)           => ipcRenderer.invoke('tab:can-go-back', id),
+    canGoForward:         (id)           => ipcRenderer.invoke('tab:can-go-forward', id),
+    isLoading:            (id)           => ipcRenderer.invoke('tab:is-loading', id),
+
+    executeJavaScript:    (id, code, ug) => ipcRenderer.invoke('tab:execute-js', { tabId: id, code, userGesture: !!ug }),
+    capturePage:          (id, rect)     => ipcRenderer.invoke('tab:capture-page', { tabId: id, rect: rect || null }),
+
+    findInPage:           (id, txt, o)   => ipcRenderer.invoke('tab:find-in-page', { tabId: id, text: txt, opts: o || {} }),
+    stopFindInPage:       (id, action)   => ipcRenderer.send('tab:stop-find-in-page', { tabId: id, action: action || 'clearSelection' }),
+
+    setZoomFactor:        (id, factor)   => ipcRenderer.send('tab:set-zoom-factor', { tabId: id, factor }),
+    getZoomFactor:        (id)           => ipcRenderer.invoke('tab:get-zoom-factor', id),
+
+    openDevTools:         (id)           => ipcRenderer.send('tab:open-devtools', id),
+    closeDevTools:        (id)           => ipcRenderer.send('tab:close-devtools', id),
+
+    focus:                (id)           => ipcRenderer.send('tab:focus', id),
+    print:                (id)           => ipcRenderer.send('tab:print', id),
+    setAudioMuted:        (id, muted)    => ipcRenderer.send('tab:set-audio-muted', { tabId: id, muted: !!muted }),
+    setUserAgent:         (id, ua)       => ipcRenderer.send('tab:set-user-agent', { tabId: id, userAgent: ua }),
+
+    // Mirror of <webview>.send(channel, ...args) — pushes an IPC
+    // message into the tab's preload (webview-preload.js).
+    sendToPreload:        (id, ch, args) => ipcRenderer.send('tab:send-to-preload', { tabId: id, channel: ch, args }),
+
+    // Subscribe to tab events. Returns an unsubscribe function.
+    onEvent: (fn) => {
+      const handler = (_e, payload) => { try { fn(payload) } catch (_) {} }
+      ipcRenderer.on('tab:event', handler)
+      return () => ipcRenderer.removeListener('tab:event', handler)
+    },
+    onNewWindow: (fn) => {
+      const handler = (_e, payload) => { try { fn(payload) } catch (_) {} }
+      ipcRenderer.on('tab:new-window', handler)
+      return () => ipcRenderer.removeListener('tab:new-window', handler)
+    },
+  },
+
   // Auto-updater
   updaterCheck:     () => ipcRenderer.send('updater-check'),
   updaterDownload:  () => ipcRenderer.send('updater-download'),
@@ -200,7 +264,7 @@ contextBridge.exposeInMainWorld('seoz', {
 
   // Events from main → renderer
   on:  (ch, fn) => {
-    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save', 'permission-prompt', 'news:items-updated']
+    const ok = ['sync-data', 'theme-changed', 'blocker-count', 'updater-status', 'profile-changed', 'open-url', 'navigate-current', 'terminal-data', 'terminal-exit', 'terminal-history-new', 'mail:event', 'mail:list-updated', 'mail:unread-total', 'mail:scheduled-sent', 'webview-fullscreen', 'popup-autofill-request', 'popup-autofill-save', 'permission-prompt', 'news:items-updated', 'chrome-shortcut', 'tab-context-action']
     if (ok.includes(ch)) ipcRenderer.on(ch, (_, ...a) => fn(...a))
   },
   off: (ch, fn) => ipcRenderer.removeListener(ch, fn),

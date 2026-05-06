@@ -3606,21 +3606,54 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
   // Heartbeat — when renderer's event loop hangs, this stops.
   setInterval(() => _log('RENDERER-ALIVE'), 1000)
 
-  // Click capture (capture phase so we see every click, even on
-  // elements that stopPropagation in their own handlers). Logs the
-  // target element so we know exactly what was clicked just before
-  // the renderer (presumably) hung.
+  // Click capture — logs target + closest actionable ancestor (id/
+  // onclick handler) so we know which dock icon / button was clicked
+  // even when the immediate target was a child <svg> / <span>.
   document.addEventListener('click', (e) => {
     try {
       const t = e.target
-      const desc = (t.tagName || 'unknown') +
+      const targetDesc = (t.tagName || 'unknown') +
         (t.id ? '#' + t.id : '') +
         (t.className && typeof t.className === 'string'
           ? '.' + String(t.className).split(/\s+/).filter(Boolean).slice(0, 3).join('.')
           : '')
-      _log('CLICK ' + desc)
+      // Walk up to find the actual interactive ancestor.
+      let actor = t
+      let chain = []
+      for (let i = 0; i < 6 && actor && actor !== document.body; i++) {
+        const tag = actor.tagName || ''
+        const id = actor.id || ''
+        const cls = (actor.className && typeof actor.className === 'string')
+          ? actor.className.split(/\s+/).filter(Boolean).slice(0, 2).join('.')
+          : ''
+        const onclick = actor.getAttribute && actor.getAttribute('onclick')
+        chain.push(
+          tag +
+          (id ? '#' + id : '') +
+          (cls ? '.' + cls : '') +
+          (onclick ? ' onclick="' + onclick.slice(0, 60) + '"' : '')
+        )
+        if (id || onclick) break  // stop at first identifiable ancestor
+        actor = actor.parentElement
+      }
+      _log('CLICK target=' + targetDesc + ' chain=' + chain.join(' < '))
     } catch (_) { _log('CLICK <err>') }
   }, { capture: true })
+
+  // Long-task observer — fires for any JS task that blocks the main
+  // thread for >50ms. The hang we're chasing is a single sync task
+  // running forever, so we'll see "LONGTASK dur=Xms" with X near the
+  // hang duration right before heartbeat stops.
+  try {
+    if (typeof PerformanceObserver !== 'undefined') {
+      const lt = new PerformanceObserver((list) => {
+        for (const e of list.getEntries()) {
+          _log('LONGTASK dur=' + Math.round(e.duration) + 'ms start=' + Math.round(e.startTime) + 'ms')
+        }
+      })
+      lt.observe({ type: 'longtask', buffered: true })
+    }
+  } catch (_) {}
 
   // Catch unhandled errors + promise rejections — these often
   // precede a freeze (an exception kills a critical event listener).

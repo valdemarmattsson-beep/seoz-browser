@@ -1,0 +1,122 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>SEOZ tab tooltip</title>
+<style>
+  /* Transparent root — the BrowserWindow itself is `transparent:true`
+     and `frame:false`, so the only visible chrome is the .card below. */
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    color: #f8f8f8;
+  }
+
+  /* Card layout matches what the in-DOM .tab-tip-card used to look like
+     (v1.10.106 and earlier). Inline tokens here instead of CSS variables
+     because this HTML loads in its own renderer with no design-system
+     stylesheet. Theme-awareness is intentionally simple: assume dark
+     since the SEOZ chrome is dark by default. */
+  .card {
+    background: #1a1d23;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 10px 12px;
+    margin: 4px;          /* small gutter so the box-shadow isn't clipped at window edge */
+    overflow: hidden;
+  }
+
+  .preview {
+    display: none;
+    width: calc(100% + 24px);
+    margin: -10px -12px 10px;
+    height: 140px;
+    object-fit: cover;
+    object-position: top center;
+    background: #0f1116;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .preview.show { display: block }
+
+  .head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px }
+  .fav {
+    width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+    object-fit: contain;
+    display: none;
+  }
+  .fav.show { display: block }
+  .title {
+    flex: 1; min-width: 0;
+    font-size: 12px; font-weight: 600; color: #f8f8f8;
+    line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .url {
+    font-size: 11px; color: rgba(255,255,255,.55);
+    line-height: 1.4;
+    word-break: break-all;
+    margin-bottom: 2px;
+    /* Truncate to 2 lines max so tooltip height stays predictable. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .domain {
+    font-size: 10.5px; color: rgba(255,255,255,.4);
+    margin-top: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+  .empty {
+    text-align: center; color: rgba(255,255,255,.4);
+    font-size: 11px; padding: 4px 0;
+  }
+</style>
+</head>
+<body>
+<div class="card">
+  <img class="preview" id="preview" alt="">
+  <div class="head">
+    <img class="fav" id="fav" src="" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
+    <div class="title" id="title"></div>
+  </div>
+  <div class="url" id="url"></div>
+  <div class="domain" id="domain"></div>
+</div>
+<script>
+  // Listen for content updates from main. The window is created hidden;
+  // main shows it via .showInactive() once content is set.
+  if (window.seoz && window.seoz.tooltip && window.seoz.tooltip.onUpdate) {
+    window.seoz.tooltip.onUpdate((data) => {
+      const fav = document.getElementById('fav')
+      const title = document.getElementById('title')
+      const url = document.getElementById('url')
+      const domain = document.getElementById('domain')
+      const preview = document.getElementById('preview')
+
+      title.textContent = data.title || data.url || ''
+      url.textContent = data.url || ''
+      domain.textContent = data.domain || ''
+
+      if (data.favicon) {
+        fav.src = data.favicon
+        // .show is added via onload above
+      } else {
+        fav.removeAttribute('src')
+        fav.classList.remove('show')
+      }
+
+      if (data.preview) {
+        preview.src = data.preview
+        preview.classList.add('show')
+      } else {
+        preview.removeAttribute('src')
+        preview.classList.remove('show')
+      }
+    })
+  }
+</script>
+</body>
+</html>

@@ -1592,28 +1592,22 @@ input,textarea,select{user-select:text}
    The two clip values are different because the URL-suggest dropdown
    anchors below the URL bar (further down the chrome) and can be
    taller than the tab tooltip card. */
-/* Tab tooltip uses a fixed 280px clip — set by JS hover handler with a
-   420ms intent delay matching the CSS opacity transition. */
-body.tab-tip-hovering .tab-handle{
-  top:280px !important;
-  transition:top .12s ease-out;
-}
 /* Generic clip-from-top for chrome dropdowns / context menus / URL
    suggest. Height is computed dynamically by _refreshOverlayState
    based on the tallest visible clip-mode overlay (see
    _CLIP_OPEN_SELECTOR). The CSS variable defaults to 280px so the
-   transition still works smoothly even if the var hasn't been set yet. */
+   transition still works smoothly even if the var hasn't been set yet.
+
+   NB: tab-tip-hovering used to also live here (with a static 280px
+   clip) but the tab tooltip moved to a separate floating BrowserWindow
+   in v1.10.107 — see seoz.tooltip.show() in the renderer + tooltip-
+   preload.js + the tooltip BrowserWindow setup in main.js. The page no
+   longer needs to clip on tab hover; the tooltip floats over it. */
 body.chrome-clip-active .tab-handle{
   top:var(--chrome-clip-h, 280px) !important;
   transition:top .12s ease-out;
 }
-/* When BOTH classes are active simultaneously, pick whichever is
-   larger so neither overlay is occluded. We use max() with the CSS
-   variable falling back to 280px to keep things sensible. */
-body.tab-tip-hovering.chrome-clip-active .tab-handle{
-  top:max(280px, var(--chrome-clip-h, 280px)) !important;
-}
-body:not(.tab-tip-hovering):not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
+body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -9053,82 +9047,55 @@ function renderTabs() {
         <div class="tab-ico-wrap"></div>
         <div class="tab-title"></div>
         <div class="tab-x" aria-label="Stäng flik"><svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round"><path d="M18 6 6 18M6 6l12 12"/></svg></div>
-        <div class="tab-tip">
-          <div class="tab-tip-card">
-            <img class="tab-tip-preview" alt="">
-            <div class="tab-tip-head">
-              <img class="tab-tip-fav" src="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
-              <div class="tab-tip-title"></div>
-            </div>
-            <div class="tab-tip-url"></div>
-            <div class="tab-tip-domain"></div>
-            <div class="tab-tip-pw-section" style="display:none">
-              <div class="tab-tip-section-label">Passwords</div>
-              <div class="tab-tip-pw-list"></div>
-            </div>
-            <div class="tab-tip-actions">
-              <button class="tab-tip-action" type="button" data-tip-action="pin" data-tab-id="${tab.id}" title="Fäst flik">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
-              </button>
-              <button class="tab-tip-action" type="button" data-tip-action="split" data-tab-id="${tab.id}" title="Splitvy">
-                <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-              </button>
-            </div>
-          </div>
-        </div>
       `
       const xBtn = el.querySelector('.tab-x')
       xBtn.draggable = false
       xBtn.addEventListener('mousedown', e => e.stopPropagation())
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
-      // Tooltip uses position:fixed (v1.10.104) so it escapes the
-      // .tabs-scroll overflow:hidden clip. We compute viewport-relative
-      // top + left from the tab's getBoundingClientRect on every hover
-      // — necessary because fixed-positioned elements don't follow
-      // their DOM ancestor's flow.
+
+      // Tab preview tooltip — backed by a separate transparent
+      // BrowserWindow in main (since v1.10.107). HTML z-index can't
+      // reach across the WebContentsView native-view boundary, so the
+      // tooltip lives in its own OS window that floats over the main
+      // one. main converts our viewport coords → screen coords.
       el.addEventListener('mouseenter', () => {
-        const tip = el.querySelector('.tab-tip')
-        if (!tip) return
         const rect = el.getBoundingClientRect()
-        const tipWidth = 300   // approx of min-width:240..max-width:320 card
+        const tipWidth = 320
         const winWidth = window.innerWidth
-        const margin = 8       // safety margin from window edges
+        const margin = 8
 
-        // Top: just below the tab in viewport coords.
-        tip.style.top = rect.bottom + 'px'
-
-        // Left: try to center under the tab, clamp to viewport edges.
+        // Anchor the tooltip just below the tab, horizontally centred
+        // and clamped so it doesn't overflow the window edges.
         let left = rect.left + rect.width / 2 - tipWidth / 2
         if (left < margin) left = margin
         else if (left + tipWidth > winWidth - margin) left = winWidth - margin - tipWidth
-        tip.style.left = left + 'px'
-        tip.style.right = 'auto'
-        tip.style.transform = 'none'
 
-        // After the same 420ms intent delay the CSS uses for opacity,
-        // toggle body.tab-tip-hovering so the .tab-handle CSS rule
-        // shrinks the WebContentsView from the top by 280px. That
-        // exposes a strip of chrome bg where the tooltip can actually
-        // render — without making the entire page disappear (the
-        // v1.10.97 mistake we reverted in v1.10.100).
         clearTimeout(window._tabTipShowTimer)
         clearTimeout(window._tabTipHideTimer)
+        // 420ms intent delay — quick hovers (e.g. moving the cursor
+        // across the tab strip) don't pop a tooltip.
         window._tabTipShowTimer = setTimeout(() => {
-          document.body.classList.add('tab-tip-hovering')
+          if (!window.seoz?.tooltip) return
+          let domain = ''
+          try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
+          window.seoz.tooltip.show(left, rect.bottom + 4, {
+            title: tab.title || tab.url || '',
+            url: tab.url || '',
+            domain,
+            favicon: tab.favicon || '',
+            preview: '',  // capturePage hookup tracked separately
+          })
         }, 420)
       })
       el.addEventListener('mouseleave', () => {
         clearTimeout(window._tabTipShowTimer)
         clearTimeout(window._tabTipHideTimer)
-        // Grace period so the user gets a brief moment to read the
-        // tooltip after moving the cursor off the tab. With v1.10.106
-        // pointer-events:none, the tooltip can no longer "catch" the
-        // cursor (the hover bridge is gone), so we lean on a slightly
-        // longer grace (300ms) for comfort.
+        // Short grace before hiding — gives the user a moment in case
+        // the cursor is just transiting between adjacent tabs.
         window._tabTipHideTimer = setTimeout(() => {
-          document.body.classList.remove('tab-tip-hovering')
-        }, 300)
+          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+        }, 120)
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {

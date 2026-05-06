@@ -23,6 +23,16 @@ contextBridge.exposeInMainWorld('seoz', {
   winDragMove:  (dx, dy)   => ipcRenderer.send('win-drag-move', dx, dy),
   winDragEnd:   ()         => ipcRenderer.send('win-drag-end'),
 
+  // Tab-preview tooltip — backed by a separate transparent
+  // BrowserWindow in main. This is the only way to render a tooltip
+  // OVER a WebContentsView (the page); HTML z-index can't reach
+  // across that native-view boundary. anchorX/Y are viewport coords
+  // in the parent window; main converts to screen coords.
+  tooltip: {
+    show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
+    hide: () => ipcRenderer.send('tooltip:hide'),
+  },
+
   // Password manager (per-profile, encrypted via OS-level safeStorage)
   passwordsList:   ()              => ipcRenderer.invoke('passwords-list'),
   passwordsAdd:    (entry)         => ipcRenderer.invoke('passwords-add', entry),

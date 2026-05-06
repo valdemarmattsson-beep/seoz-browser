@@ -1072,6 +1072,120 @@ function createWindow() {
   })
 }
 
+// ── Tab tooltip floating window ─────────────────────────────────────
+// A small, transparent, frameless, focusable:false BrowserWindow that
+// renders the tab-preview card OVER the main window. It exists ONLY to
+// paint above the WebContentsView (the active page), which is a native
+// OS-level layer that ignores DOM z-index. Pre-1.10.107 we tried in-DOM
+// tooltips with various clip-from-top hacks; all leaked into the URL
+// bar / froze / blacked out the page. A separate window cleanly fixes
+// every one of those failure modes — it's the same approach Strawberry
+// uses (and Chrome's own hover preview, internally).
+//
+// Lifecycle: lazy-created on first 'tooltip:show', reused for every
+// subsequent hover (cheaper than spawn-on-each-hover), destroyed when
+// the parent main window closes. setIgnoreMouseEvents(true) makes it
+// fully click-through so the URL bar / page below stay interactive.
+//
+// Position: renderer sends viewport-relative coords (anchorX, anchorY)
+// of where the tooltip's top-left should sit; main converts to screen
+// coords using the parent's content bounds.
+let _tooltipWin = null
+
+function _ensureTooltipWindow() {
+  if (_tooltipWin && !_tooltipWin.isDestroyed()) return _tooltipWin
+  if (!win || win.isDestroyed()) return null
+
+  _tooltipWin = new BrowserWindow({
+    parent: win,
+    frame: false,
+    transparent: true,
+    resizable: false,
+    movable: false,
+    minimizable: false,
+    maximizable: false,
+    closable: false,
+    focusable: false,
+    skipTaskbar: true,
+    show: false,
+    width: 320,
+    height: 200,
+    hasShadow: false,
+    backgroundColor: '#00000000',
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/tooltip-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  // Cursor passes through the tooltip window to whatever's behind
+  // (URL bar, page chrome, etc) — same effect as pointer-events:none
+  // on the old in-DOM tooltip but enforced at the OS window level so
+  // there's no escape.
+  try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+
+  // alwaysOnTop relative to the parent window only (not system-wide).
+  // 'pop-up-menu' level keeps it above WebContentsView siblings but
+  // below modal dialogs / OS menus.
+  try { _tooltipWin.setAlwaysOnTop(true, 'pop-up-menu') } catch (_) {}
+
+  _tooltipWin.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
+
+  // If the parent window closes, tear down the tooltip too.
+  if (win) win.once('closed', () => {
+    try { if (_tooltipWin && !_tooltipWin.isDestroyed()) _tooltipWin.destroy() } catch (_) {}
+    _tooltipWin = null
+  })
+
+  return _tooltipWin
+}
+
+ipcMain.on('tooltip:show', (_e, payload = {}) => {
+  try {
+    const tt = _ensureTooltipWindow()
+    if (!tt) return
+    if (!win || win.isDestroyed()) return
+
+    const { anchorX = 0, anchorY = 0, content = {} } = payload
+    // Convert parent-window content coords → absolute screen coords
+    const cb = win.getContentBounds()
+    const sx = Math.round(cb.x + anchorX)
+    const sy = Math.round(cb.y + anchorY)
+    // Clamp to the screen the parent is on so the tooltip never opens
+    // off-screen (would look broken near right/bottom edges).
+    const display = screen.getDisplayMatching(cb)
+    const wa = display.workArea
+    const w = 320, h = 200
+    const x = Math.max(wa.x + 4, Math.min(wa.x + wa.width  - w - 4, sx))
+    const y = Math.max(wa.y + 4, Math.min(wa.y + wa.height - h - 4, sy))
+    tt.setBounds({ x, y, width: w, height: h })
+
+    // Push content into the tooltip's renderer. Safe even before
+    // did-finish-load because we registered an ipcRenderer.on listener
+    // in the preload BEFORE the window contents start parsing.
+    if (tt.webContents && !tt.webContents.isDestroyed()) {
+      tt.webContents.send('tooltip:update', content)
+    }
+    // Show without stealing focus. focusable:false also prevents focus
+    // theft if the OS would otherwise activate the window.
+    if (!tt.isVisible()) {
+      try { tt.showInactive() } catch (_) {}
+    }
+  } catch (err) {
+    console.error('[tooltip:show] failed:', err)
+  }
+})
+
+ipcMain.on('tooltip:hide', () => {
+  try {
+    if (_tooltipWin && !_tooltipWin.isDestroyed() && _tooltipWin.isVisible()) {
+      _tooltipWin.hide()
+    }
+  } catch (_) {}
+})
+
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location
 ipcMain.on('tab-tear-off', (_evt, payload) => {

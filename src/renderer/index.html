@@ -10147,18 +10147,31 @@ function toggleDock() {
 }
 
 function togglePanel(name) {
-  if (currentPanel === name) { closePanel(); return }
-  openPanel(name)
+  try { console.warn('[DIAG] togglePanel ENTER name=' + name) } catch (_) {}
+  try {
+    if (currentPanel === name) { closePanel(); return }
+    openPanel(name)
+  } finally {
+    try { console.warn('[DIAG] togglePanel EXIT name=' + name) } catch (_) {}
+  }
 }
 
 function openPanel(name) {
-  currentPanel = name
-  document.getElementById('seozPanel').classList.add('open')
-  // Highlight active dock icon
-  document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
-  const diEl = document.getElementById('di-' + name)
-  if (diEl) diEl.classList.add('active')
-  renderPanelContent(name)
+  try { console.warn('[DIAG] openPanel ENTER name=' + name) } catch (_) {}
+  try {
+    currentPanel = name
+    try { console.warn('[DIAG] openPanel +seozPanel.open') } catch (_) {}
+    document.getElementById('seozPanel').classList.add('open')
+    try { console.warn('[DIAG] openPanel -di.active*') } catch (_) {}
+    document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
+    const diEl = document.getElementById('di-' + name)
+    if (diEl) diEl.classList.add('active')
+    try { console.warn('[DIAG] openPanel before-renderPanelContent') } catch (_) {}
+    renderPanelContent(name)
+    try { console.warn('[DIAG] openPanel after-renderPanelContent') } catch (_) {}
+  } finally {
+    try { console.warn('[DIAG] openPanel EXIT name=' + name) } catch (_) {}
+  }
 }
 
 function closePanel() {
@@ -10220,10 +10233,31 @@ const _PANEL_ICONS = {
 }
 
 async function renderPanelContent(name) {
+  // v1.10.127 DIAG — log entry/exit so we can see if this function
+  // ever returns. If we see ENTER but not EXIT(name) the freeze is
+  // in this function's sync code for that panel.
+  try { console.warn('[DIAG] renderPanelContent ENTER name=' + name) } catch (_) {}
   const icon = document.getElementById('phIcon')
   const title = document.getElementById('panelTitle')
   const body = document.getElementById('panelBody')
 
+  // v1.10.127 DIAG — short-circuit ALL panels with a placeholder
+  // until we identify the freeze. If ANY panel still freezes with
+  // this stub in place, the bug is in togglePanel / openPanel /
+  // _refreshOverlayState (the common path, not the panel renders).
+  // If freeze stops, panel-specific render code is the bug.
+  try {
+    if (icon) icon.innerHTML = ''
+    if (title) title.textContent = name
+    if (body) body.innerHTML = '<div style="padding:24px 18px;font-size:11.5px;color:var(--muted);text-align:center">Panel <code>' + (name || '?') + '</code> är temporärt avstängd för att felsöka frysningsbugg.</div>'
+    console.warn('[DIAG] renderPanelContent EXIT name=' + name + ' (stub)')
+    return
+  } catch (err) {
+    console.warn('[DIAG] renderPanelContent stub-err: ' + (err && err.message))
+    return
+  }
+
+  // ── original code parked below — unreachable while stub above is active ──
   if (name === 'seo') {
     icon.innerHTML = _PANEL_ICONS.search; title.textContent = 'SEO-analys'
     // Sub-tab state

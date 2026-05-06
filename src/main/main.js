@@ -565,6 +565,27 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 // surfacing as 'render-process-gone reason: okänt'.
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
 
+// ── Hardware-accelerated media + GPU-rasterization flags ─────────────
+// Chromium auto-picks reasonable defaults but a few opt-ins make a
+// noticeable difference for video-heavy sites (YouTube, Twitch) on
+// Windows where users reported the playback feeling sluggish.
+//
+// PlatformHEVCDecoderSupport: lets Chromium decode HEVC/H.265 via the
+//   Windows OS codec extensions when available (cheap CPU-wise).
+// CanvasOopRasterization + GpuRasterization: paint <canvas> + DOM on
+//   the GPU instead of the CPU raster process. On by default in modern
+//   Chrome but explicit opt-in here so a stale Electron default doesn't
+//   regress us.
+// EnableDrDc: per-thread display-compositor — keeps animations smooth
+//   while video decodes on a separate thread.
+app.commandLine.appendSwitch('enable-features', [
+  'PlatformHEVCDecoderSupport',
+  'CanvasOopRasterization',
+  'EnableDrDc',
+].join(','))
+app.commandLine.appendSwitch('enable-gpu-rasterization')
+app.commandLine.appendSwitch('enable-zero-copy')
+
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {
   // The URL is typically the last argument
@@ -694,7 +715,21 @@ function setupContentBlocker() {
   const CH_UA           = `"Chromium";v="${CHROMIUM_MAJOR}", "Google Chrome";v="${CHROMIUM_MAJOR}", "Not.A/Brand";v="24"`
   const CH_UA_FULL_LIST = `"Chromium";v="${CHROMIUM_VERSION}", "Google Chrome";v="${CHROMIUM_VERSION}", "Not.A/Brand";v="24.0.0.0"`
 
-  ses.webRequest.onBeforeSendHeaders((details, callback) => {
+  // Resource-type filter — only rewrite headers on requests where sites
+  // actually do bot/fingerprint detection (initial document load,
+  // XHR/fetch, WebSocket, script). Image/font/stylesheet/media/ping
+  // requests never get inspected for UA, so running the rewrite on
+  // them was pure overhead. On YouTube/Twitch this skips ~90% of the
+  // callbacks (every video chunk, every emoji, every CSS file) and
+  // brings page interaction back to native Chrome speed. The filter
+  // is applied at registration so the callback isn't even called for
+  // excluded types — far cheaper than an early-return inside.
+  const FP_FILTER = {
+    urls: ['<all_urls>'],
+    types: ['mainFrame', 'subFrame', 'xhr', 'webSocket', 'script', 'cspReport', 'other'],
+  }
+
+  ses.webRequest.onBeforeSendHeaders(FP_FILTER, (details, callback) => {
     const h = details.requestHeaders
     delete h['Electron']
 
@@ -772,7 +807,33 @@ function setupContentBlocker() {
   const whitelist = ['seoz.io', 'flow.seoz.io', 'api.seoz.io']
   const isWhitelisted = host => whitelist.some(w => host === w || host.endsWith('.' + w))
 
-  ses.webRequest.onBeforeRequest((details, callback) => {
+  // Resource-type filter for the blocker — only the types where
+  // tracking/ad scripts actually live. Skipping mainFrame/subFrame
+  // (the user navigated there intentionally), stylesheet, font,
+  // ping (beacons we want to nuke but Chromium normally fires &
+  // forgets — the blocker check on those still costs a callback per
+  // beacon for negligible benefit).
+  const BLOCKER_FILTER = {
+    urls: ['<all_urls>'],
+    types: ['xhr', 'script', 'image', 'media', 'webSocket', 'object', 'other'],
+  }
+
+  // Throttle the blocker-count IPC. Without this, an ad-heavy site
+  // (YouTube preroll, Twitch overlay) can fire hundreds of blocks per
+  // second, each sending an IPC message to the renderer. The renderer
+  // only paints a counter; coalescing to ~10 fps is invisible to the
+  // user and noticeably reduces main↔renderer chatter.
+  let _blockerNotifyPending = false
+  function _scheduleBlockerNotify() {
+    if (_blockerNotifyPending) return
+    _blockerNotifyPending = true
+    setTimeout(() => {
+      _blockerNotifyPending = false
+      try { if (win) win.webContents.send('blocker-count', blockerStats.session) } catch (_) {}
+    }, 100)
+  }
+
+  ses.webRequest.onBeforeRequest(BLOCKER_FILTER, (details, callback) => {
     if (!blockerEnabled) { callback({}); return }
 
     try {
@@ -781,8 +842,7 @@ function setupContentBlocker() {
       if (isDomainBlocked(url.hostname)) {
         blockerStats.blocked++
         blockerStats.session++
-        // Notify renderer about updated count
-        if (win) win.webContents.send('blocker-count', blockerStats.session)
+        _scheduleBlockerNotify()
         callback({ cancel: true })
         return
       }

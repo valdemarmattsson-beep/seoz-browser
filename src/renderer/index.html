@@ -4885,11 +4885,13 @@ const _OVERLAY_OPEN_SELECTOR = [
   '.mail-compose-tpl-menu.show',
   '.mail-schedule-popup.show',
   '.home-mail-results.show',
-  // body class toggled by the tab :hover JS handler (see tab mouseenter
-  // below). Can't query :hover or .tab-tip directly: :hover isn't
-  // reflected in CSS class state, and the tooltip itself only becomes
-  // opacity:1 via :hover rather than via a class flag.
-  'body.tab-tip-hovering',
+  // NB: tab-tip-hovering was tried in v1.10.97 to hoist the tab tooltip
+  // above the WebContentsView, but hiding the entire page just to show
+  // a hover preview made the active tab go fully black — far worse UX
+  // than the tooltip being invisible. Reverted in v1.10.100. Real fix
+  // would be either (a) shrink the WebContentsView from the top by
+  // tooltip-height (clip approach) or (b) render the tooltip in a
+  // separate floating BrowserWindow. Both are bigger work.
   // NB: .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
   // included — they're always-visible chrome (favicon, find-bar that
   // overlays the top band) or false-positive triggers (tab-tip-fav
@@ -9019,29 +9021,12 @@ function renderTabs() {
           tip.style.right = 'auto'
           tip.style.transform = 'translateX(-50%)'
         }
-
-        // Tab tooltip lives in DOM but the WebContentsView (active page)
-        // sits on top as a native OS layer, so the tooltip would appear
-        // BEHIND the page. CSS .tab-tip has a 400ms delay before it
-        // becomes visible — match that here so we only hide the page
-        // after a clear "linger to preview" intent. _refreshOverlayState
-        // picks up body.tab-tip-hovering and hides the active tab's
-        // WebContentsView while the tooltip is on screen.
-        clearTimeout(window._tabTipShowTimer)
-        clearTimeout(window._tabTipHideTimer)
-        window._tabTipShowTimer = setTimeout(() => {
-          document.body.classList.add('tab-tip-hovering')
-        }, 420)
-      })
-      el.addEventListener('mouseleave', () => {
-        clearTimeout(window._tabTipShowTimer)
-        clearTimeout(window._tabTipHideTimer)
-        // Small grace period so the cursor can travel from the tab into
-        // the tooltip card itself (which has :hover { opacity:1 } to
-        // keep itself open) without the page flashing back in.
-        window._tabTipHideTimer = setTimeout(() => {
-          document.body.classList.remove('tab-tip-hovering')
-        }, 150)
+        // v1.10.97 also toggled body.tab-tip-hovering here to hide the
+        // WebContentsView so the tooltip could render on top. Reverted
+        // in v1.10.100 because the active tab going black on every
+        // hover-pause was unacceptable UX. Tooltip is now back to its
+        // pre-fix state — partially behind the page on hover, but the
+        // page stays visible. Proper fix is tracked separately.
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {

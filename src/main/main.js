@@ -3,6 +3,93 @@
 const { app, BrowserWindow, WebContentsView, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
 const path = require('path')
 const fs = require('fs')
+
+// ── v1.10.123 DIAGNOSTICS ──────────────────────────────────────────
+// User reports SEOZ hangs on first click — Windows logs AppHangB1 →
+// main process is blocking the message pump for >5s. Need to find
+// which IPC handler (or other main-side code) is doing it.
+//
+// Two instruments:
+//   1. Heartbeat: setInterval logs "MAIN-ALIVE" every second. When
+//      main hangs, the log stops. The last timestamp tells us when.
+//   2. IPC trace: wraps ipcMain.on / ipcMain.handle so every channel
+//      that takes >100ms (or throws) gets logged. Reveals the slow
+//      handler by name.
+//
+// Both write to startup.log so they're already in the path the user
+// is sending us. To remove later, just delete this block.
+;(function _diag123() {
+  let _logPath = null
+  const _resolveLog = () => {
+    if (!_logPath) {
+      try { _logPath = path.join(app.getPath('userData'), 'startup.log') } catch (_) {}
+    }
+    return _logPath
+  }
+  const _diagLog = (line) => {
+    try {
+      const p = _resolveLog(); if (!p) return
+      fs.appendFileSync(p, new Date().toISOString() + ' ' + line + '\n')
+    } catch (_) {}
+  }
+
+  // Heartbeat — when main hangs, this stops emitting.
+  app.whenReady().then(() => {
+    setInterval(() => _diagLog('MAIN-ALIVE'), 1000)
+  })
+
+  // IPC trace wrapper. Replaces ipcMain.on / .handle / .handleOnce so
+  // every subsequent registration goes through a timed proxy. Must
+  // run BEFORE any registrations elsewhere in the file — that's why
+  // this block is at the top of main.js.
+  const _origOn = ipcMain.on.bind(ipcMain)
+  const _origHandle = ipcMain.handle.bind(ipcMain)
+  const _origHandleOnce = ipcMain.handleOnce.bind(ipcMain)
+
+  const _trace = (channel, dt, err) => {
+    if (err) _diagLog('IPC-ERR channel=' + channel + ' dt=' + dt + 'ms err=' + (err.message || err))
+    else if (dt > 100) _diagLog('IPC-SLOW channel=' + channel + ' dt=' + dt + 'ms')
+  }
+
+  ipcMain.on = (channel, handler) => _origOn(channel, function (event, ...args) {
+    const t0 = Date.now()
+    try {
+      const r = handler(event, ...args)
+      _trace(channel, Date.now() - t0)
+      return r
+    } catch (err) {
+      _trace(channel, Date.now() - t0, err)
+      throw err
+    }
+  })
+
+  ipcMain.handle = (channel, handler) => _origHandle(channel, async function (event, ...args) {
+    const t0 = Date.now()
+    try {
+      const r = await handler(event, ...args)
+      _trace(channel, Date.now() - t0)
+      return r
+    } catch (err) {
+      _trace(channel, Date.now() - t0, err)
+      throw err
+    }
+  })
+
+  ipcMain.handleOnce = (channel, handler) => _origHandleOnce(channel, async function (event, ...args) {
+    const t0 = Date.now()
+    try {
+      const r = await handler(event, ...args)
+      _trace(channel, Date.now() - t0)
+      return r
+    } catch (err) {
+      _trace(channel, Date.now() - t0, err)
+      throw err
+    }
+  })
+
+  _diagLog('DIAG-123 instrumented (heartbeat + IPC trace)')
+})()
+
 const https = require('https')
 const os = require('os')
 const { exec, spawn } = require('child_process')

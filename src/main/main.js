@@ -1133,11 +1133,37 @@ function _ensureTooltipWindow() {
 
   _tooltipWin.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
 
-  // If the parent window closes, tear down the tooltip too.
-  if (win) win.once('closed', () => {
-    try { if (_tooltipWin && !_tooltipWin.isDestroyed()) _tooltipWin.destroy() } catch (_) {}
-    _tooltipWin = null
-  })
+  // Hide the tooltip whenever the main window loses focus or is
+  // minimised — without this, alt-tabbing away from SEOZ leaves a
+  // ghost tooltip floating over the new foreground app (alwaysOnTop:
+  // 'pop-up-menu' is system-wide for that level), and the cursor
+  // doesn't get a chance to fire mouseleave on the underlying tab so
+  // setInteractive(false) is never sent → on return, the tooltip is
+  // sometimes still in capture mode and silently swallows clicks. We
+  // also reset setIgnoreMouseEvents back to forward-only on the way
+  // out so the next show is in a clean state. (v1.10.114.)
+  const _hideTooltipOnDefocus = () => {
+    try {
+      if (_tooltipWin && !_tooltipWin.isDestroyed()) {
+        try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+        if (_tooltipWin.isVisible()) _tooltipWin.hide()
+      }
+      // Tell the renderer to forget any pending show/hide timers so a
+      // delayed timer doesn't pop the tooltip back up after the
+      // window has lost focus.
+      try { if (win && !win.isDestroyed()) win.webContents.send('tooltip:force-hide') } catch (_) {}
+    } catch (_) {}
+  }
+  if (win) {
+    win.on('blur', _hideTooltipOnDefocus)
+    win.on('minimize', _hideTooltipOnDefocus)
+    win.on('hide', _hideTooltipOnDefocus)
+    // If the parent window closes, tear down the tooltip too.
+    win.once('closed', () => {
+      try { if (_tooltipWin && !_tooltipWin.isDestroyed()) _tooltipWin.destroy() } catch (_) {}
+      _tooltipWin = null
+    })
+  }
 
   return _tooltipWin
 }

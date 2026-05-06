@@ -9360,13 +9360,16 @@ async function _captureAndUpdateTooltip(tab, anchor) {
 
 // ── Floating-window tooltip bridge ──────────────────────────────────
 // The tooltip lives in its own transparent BrowserWindow (see main.js
-// _tooltipWin + tooltip-preload.js). It signals back two things:
+// _tooltipWin + tooltip-preload.js). It signals back three things:
 //
 //   1) cursor-on-card: cursor entered or left the card. We cancel our
 //      pending hide timer when the cursor lands on it so the tooltip
 //      stays visible while the user reaches for an action button.
 //   2) action: user clicked Fäst / Splitvy. We route into the same
 //      logic the v1.10.106 in-DOM data-tip-action handler used.
+//   3) force-hide: main hid the tooltip because the window lost
+//      focus / was minimized. We clear any pending timers so a stale
+//      delayed show doesn't pop it back up after defocus.
 ;(function _wireTooltipBridge() {
   if (!window.seoz?.tooltip) return
   if (typeof window.seoz.tooltip.onCursorOnCard === 'function') {
@@ -9396,6 +9399,16 @@ async function _captureAndUpdateTooltip(tab, anchor) {
       } else if (action === 'pin') {
         toast('Fästa flikar kommer i nästa version', '#94a3b8')
       }
+    })
+  }
+  if (typeof window.seoz.tooltip.onForceHide === 'function') {
+    window.seoz.tooltip.onForceHide(() => {
+      // Window blurred / minimized → cancel any in-flight hover
+      // timers. Otherwise a 420ms intent timer can fire after the
+      // user has alt-tabbed away, popping the tooltip on top of
+      // whatever app they're now using.
+      clearTimeout(window._tabTipShowTimer)
+      clearTimeout(window._tabTipHideTimer)
     })
   }
 })()

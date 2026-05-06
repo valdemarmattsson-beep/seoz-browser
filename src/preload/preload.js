@@ -48,6 +48,13 @@ contextBridge.exposeInMainWorld('seoz', {
     onAction: (cb) => ipcRenderer.on('tooltip:action', (_e, payload) => {
       try { cb(payload || {}) } catch (err) { console.error('[onAction]', err) }
     }),
+    // Main signals that the tooltip was force-hidden due to window
+    // blur / minimize / hide. The renderer should clear any pending
+    // show/hide timers so a stale timer doesn't pop the tooltip back
+    // up after the window has lost focus.
+    onForceHide: (cb) => ipcRenderer.on('tooltip:force-hide', () => {
+      try { cb() } catch (err) { console.error('[onForceHide]', err) }
+    }),
   },
 
   // Password manager (per-profile, encrypted via OS-level safeStorage)

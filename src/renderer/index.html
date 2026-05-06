@@ -9113,10 +9113,17 @@ function renderTabs() {
           if (window.seoz?.tooltip) window.seoz.tooltip.hide()
         }, 180)
       })
-      // Right-click → tab context menu (Chrome / Arc / Strawberry style)
+      // Right-click → tab context menu (Chrome / Arc / Strawberry style).
+      // Hide the floating tooltip first — its BrowserWindow has
+      // alwaysOnTop:'pop-up-menu' which would otherwise paint over the
+      // ctx menu. Cancel any pending show timer too so a slow hover
+      // doesn't pop the tooltip up while the menu is open.
       el.addEventListener('contextmenu', (e) => {
         e.preventDefault()
         e.stopPropagation()
+        clearTimeout(window._tabTipShowTimer)
+        clearTimeout(window._tabTipHideTimer)
+        if (window.seoz?.tooltip) window.seoz.tooltip.hide()
         showCtx(e, tabCtxItems(tab.id))
       })
       attachTabDnD(el)
@@ -13189,6 +13196,15 @@ function closeAllDrops() { document.querySelectorAll('.bm-drop').forEach(d => d.
 // ── Context menu ──
 function showCtx(e, items) {
   closeAllDrops()
+  // Hide the floating tab tooltip if it's showing — its BrowserWindow
+  // has alwaysOnTop:'pop-up-menu' which would otherwise paint over
+  // this HTML ctx menu and make it look like right-click does nothing.
+  // (v1.10.110 fix.)
+  try {
+    clearTimeout(window._tabTipShowTimer)
+    clearTimeout(window._tabTipHideTimer)
+    if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+  } catch (_) {}
   const menu = document.getElementById('ctxMenu')
   menu.innerHTML = ''
   items.forEach(item => {

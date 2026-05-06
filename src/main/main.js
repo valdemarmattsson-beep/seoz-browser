@@ -724,9 +724,15 @@ function setupContentBlocker() {
   // brings page interaction back to native Chrome speed. The filter
   // is applied at registration so the callback isn't even called for
   // excluded types — far cheaper than an early-return inside.
+  // NB: 'other' is documented for Chromium's webRequest API but Electron
+  // 41's filter validator rejects it with TypeError: Invalid type other
+  // (regression from a Chromium internal rename — was caught after
+  // 1.10.98 shipped and crashed the app at startup before createWindow).
+  // We don't need it; service-worker / preload-link requests are rare
+  // and skipping the rewrite on them is harmless.
   const FP_FILTER = {
     urls: ['<all_urls>'],
-    types: ['mainFrame', 'subFrame', 'xhr', 'webSocket', 'script', 'cspReport', 'other'],
+    types: ['mainFrame', 'subFrame', 'xhr', 'webSocket', 'script', 'cspReport'],
   }
 
   ses.webRequest.onBeforeSendHeaders(FP_FILTER, (details, callback) => {
@@ -813,9 +819,11 @@ function setupContentBlocker() {
   // ping (beacons we want to nuke but Chromium normally fires &
   // forgets — the blocker check on those still costs a callback per
   // beacon for negligible benefit).
+  // 'other' is rejected by Electron 41's filter validator (see FP_FILTER
+   // comment above) — must not include it here either.
   const BLOCKER_FILTER = {
     urls: ['<all_urls>'],
-    types: ['xhr', 'script', 'image', 'media', 'webSocket', 'object', 'other'],
+    types: ['xhr', 'script', 'image', 'media', 'webSocket', 'object'],
   }
 
   // Throttle the blocker-count IPC. Without this, an ad-heavy site

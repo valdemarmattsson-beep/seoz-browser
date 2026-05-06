@@ -574,6 +574,30 @@ app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
 // OS codecs, which is well-supported on Win10/11.
 app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
 
+// v1.10.120: GPU + child process crash diagnostics. User reports
+// random crashes (left-click in sidebar, etc) — not just right-click
+// freeze. The pair pattern in Crashpad (1.6 MB + 750 KB dumps) is
+// classic GPU + renderer co-crash. These listeners log to startup.log
+// so we can correlate crash time with user actions.
+app.on('gpu-process-crashed', (_e, killed) => {
+  try {
+    const fs = require('fs'); const path = require('path')
+    fs.appendFileSync(path.join(app.getPath('userData'), 'startup.log'),
+      new Date().toISOString() + ' GPU-PROCESS-CRASHED killed=' + killed + '\n')
+  } catch (_) {}
+})
+// child-process-gone replaces gpu-process-crashed in newer Electron;
+// register both so whichever fires gets logged.
+app.on('child-process-gone', (_e, details) => {
+  try {
+    const fs = require('fs'); const path = require('path')
+    fs.appendFileSync(path.join(app.getPath('userData'), 'startup.log'),
+      new Date().toISOString() + ' CHILD-PROCESS-GONE type=' + details.type +
+      ' reason=' + details.reason + ' exitCode=' + details.exitCode +
+      (details.name ? ' name=' + details.name : '') + '\n')
+  } catch (_) {}
+})
+
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {
   // The URL is typically the last argument

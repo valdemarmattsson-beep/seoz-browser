@@ -9057,14 +9057,17 @@ function renderTabs() {
       xBtn.addEventListener('click', e => closeTab(e, tab.id))
       el.addEventListener('click', e => { if (!e.target.closest('.tab-x')) switchTab(tab.id) })
 
-      // Tab preview tooltip — re-enabled in v1.10.119 after the
-      // v1.10.117 diagnostic confirmed the right-click freeze was
-      // NOT in the tooltip system. Cause was HTML showCtx +
-      // chrome-clip-active mechanism, fixed in v1.10.118 by
-      // switching tab right-click to native Menu.popup().
-      // Strawberry-style WebContentsView tooltip (v1.10.116) is
-      // intact and back in service.
+      // Tab preview tooltip — DISABLED v1.10.122 due to click-anywhere
+      // freeze regression after 1.10.119 re-enable. Symptoms: clicking
+      // any chrome element (tab / URL bar / sidebar / dock) freezes
+      // the entire UI. No crash dumps, no log entries → renderer event
+      // loop is blocked, not a process crash. Suspect: capturePage
+      // IPC pile-up when user hovers many tabs, exhausting main thread
+      // / IPC queue. Native HTML title fallback used until root cause
+      // is identified and fixed.
+      el.title = (tab.title || '') + (tab.url ? '\n' + tab.url : '')
       el.addEventListener('mouseenter', () => {
+        if (true) return  // ← v1.10.122 emergency disable
         const rect = el.getBoundingClientRect()
         const tipWidth = 320
         const winWidth = window.innerWidth

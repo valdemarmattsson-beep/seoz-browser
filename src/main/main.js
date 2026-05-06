@@ -1199,6 +1199,21 @@ ipcMain.on('tooltip:hide', () => {
   } catch (_) {}
 })
 
+// Synchronous variant — used by showCtx() in the main window's
+// renderer. Renderer blocks until we've actually called .hide() on
+// the BrowserWindow so the subsequent ctx-menu render can't be
+// occluded by a still-visible tooltip. event.returnValue completes
+// the sendSync round-trip.
+ipcMain.on('tooltip:hide-sync', (e) => {
+  try {
+    if (_tooltipWin && !_tooltipWin.isDestroyed()) {
+      try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+      if (_tooltipWin.isVisible()) _tooltipWin.hide()
+    }
+  } catch (_) {}
+  e.returnValue = true
+})
+
 // Toggle whether the tooltip window catches clicks (over an action
 // button) or lets them pass through to the parent window. The tooltip
 // renderer flips this on mouseenter/leave of its action buttons.

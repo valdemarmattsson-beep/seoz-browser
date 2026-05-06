@@ -31,6 +31,13 @@ contextBridge.exposeInMainWorld('seoz', {
   tooltip: {
     show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
     hide: () => ipcRenderer.send('tooltip:hide'),
+    // Synchronous hide — blocks the renderer until main confirms the
+    // tooltip BrowserWindow is hidden. Used by showCtx() so the
+    // tooltip's alwaysOnTop:'pop-up-menu' window can't paint over the
+    // HTML ctx menu we're about to render. fire-and-forget hide()
+    // runs into a 1-2 frame IPC delay where both windows are visible
+    // simultaneously and the tooltip occludes the menu. (v1.10.113.)
+    hideSync: () => { try { return ipcRenderer.sendSync('tooltip:hide-sync') } catch (_) { return false } },
     // The tooltip's renderer signals these back to us via main:
     //   onCursorOnCard(true|false) — cursor entered / left the tooltip.
     //     Renderer should cancel its hide timer on true, schedule on false.

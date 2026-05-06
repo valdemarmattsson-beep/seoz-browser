@@ -13196,14 +13196,17 @@ function closeAllDrops() { document.querySelectorAll('.bm-drop').forEach(d => d.
 // ── Context menu ──
 function showCtx(e, items) {
   closeAllDrops()
-  // Hide the floating tab tooltip if it's showing — its BrowserWindow
-  // has alwaysOnTop:'pop-up-menu' which would otherwise paint over
-  // this HTML ctx menu and make it look like right-click does nothing.
-  // (v1.10.110 fix.)
+  // Hide the floating tab tooltip BEFORE rendering the ctx menu.
+  // hideSync blocks the renderer until main has actually called
+  // hide() on the BrowserWindow — without this the IPC takes 1-2
+  // frames and the tooltip (alwaysOnTop:'pop-up-menu') visually
+  // occludes the ctx menu. With sync, the menu paints into the
+  // already-empty space. (v1.10.113.)
   try {
     clearTimeout(window._tabTipShowTimer)
     clearTimeout(window._tabTipHideTimer)
-    if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+    if (window.seoz?.tooltip?.hideSync) window.seoz.tooltip.hideSync()
+    else if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
   } catch (_) {}
   const menu = document.getElementById('ctxMenu')
   menu.innerHTML = ''

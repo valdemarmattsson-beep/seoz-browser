@@ -88,6 +88,21 @@ const fs = require('fs')
   })
 
   _diagLog('DIAG-123 instrumented (heartbeat + IPC trace)')
+
+  // v1.10.124: pipe renderer-side console.warn('[DIAG] ...') back into
+  // startup.log. The main heartbeat from 1.10.123 confirmed main is
+  // alive — so the freeze is in the renderer's event loop. Add a
+  // matching heartbeat + click-trace there (see init.js / index.html
+  // diagnostic block) and forward via console-message → file.
+  app.on('browser-window-created', (_e, w) => {
+    try {
+      w.webContents.on('console-message', (_e2, _level, message) => {
+        if (typeof message === 'string' && message.startsWith('[DIAG]')) {
+          _diagLog('RENDERER ' + message.slice(7))
+        }
+      })
+    } catch (_) {}
+  })
 })()
 
 const https = require('https')

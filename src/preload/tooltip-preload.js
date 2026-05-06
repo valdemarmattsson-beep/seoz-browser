@@ -1,28 +1,29 @@
 'use strict'
 // ════════════════════════════════════════════════════════════════════
-//  Preload for the tab-tooltip BrowserWindow.
+//  Preload for the tab-tooltip WebContentsView.
 //
-//  This is a tiny floating, transparent, frame-less window that
-//  renders the tab preview card OVER the main window. It exists only
-//  so the tooltip can paint above the WebContentsView (the main page),
-//  which a normal HTML element cannot do — WebContentsView is a native
-//  OS-level layer that ignores DOM z-index.
+//  v1.10.116: switched from a separate BrowserWindow to a sibling
+//  WebContentsView under the main BrowserWindow's contentView. Mouse
+//  events route to whichever view is at the cursor naturally, so the
+//  setInteractive/ignoreMouseEvents juggling we needed before is
+//  gone. Click handlers in the tooltip renderer just work.
 //
 //  Channels:
 //    main → tooltip-renderer:
 //      tooltip:update {title, url, domain, favicon, preview, tabId}
 //
 //    tooltip-renderer → main:
-//      tooltip:set-interactive (bool)
-//        Toggle setIgnoreMouseEvents on this window. true = the
-//        window captures mouse clicks (over an action button); false =
-//        clicks pass through to the parent window underneath.
 //      tooltip:cursor-on-card (bool)
-//        Cursor entered/left the card area. Main forwards this to the
-//        main window so it can cancel/reschedule its hide timer.
+//        Cursor entered/left the card. Main forwards to the main
+//        window's renderer so it can cancel its hide timer while the
+//        cursor is on the tooltip.
 //      tooltip:action {action, tabId}
 //        User clicked an action button (pin / split). Main forwards
 //        to the main window's renderer for execution.
+//      tooltip:resize {height}
+//        Renderer measured its card and asks main to resize the view
+//        to match — needed when the preview image loads and grows
+//        the card. Bounded in main.
 // ════════════════════════════════════════════════════════════════════
 
 const { contextBridge, ipcRenderer } = require('electron')
@@ -34,13 +35,8 @@ contextBridge.exposeInMainWorld('seoz', {
         try { cb(payload || {}) } catch (err) { console.error('[tooltip] onUpdate cb error:', err) }
       })
     },
-    setInteractive: (on) => ipcRenderer.send('tooltip:set-interactive', !!on),
-    cursorOnCard:   (on) => ipcRenderer.send('tooltip:cursor-on-card', !!on),
-    triggerAction:  (action, tabId) => ipcRenderer.send('tooltip:action', { action, tabId }),
-    // Renderer measured its card and asks main to resize the
-    // BrowserWindow accordingly. Without this the action buttons get
-    // clipped when the preview image is present (content tall, window
-    // small). Bound is set in main to avoid silly values.
-    requestResize:  (height) => ipcRenderer.send('tooltip:resize', { height }),
+    cursorOnCard:  (on) => ipcRenderer.send('tooltip:cursor-on-card', !!on),
+    triggerAction: (action, tabId) => ipcRenderer.send('tooltip:action', { action, tabId }),
+    requestResize: (height) => ipcRenderer.send('tooltip:resize', { height }),
   },
 })

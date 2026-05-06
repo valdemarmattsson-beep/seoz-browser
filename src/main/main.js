@@ -1,6 +1,6 @@
 'use strict'
 
-const { app, BrowserWindow, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
+const { app, BrowserWindow, WebContentsView, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
 const path = require('path')
 const fs = require('fs')
 const https = require('https')
@@ -1072,46 +1072,42 @@ function createWindow() {
   })
 }
 
-// ── Tab tooltip floating window ─────────────────────────────────────
-// A small, transparent, frameless, focusable:false BrowserWindow that
-// renders the tab-preview card OVER the main window. It exists ONLY to
-// paint above the WebContentsView (the active page), which is a native
-// OS-level layer that ignores DOM z-index. Pre-1.10.107 we tried in-DOM
-// tooltips with various clip-from-top hacks; all leaked into the URL
-// bar / froze / blacked out the page. A separate window cleanly fixes
-// every one of those failure modes — it's the same approach Strawberry
-// uses (and Chrome's own hover preview, internally).
+// ── Tab tooltip — sibling WebContentsView (Strawberry-style) ────────
 //
-// Lifecycle: lazy-created on first 'tooltip:show', reused for every
-// subsequent hover (cheaper than spawn-on-each-hover), destroyed when
-// the parent main window closes. setIgnoreMouseEvents(true) makes it
-// fully click-through so the URL bar / page below stay interactive.
+// v1.10.107-1.10.115 used a separate transparent BrowserWindow with
+// alwaysOnTop:'pop-up-menu' + setIgnoreMouseEvents(true, {forward:true})
+// + focusable:false. Every one of those properties caused issues:
+//   - alwaysOnTop: covered ctx menus, ghosted over other apps on alt-tab
+//   - setIgnoreMouseEvents flip-flop: stuck in capture mode → URL bar
+//     and sidebar got eaten silently
+//   - sendSync to coordinate hide/show with ctx menus: deadlocked the
+//     renderer because BrowserWindow.hide() blocks on Win32 message pump
+//   - blur/minimize listeners to clean up: extra IPC churn, race condns
 //
-// Position: renderer sends viewport-relative coords (anchorX, anchorY)
-// of where the tooltip's top-left should sit; main converts to screen
-// coords using the parent's content bounds.
-let _tooltipWin = null
+// v1.10.116 switches to Strawberry's actual approach (extracted from
+// their app.asar, src/main/components/tab-hover-popover/). Instead of
+// a separate BrowserWindow, the tooltip is a WebContentsView attached
+// as a SIBLING of the page view under the main BrowserWindow's
+// contentView. Mouse events naturally route to whichever sibling is
+// at the cursor position. No alwaysOnTop. No focus quirks. No sync
+// IPC. No setIgnoreMouseEvents juggling. Clicks on action buttons
+// land on the tooltip view's renderer because that's where the cursor
+// actually is.
+//
+// Lifecycle:
+//   - Lazy-created on first 'tooltip:show', reused thereafter
+//   - Attached to win.contentView via addChildView (re-add on every
+//     show to bump z-order so tooltip stays above any newly-attached
+//     tab views)
+//   - Hidden via setVisible(false) — fast, no message pump flush
+//   - Cleaned up when main window closes
+let _tooltipView = null
 
-function _ensureTooltipWindow() {
-  if (_tooltipWin && !_tooltipWin.isDestroyed()) return _tooltipWin
+function _ensureTooltipView() {
+  if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) return _tooltipView
   if (!win || win.isDestroyed()) return null
 
-  _tooltipWin = new BrowserWindow({
-    parent: win,
-    frame: false,
-    transparent: true,
-    resizable: false,
-    movable: false,
-    minimizable: false,
-    maximizable: false,
-    closable: false,
-    focusable: false,
-    skipTaskbar: true,
-    show: false,
-    width: 320,
-    height: 200,
-    hasShadow: false,
-    backgroundColor: '#00000000',
+  _tooltipView = new WebContentsView({
     webPreferences: {
       preload: path.join(__dirname, '../preload/tooltip-preload.js'),
       contextIsolation: true,
@@ -1120,94 +1116,56 @@ function _ensureTooltipWindow() {
     },
   })
 
-  // Cursor passes through the tooltip window to whatever's behind
-  // (URL bar, page chrome, etc) — same effect as pointer-events:none
-  // on the old in-DOM tooltip but enforced at the OS window level so
-  // there's no escape.
-  try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+  // Transparent background so the tooltip's body's CSS-styled card
+  // can have rounded corners + shadow with a clean cutout. The card
+  // itself paints its own bg; the rest of the view is transparent.
+  try { _tooltipView.setBackgroundColor('#00000000') } catch (_) {}
+  _tooltipView.setVisible(false)
+  _tooltipView.webContents.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
 
-  // alwaysOnTop relative to the parent window only (not system-wide).
-  // 'pop-up-menu' level keeps it above WebContentsView siblings but
-  // below modal dialogs / OS menus.
-  try { _tooltipWin.setAlwaysOnTop(true, 'pop-up-menu') } catch (_) {}
-
-  _tooltipWin.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
-
-  // Hide the tooltip whenever the main window loses focus or is
-  // minimised — without this, alt-tabbing away from SEOZ leaves a
-  // ghost tooltip floating over the new foreground app (alwaysOnTop:
-  // 'pop-up-menu' is system-wide for that level), and the cursor
-  // doesn't get a chance to fire mouseleave on the underlying tab so
-  // setInteractive(false) is never sent → on return, the tooltip is
-  // sometimes still in capture mode and silently swallows clicks. We
-  // also reset setIgnoreMouseEvents back to forward-only on the way
-  // out so the next show is in a clean state. (v1.10.114.)
-  const _hideTooltipOnDefocus = () => {
-    try {
-      if (_tooltipWin && !_tooltipWin.isDestroyed()) {
-        try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
-        if (_tooltipWin.isVisible()) _tooltipWin.hide()
-      }
-      // Tell the renderer to forget any pending show/hide timers so a
-      // delayed timer doesn't pop the tooltip back up after the
-      // window has lost focus.
-      try { if (win && !win.isDestroyed()) win.webContents.send('tooltip:force-hide') } catch (_) {}
-    } catch (_) {}
-  }
   if (win) {
-    win.on('blur', _hideTooltipOnDefocus)
-    win.on('minimize', _hideTooltipOnDefocus)
-    win.on('hide', _hideTooltipOnDefocus)
-    // If the parent window closes, tear down the tooltip too.
     win.once('closed', () => {
-      try { if (_tooltipWin && !_tooltipWin.isDestroyed()) _tooltipWin.destroy() } catch (_) {}
-      _tooltipWin = null
+      try { if (_tooltipView?.webContents && !_tooltipView.webContents.isDestroyed()) _tooltipView.webContents.close() } catch (_) {}
+      _tooltipView = null
     })
   }
 
-  return _tooltipWin
+  return _tooltipView
 }
 
 ipcMain.on('tooltip:show', (_e, payload = {}) => {
   try {
-    const tt = _ensureTooltipWindow()
+    const tt = _ensureTooltipView()
     if (!tt) return
     if (!win || win.isDestroyed()) return
 
     const { anchorX = 0, anchorY = 0, content = {} } = payload
-    // Convert parent-window content coords → absolute screen coords
+    // anchorX/Y are window-content-relative. WebContentsView setBounds
+    // also uses window-content coordinates (relative to BrowserWindow's
+    // content area), so no screen-coord conversion needed — much
+    // simpler than the BrowserWindow case.
     const cb = win.getContentBounds()
-    const sx = Math.round(cb.x + anchorX)
-    const sy = Math.round(cb.y + anchorY)
-    // Clamp to the screen the parent is on so the tooltip never opens
-    // off-screen (would look broken near right/bottom edges).
-    const display = screen.getDisplayMatching(cb)
-    const wa = display.workArea
-    const w = 320, h = 200
-    const x = Math.max(wa.x + 4, Math.min(wa.x + wa.width  - w - 4, sx))
-    const y = Math.max(wa.y + 4, Math.min(wa.y + wa.height - h - 4, sy))
+    const w = 320
+    const h = (_tooltipView.getBounds().height) || 200  // preserve last height
+    let x = Math.round(anchorX)
+    let y = Math.round(anchorY)
+    // Clamp inside the content area
+    x = Math.max(4, Math.min(cb.width - w - 4, x))
+    y = Math.max(4, Math.min(cb.height - h - 4, y))
     tt.setBounds({ x, y, width: w, height: h })
 
-    // Push content into the tooltip's renderer. Safe even before
-    // did-finish-load because we registered an ipcRenderer.on listener
-    // in the preload BEFORE the window contents start parsing.
+    // Push content into the tooltip's renderer.
     if (tt.webContents && !tt.webContents.isDestroyed()) {
       tt.webContents.send('tooltip:update', content)
     }
-    // Always start in forward-only mode (cursor passes through to the
-    // main window; only mousemove is forwarded for hit-testing). The
-    // renderer flips to capture mode on action-button mouseenter, but
-    // if a previous hover left it stuck in capture mode (race with a
-    // missed mouseleave, tab close, focus loss, etc.) the tooltip
-    // would silently block clicks on URL bar / sidebar / page within
-    // its 320×200 rect. Resetting on every show makes that
-    // unrecoverable state recoverable. (v1.10.111 fix.)
-    try { tt.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
-    // Show without stealing focus. focusable:false also prevents focus
-    // theft if the OS would otherwise activate the window.
-    if (!tt.isVisible()) {
-      try { tt.showInactive() } catch (_) {}
-    }
+
+    // Re-add the view on every show so it sits at the top of the
+    // contentView z-order, above any tab WebContentsViews that may
+    // have been added while the tooltip was idle. addChildView is
+    // idempotent for already-attached children — it just bumps the
+    // z-order.
+    try { win.contentView.addChildView(tt) } catch (_) {}
+    tt.setVisible(true)
   } catch (err) {
     console.error('[tooltip:show] failed:', err)
   }
@@ -1215,60 +1173,37 @@ ipcMain.on('tooltip:show', (_e, payload = {}) => {
 
 ipcMain.on('tooltip:hide', () => {
   try {
-    if (_tooltipWin && !_tooltipWin.isDestroyed()) {
-      // Reset before hiding so the next show starts clean even if we
-      // were in capture mode when hide was triggered (e.g. user
-      // moved cursor off a button + off the card in one motion).
-      try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
-      if (_tooltipWin.isVisible()) _tooltipWin.hide()
+    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
+      _tooltipView.setVisible(false)
     }
   } catch (_) {}
 })
 
-// NB: tooltip:hide-sync was removed in v1.10.115. BrowserWindow.hide()
-// on Windows can block on the window-message pump flush, which made
-// the renderer-side sendSync deadlock the whole app on right-click.
-// Callers that need ordering rely on a one-frame requestAnimationFrame
-// yield after fire-and-forget hide() in showCtx — main has the full
-// frame budget (~16ms) to process the hide before the menu paints.
-
-// Toggle whether the tooltip window catches clicks (over an action
-// button) or lets them pass through to the parent window. The tooltip
-// renderer flips this on mouseenter/leave of its action buttons.
-//
-// Watchdog: if the renderer ever fails to send the (false) follow-up
-// (rapid hover, tab close while button is hovered, OS focus loss
-// before mouseleave fires, etc.) the window would stay in capture
-// mode and silently block all clicks within its rect — including the
-// URL bar and sidebar if the tooltip happens to overlap them. We
-// therefore auto-revert to forward-only after 3s if not explicitly
-// reset, which makes the worst case "buttons unclickable for a few
-// seconds" instead of "main UI locked until app restart".
-let _tooltipCaptureWatchdog = null
-ipcMain.on('tooltip:set-interactive', (_e, on) => {
+// Resize the tooltip view to fit the card the renderer just laid out.
+// Without this the view is fixed at 200px and the action buttons get
+// clipped when a preview image (140px tall) is present. Bounds are
+// clamped to a sane range so a buggy renderer can't ask for a 10000px
+// tall view.
+ipcMain.on('tooltip:resize', (_e, payload = {}) => {
   try {
-    if (!_tooltipWin || _tooltipWin.isDestroyed()) return
-    clearTimeout(_tooltipCaptureWatchdog)
-    if (on) {
-      _tooltipWin.setIgnoreMouseEvents(false)
-      _tooltipCaptureWatchdog = setTimeout(() => {
-        try {
-          if (_tooltipWin && !_tooltipWin.isDestroyed()) {
-            _tooltipWin.setIgnoreMouseEvents(true, { forward: true })
-          }
-        } catch (_) {}
-      }, 3000)
-    } else {
-      _tooltipWin.setIgnoreMouseEvents(true, { forward: true })
-    }
+    if (!_tooltipView || _tooltipView.webContents.isDestroyed()) return
+    const want = Math.max(80, Math.min(420, Math.round(payload.height) || 200))
+    const b = _tooltipView.getBounds()
+    if (b.height === want) return
+    // Re-clamp y so a taller view doesn't escape the bottom edge.
+    if (!win || win.isDestroyed()) return
+    const cb = win.getContentBounds()
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _tooltipView.setBounds({ x: b.x, y, width: b.width, height: want })
   } catch (_) {}
 })
 
-// Tooltip renderer says the cursor entered or left the card. The
-// main window's renderer listens so it can cancel its hide timer
-// while the user is on the tooltip — without this, the tooltip
-// would auto-hide 120ms after the user leaves the tab strip even
-// if they were heading for an action button.
+// Tooltip renderer says the cursor entered or left the card. With the
+// WebContentsView architecture mouse events are reliable (cursor
+// naturally hits the topmost view at each pixel), so the renderer's
+// own body mouseenter/leave is the source of truth. We forward to
+// the main window's renderer so it can cancel/reschedule its hide
+// timer accordingly.
 ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
   try {
     if (win && !win.isDestroyed()) {
@@ -1277,40 +1212,27 @@ ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
   } catch (_) {}
 })
 
-// Resize the tooltip window to fit the card the renderer just laid
-// out. Without this the window is fixed at 200px and the action
-// buttons get clipped when a preview image (140px tall) is present.
-// Bounds are clamped to a sane range so a hostile or buggy renderer
-// can't ask for a 10000px tall window.
-ipcMain.on('tooltip:resize', (_e, payload = {}) => {
-  try {
-    if (!_tooltipWin || _tooltipWin.isDestroyed()) return
-    const want = Math.max(80, Math.min(420, Math.round(payload.height) || 200))
-    const b = _tooltipWin.getBounds()
-    if (b.height === want) return
-    // Re-clamp y so a taller window doesn't escape the screen at the
-    // bottom edge.
-    const display = screen.getDisplayMatching(b)
-    const wa = display.workArea
-    const y = Math.max(wa.y + 4, Math.min(wa.y + wa.height - want - 4, b.y))
-    _tooltipWin.setBounds({ x: b.x, y, width: b.width, height: want })
-  } catch (_) {}
-})
-
-// User clicked Fäst / Splitvy in the tooltip. Forward to the main
-// window's renderer where the existing pin/split logic lives, then
-// hide the tooltip + reset ignoreMouseEvents.
+// User clicked Fäst / Splitvy. Forward to the main window's renderer
+// where the existing pin/split logic lives, then hide the tooltip.
+// No setIgnoreMouseEvents to reset (we don't use it anymore).
 ipcMain.on('tooltip:action', (_e, payload = {}) => {
   try {
     if (win && !win.isDestroyed()) {
       win.webContents.send('tooltip:action', payload)
     }
-    if (_tooltipWin && !_tooltipWin.isDestroyed()) {
-      try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
-      if (_tooltipWin.isVisible()) _tooltipWin.hide()
+    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
+      _tooltipView.setVisible(false)
     }
   } catch (_) {}
 })
+
+// NB: removed in v1.10.116:
+//   - tooltip:set-interactive (no setIgnoreMouseEvents in WCV mode)
+//   - tooltip:hide-sync (sendSync was deadlocking; never coming back)
+//   - win.on('blur'/'minimize'/'hide') hide handlers — the tooltip
+//     view is a child of the main window's contentView, so it's
+//     automatically not visible when the parent window is occluded.
+//     No ghost over other apps. No state to clean up.
 
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location

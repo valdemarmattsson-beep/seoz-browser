@@ -29,13 +29,12 @@ contextBridge.exposeInMainWorld('seoz', {
   // across that native-view boundary. anchorX/Y are viewport coords
   // in the parent window; main converts to screen coords.
   tooltip: {
+    // v1.10.116: tab tooltip is a sibling WebContentsView under the
+    // main BrowserWindow's contentView (not a separate alwaysOnTop
+    // BrowserWindow as in v1.10.107-1.10.115). Same API surface —
+    // show/hide/onCursorOnCard/onAction are all the renderer needs.
     show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
     hide: () => ipcRenderer.send('tooltip:hide'),
-    // NB: hideSync used to live here (v1.10.113) but BrowserWindow.hide()
-    // on Windows can block on the message pump and the sendSync call
-    // would deadlock the renderer → whole app froze on right-click.
-    // Removed in v1.10.115. Callers that need ordering use a one-frame
-    // requestAnimationFrame yield after fire-and-forget hide() instead.
     // The tooltip's renderer signals these back to us via main:
     //   onCursorOnCard(true|false) — cursor entered / left the tooltip.
     //     Renderer should cancel its hide timer on true, schedule on false.
@@ -46,13 +45,10 @@ contextBridge.exposeInMainWorld('seoz', {
     onAction: (cb) => ipcRenderer.on('tooltip:action', (_e, payload) => {
       try { cb(payload || {}) } catch (err) { console.error('[onAction]', err) }
     }),
-    // Main signals that the tooltip was force-hidden due to window
-    // blur / minimize / hide. The renderer should clear any pending
-    // show/hide timers so a stale timer doesn't pop the tooltip back
-    // up after the window has lost focus.
-    onForceHide: (cb) => ipcRenderer.on('tooltip:force-hide', () => {
-      try { cb() } catch (err) { console.error('[onForceHide]', err) }
-    }),
+    // NB: onForceHide used to live here (v1.10.114) for blur/minimize
+    // cleanup. Removed in v1.10.116 — the WebContentsView is a child
+    // of the main window so it's automatically hidden when the parent
+    // is occluded. No explicit cleanup needed.
   },
 
   // Password manager (per-profile, encrypted via OS-level safeStorage)

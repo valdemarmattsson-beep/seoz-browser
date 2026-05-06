@@ -9401,16 +9401,12 @@ async function _captureAndUpdateTooltip(tab, anchor) {
       }
     })
   }
-  if (typeof window.seoz.tooltip.onForceHide === 'function') {
-    window.seoz.tooltip.onForceHide(() => {
-      // Window blurred / minimized → cancel any in-flight hover
-      // timers. Otherwise a 420ms intent timer can fire after the
-      // user has alt-tabbed away, popping the tooltip on top of
-      // whatever app they're now using.
-      clearTimeout(window._tabTipShowTimer)
-      clearTimeout(window._tabTipHideTimer)
-    })
-  }
+  // v1.10.116: removed onForceHide bridge — the WebContentsView
+  // tooltip is a child of the main window so blur/minimize hides
+  // it automatically (no ghost over other apps). The renderer's
+  // pending timers are bounded by 420ms / 180ms so even if they do
+  // fire after blur, the IPC just calls show() on a hidden view
+  // that's still child-of-occluded-parent. Harmless.
 })()
 
 // ── Tab drag & drop (Chrome-style reorder + tear-off) ───────────────

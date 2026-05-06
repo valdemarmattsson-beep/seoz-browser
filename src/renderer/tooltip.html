@@ -190,15 +190,11 @@
     card.addEventListener('mouseleave', () => window.seoz.tooltip.cursorOnCard(false))
   }
 
+  // Action buttons. v1.10.116 dropped the setInteractive flip-flop
+  // because we're now a sibling WebContentsView — mouse events go
+  // here naturally when the cursor is on the tooltip, no
+  // setIgnoreMouseEvents juggling needed.
   document.querySelectorAll('.action').forEach((btn) => {
-    btn.addEventListener('mouseenter', () => {
-      // Re-enable mouse capture so the click below can fire.
-      if (window.seoz?.tooltip?.setInteractive) window.seoz.tooltip.setInteractive(true)
-    })
-    btn.addEventListener('mouseleave', () => {
-      // Back to forward-only — cursor passes through to URL bar etc.
-      if (window.seoz?.tooltip?.setInteractive) window.seoz.tooltip.setInteractive(false)
-    })
     btn.addEventListener('click', () => {
       const action = btn.dataset.action
       if (window.seoz?.tooltip?.triggerAction) {

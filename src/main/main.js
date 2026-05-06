@@ -565,26 +565,14 @@ app.commandLine.appendSwitch('disable-blink-features', 'AutomationControlled')
 // surfacing as 'render-process-gone reason: okänt'.
 app.commandLine.appendSwitch('js-flags', '--max-old-space-size=4096')
 
-// ── Hardware-accelerated media + GPU-rasterization flags ─────────────
-// Chromium auto-picks reasonable defaults but a few opt-ins make a
-// noticeable difference for video-heavy sites (YouTube, Twitch) on
-// Windows where users reported the playback feeling sluggish.
-//
-// PlatformHEVCDecoderSupport: lets Chromium decode HEVC/H.265 via the
-//   Windows OS codec extensions when available (cheap CPU-wise).
-// CanvasOopRasterization + GpuRasterization: paint <canvas> + DOM on
-//   the GPU instead of the CPU raster process. On by default in modern
-//   Chrome but explicit opt-in here so a stale Electron default doesn't
-//   regress us.
-// EnableDrDc: per-thread display-compositor — keeps animations smooth
-//   while video decodes on a separate thread.
-app.commandLine.appendSwitch('enable-features', [
-  'PlatformHEVCDecoderSupport',
-  'CanvasOopRasterization',
-  'EnableDrDc',
-].join(','))
-app.commandLine.appendSwitch('enable-gpu-rasterization')
-app.commandLine.appendSwitch('enable-zero-copy')
+// ── Hardware-accelerated media flags ─────────────────────────────────
+// v1.10.120: removed EnableDrDc (Android-Vulkan-specific, suspected
+// of causing Windows GPU process crashes — Crashpad showed pairs of
+// dumps every few minutes on user's machine since v1.10.98 added the
+// flags) and CanvasOopRasterization (also experimental). Kept
+// PlatformHEVCDecoderSupport for hardware H.265 decode via Windows
+// OS codecs, which is well-supported on Win10/11.
+app.commandLine.appendSwitch('enable-features', 'PlatformHEVCDecoderSupport')
 
 // Capture URL from command-line args (e.g. when Windows opens a link with this app)
 function extractUrlFromArgs(argv) {

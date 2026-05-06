@@ -143,7 +143,7 @@ try {
 const PM = require('./profile-manager')
 const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')
-const { TabManager } = require('./tab-manager')
+const { TabManager, applyChromeShim } = require('./tab-manager')
 
 // Holds the TabManager instance for the main window. Created in
 // createWindow() once `win` exists, then read by feature code that
@@ -3578,6 +3578,20 @@ function _setupTabContents(contents) {
       win.setFullScreen(false)
     }
     win.webContents.send('webview-fullscreen', false)
+  })
+
+  // v1.10.131: when an OAuth popup opens via window.open() and we
+  // return action:'allow' (below), Electron creates a new
+  // BrowserWindow and fires 'did-create-window' on the parent's
+  // webContents. Apply the same Chrome shim (navigator.userAgentData,
+  // window.chrome, WebAuthn block) that tabs get — otherwise Google
+  // sign-in detects the missing window.chrome.runtime / wrong UA
+  // data and blocks login with "Webbläsaren kanske inte är säker".
+  contents.on('did-create-window', (newWin /* , details */) => {
+    try {
+      const newWc = newWin && newWin.webContents
+      if (newWc) applyChromeShim(newWc)
+    } catch (_) {}
   })
 
   contents.setWindowOpenHandler(({ url, disposition, features }) => {

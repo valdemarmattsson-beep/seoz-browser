@@ -284,6 +284,78 @@ const CHROME_SHIM = `
 })();
 `
 
+// ────────────────────────────────────────────────────────────
+//  applyChromeShim(wc, diag)
+//
+//  Two-layer shim install for an arbitrary webContents:
+//    1) CDP Page.addScriptToEvaluateOnNewDocument — runs in main
+//       world before any page <script> tag, on every navigation.
+//    2) executeJavaScript on did-start-navigation + dom-ready —
+//       guaranteed fallback if CDP attach lost the timing race.
+//
+//  Used by:
+//    - TabManager.createTab (every tab WebContentsView)
+//    - main.js _setupTabContents (OAuth popup BrowserWindows
+//      created via setWindowOpenHandler action:'allow')
+//
+//  diag is optional; defaults to a no-op if the caller has no
+//  log channel of its own.
+// ────────────────────────────────────────────────────────────
+function applyChromeShim(wc, diag) {
+  const _diag = typeof diag === 'function' ? diag : () => {}
+  if (!wc || wc.isDestroyed?.()) return
+
+  // Layer 1: CDP Page.addScriptToEvaluateOnNewDocument (best-effort,
+  //          fire-and-forget, no await).
+  try {
+    _diag('CDP attach attempt; isAttached=' + wc.debugger.isAttached())
+    if (!wc.debugger.isAttached()) {
+      try {
+        wc.debugger.attach('1.3')
+        _diag('CDP attach OK (1.3)')
+      } catch (err1) {
+        _diag('CDP attach 1.3 failed: ' + (err1?.message || err1))
+        throw err1
+      }
+    }
+    wc.debugger.sendCommand('Page.enable').then(
+      () => _diag('Page.enable OK'),
+      (err) => _diag('Page.enable FAILED: ' + (err?.message || err))
+    )
+    wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
+      source: CHROME_SHIM,
+    }).then(
+      (result) => _diag('addScriptToEvaluateOnNewDocument OK; id=' + (result?.identifier || '?')),
+      (err)    => _diag('addScriptToEvaluateOnNewDocument FAILED: ' + (err?.message || err))
+    )
+    wc.debugger.on('detach', (_e, reason) => _diag('CDP detach reason=' + reason))
+  } catch (err) {
+    _diag('CDP setup outer-throw: ' + (err?.message || err))
+  }
+
+  // Layer 2: Direct executeJavaScript on every navigation. Fires AFTER
+  // page main world is created. Slower than CDP-pre-script (page may
+  // see native values until our script runs ~ms later), but at least
+  // GUARANTEED to run, since we control the timing.
+  const _injectViaExecJS = () => {
+    try {
+      if (wc.isDestroyed?.()) return
+      const url = wc.getURL() || ''
+      if (!url || url.startsWith('file:') || url.startsWith('about:') ||
+          url.startsWith('chrome-extension:') || url.startsWith('devtools:')) return
+      wc.executeJavaScript(CHROME_SHIM, false)
+        .then(() => _diag('executeJavaScript shim OK at ' + url.slice(0, 80)))
+        .catch((err) => _diag('executeJavaScript shim FAILED: ' + (err?.message || err)))
+    } catch (err) {
+      _diag('executeJavaScript outer-throw: ' + (err?.message || err))
+    }
+  }
+  wc.on('did-start-navigation', (_e, _u, _isInPlace, isMainFrame) => {
+    if (isMainFrame) _injectViaExecJS()
+  })
+  wc.on('dom-ready', _injectViaExecJS)
+}
+
 // Events we forward main → renderer. Each fires on the `tab:event`
 // channel as { tabId, event, args }. The renderer's TabHandle
 // re-dispatches them to addEventListener() listeners using the
@@ -428,54 +500,14 @@ class TabManager {
     // Now we ALSO listen for navigation events and re-inject via
     // executeJavaScript, AND attempt CDP as a best-effort.
 
-    // Layer 1: CDP Page.addScriptToEvaluateOnNewDocument (best-effort,
-    //          fire-and-forget, no await).
-    try {
-      _diag('CDP attach attempt; isAttached=' + wc.debugger.isAttached())
-      if (!wc.debugger.isAttached()) {
-        try {
-          wc.debugger.attach('1.3')
-          _diag('CDP attach OK (1.3)')
-        } catch (err1) {
-          _diag('CDP attach 1.3 failed: ' + (err1?.message || err1))
-          throw err1
-        }
-      }
-      wc.debugger.sendCommand('Page.enable').then(
-        () => _diag('Page.enable OK'),
-        (err) => _diag('Page.enable FAILED: ' + (err?.message || err))
-      )
-      wc.debugger.sendCommand('Page.addScriptToEvaluateOnNewDocument', {
-        source: CHROME_SHIM,
-      }).then(
-        (result) => _diag('addScriptToEvaluateOnNewDocument OK; id=' + (result?.identifier || '?')),
-        (err)    => _diag('addScriptToEvaluateOnNewDocument FAILED: ' + (err?.message || err))
-      )
-      wc.debugger.on('detach', (_e, reason) => _diag('CDP detach reason=' + reason))
-    } catch (err) {
-      _diag('CDP setup outer-throw: ' + (err?.message || err))
-    }
-
-    // Layer 2: Direct executeJavaScript on every navigation. Fires AFTER
-    // page main world is created. Slower than CDP-pre-script (page may
-    // see native values until our script runs ~ms later), but at least
-    // GUARANTEED to run, since we control the timing.
-    const _injectViaExecJS = () => {
-      try {
-        const url = wc.getURL() || ''
-        if (!url || url.startsWith('file:') || url.startsWith('about:') ||
-            url.startsWith('chrome-extension:') || url.startsWith('devtools:')) return
-        wc.executeJavaScript(CHROME_SHIM, false)
-          .then(() => _diag('executeJavaScript shim OK at ' + url.slice(0, 80)))
-          .catch((err) => _diag('executeJavaScript shim FAILED: ' + (err?.message || err)))
-      } catch (err) {
-        _diag('executeJavaScript outer-throw: ' + (err?.message || err))
-      }
-    }
-    wc.on('did-start-navigation', (_e, _u, _isInPlace, isMainFrame) => {
-      if (isMainFrame) _injectViaExecJS()
-    })
-    wc.on('dom-ready', _injectViaExecJS)
+    // Apply the Chrome shim to this tab. v1.10.131 extracted into a
+    // standalone function (applyChromeShim) so OAuth popup
+    // BrowserWindows can get the same treatment — Google sign-in opens
+    // a window.open() popup which previously ran with UA spoof but
+    // WITHOUT the navigator.userAgentData / window.chrome / WebAuthn
+    // shim, leaking its embedded-browser identity to Google's bot
+    // detector and triggering "Webbläsaren kanske inte är säker".
+    applyChromeShim(wc, _diag)
 
     // Forward known events to the renderer.
     this._wireEventForwarding(tabId, wc, entry)
@@ -810,4 +842,4 @@ class TabManager {
   }
 }
 
-module.exports = { TabManager }
+module.exports = { TabManager, applyChromeShim }

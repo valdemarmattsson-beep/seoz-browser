@@ -1186,6 +1186,48 @@ ipcMain.on('tooltip:hide', () => {
   } catch (_) {}
 })
 
+// Toggle whether the tooltip window catches clicks (over an action
+// button) or lets them pass through to the parent window. The tooltip
+// renderer flips this on mouseenter/leave of its action buttons.
+ipcMain.on('tooltip:set-interactive', (_e, on) => {
+  try {
+    if (!_tooltipWin || _tooltipWin.isDestroyed()) return
+    if (on) {
+      _tooltipWin.setIgnoreMouseEvents(false)
+    } else {
+      _tooltipWin.setIgnoreMouseEvents(true, { forward: true })
+    }
+  } catch (_) {}
+})
+
+// Tooltip renderer says the cursor entered or left the card. The
+// main window's renderer listens so it can cancel its hide timer
+// while the user is on the tooltip — without this, the tooltip
+// would auto-hide 120ms after the user leaves the tab strip even
+// if they were heading for an action button.
+ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
+  try {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('tooltip:cursor-on-card', !!on)
+    }
+  } catch (_) {}
+})
+
+// User clicked Fäst / Splitvy in the tooltip. Forward to the main
+// window's renderer where the existing pin/split logic lives, then
+// hide the tooltip + reset ignoreMouseEvents.
+ipcMain.on('tooltip:action', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('tooltip:action', payload)
+    }
+    if (_tooltipWin && !_tooltipWin.isDestroyed()) {
+      try { _tooltipWin.setIgnoreMouseEvents(true, { forward: true }) } catch (_) {}
+      if (_tooltipWin.isVisible()) _tooltipWin.hide()
+    }
+  } catch (_) {}
+})
+
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location
 ipcMain.on('tab-tear-off', (_evt, payload) => {

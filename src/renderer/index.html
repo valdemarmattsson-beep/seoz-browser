@@ -9080,6 +9080,7 @@ function renderTabs() {
           let domain = ''
           try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
           window.seoz.tooltip.show(left, rect.bottom + 4, {
+            tabId: tab.id,
             title: tab.title || tab.url || '',
             url: tab.url || '',
             domain,
@@ -9092,10 +9093,14 @@ function renderTabs() {
         clearTimeout(window._tabTipShowTimer)
         clearTimeout(window._tabTipHideTimer)
         // Short grace before hiding — gives the user a moment in case
-        // the cursor is just transiting between adjacent tabs.
+        // the cursor is just transiting between adjacent tabs OR
+        // moving onto the tooltip itself to click an action button.
+        // The tooltip's renderer also signals back via cursor-on-card
+        // to cancel this timer mid-flight if the cursor lands on the
+        // card (see _tabTipInstallTooltipBridges below).
         window._tabTipHideTimer = setTimeout(() => {
           if (window.seoz?.tooltip) window.seoz.tooltip.hide()
-        }, 120)
+        }, 180)
       })
       // Right-click → tab context menu (Chrome / Arc / Strawberry style)
       el.addEventListener('contextmenu', (e) => {
@@ -9281,21 +9286,47 @@ async function _refreshPwCacheForTabs() {
   scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
 }
 
-// Delegated handler for tooltip action icons.
-document.addEventListener('click', e => {
-  const btn = e.target.closest('[data-tip-action]')
-  if (!btn) return
-  e.stopPropagation()
-  const action = btn.getAttribute('data-tip-action')
-  const tabId = Number(btn.getAttribute('data-tab-id'))
-  if (action === 'split') {
-    if (activeId !== tabId) switchTab(tabId)
-    if (typeof openSplitView === 'function' && !_splitWebviews.has(tabId)) openSplitView()
-    else if (typeof closeSplitView === 'function' && _splitWebviews.has(tabId)) closeSplitView(tabId)
-  } else if (action === 'pin') {
-    toast('Fästa flikar kommer i nästa version', '#94a3b8')
+// ── Floating-window tooltip bridge ──────────────────────────────────
+// The tooltip lives in its own transparent BrowserWindow (see main.js
+// _tooltipWin + tooltip-preload.js). It signals back two things:
+//
+//   1) cursor-on-card: cursor entered or left the card. We cancel our
+//      pending hide timer when the cursor lands on it so the tooltip
+//      stays visible while the user reaches for an action button.
+//   2) action: user clicked Fäst / Splitvy. We route into the same
+//      logic the v1.10.106 in-DOM data-tip-action handler used.
+;(function _wireTooltipBridge() {
+  if (!window.seoz?.tooltip) return
+  if (typeof window.seoz.tooltip.onCursorOnCard === 'function') {
+    window.seoz.tooltip.onCursorOnCard((on) => {
+      if (on) {
+        // Cursor on tooltip → cancel any pending hide so the tooltip
+        // doesn't fade while the user is on it.
+        clearTimeout(window._tabTipHideTimer)
+      } else {
+        // Cursor left tooltip → fade after a short delay (matching
+        // the tab mouseleave grace).
+        clearTimeout(window._tabTipHideTimer)
+        window._tabTipHideTimer = setTimeout(() => {
+          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+        }, 180)
+      }
+    })
   }
-})
+  if (typeof window.seoz.tooltip.onAction === 'function') {
+    window.seoz.tooltip.onAction(({ action, tabId }) => {
+      tabId = Number(tabId) || 0
+      if (!tabId) return
+      if (action === 'split') {
+        if (activeId !== tabId) switchTab(tabId)
+        if (typeof openSplitView === 'function' && !_splitWebviews.has(tabId)) openSplitView()
+        else if (typeof closeSplitView === 'function' && _splitWebviews.has(tabId)) closeSplitView(tabId)
+      } else if (action === 'pin') {
+        toast('Fästa flikar kommer i nästa version', '#94a3b8')
+      }
+    })
+  }
+})()
 
 // ── Tab drag & drop (Chrome-style reorder + tear-off) ───────────────
 let _dragTabId = null

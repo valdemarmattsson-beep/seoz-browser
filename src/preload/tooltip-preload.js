@@ -10,7 +10,19 @@
 //
 //  Channels:
 //    main → tooltip-renderer:
-//      tooltip:update {title, url, domain, favicon, preview}
+//      tooltip:update {title, url, domain, favicon, preview, tabId}
+//
+//    tooltip-renderer → main:
+//      tooltip:set-interactive (bool)
+//        Toggle setIgnoreMouseEvents on this window. true = the
+//        window captures mouse clicks (over an action button); false =
+//        clicks pass through to the parent window underneath.
+//      tooltip:cursor-on-card (bool)
+//        Cursor entered/left the card area. Main forwards this to the
+//        main window so it can cancel/reschedule its hide timer.
+//      tooltip:action {action, tabId}
+//        User clicked an action button (pin / split). Main forwards
+//        to the main window's renderer for execution.
 // ════════════════════════════════════════════════════════════════════
 
 const { contextBridge, ipcRenderer } = require('electron')
@@ -22,5 +34,8 @@ contextBridge.exposeInMainWorld('seoz', {
         try { cb(payload || {}) } catch (err) { console.error('[tooltip] onUpdate cb error:', err) }
       })
     },
+    setInteractive: (on) => ipcRenderer.send('tooltip:set-interactive', !!on),
+    cursorOnCard:   (on) => ipcRenderer.send('tooltip:cursor-on-card', !!on),
+    triggerAction:  (action, tabId) => ipcRenderer.send('tooltip:action', { action, tabId }),
   },
 })

@@ -69,14 +69,34 @@
     margin-top: 4px;
     overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
   }
-  .empty {
-    text-align: center; color: rgba(255,255,255,.4);
-    font-size: 11px; padding: 4px 0;
+
+  /* Action buttons — pin / split. Get pointer events when the cursor
+     enters them (renderer toggles setIgnoreMouseEvents in main). */
+  .actions {
+    display: flex; gap: 6px; margin-top: 10px;
+    padding-top: 8px; border-top: 1px solid rgba(255,255,255,.06);
   }
+  .action {
+    flex: 1; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px;
+    color: rgba(255,255,255,.65);
+    font: inherit; font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .action:hover {
+    background: rgba(70,128,255,.12);
+    border-color: rgba(70,128,255,.45);
+    color: #f8f8f8;
+  }
+  .action svg { width: 12px; height: 12px }
 </style>
 </head>
 <body>
-<div class="card">
+<div class="card" id="card">
   <img class="preview" id="preview" alt="">
   <div class="head">
     <img class="fav" id="fav" src="" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
@@ -84,10 +104,35 @@
   </div>
   <div class="url" id="url"></div>
   <div class="domain" id="domain"></div>
+  <div class="actions">
+    <button class="action" id="actPin" data-action="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+      <span>Fäst</span>
+    </button>
+    <button class="action" id="actSplit" data-action="split">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      <span>Splitvy</span>
+    </button>
+  </div>
 </div>
 <script>
-  // Listen for content updates from main. The window is created hidden;
-  // main shows it via .showInactive() once content is set.
+  // ──────────────────────────────────────────────────────────────────
+  //  Tooltip renderer — three jobs:
+  //  1) Update content when main sends `tooltip:update`
+  //  2) Tell main when the cursor is over the .card (so the main
+  //     window's renderer can cancel its hide timer — otherwise the
+  //     tooltip hides 120ms after the user leaves the tab even if
+  //     they're on their way to click an action button)
+  //  3) Tell main when the cursor enters/leaves an action button so
+  //     it can flip setIgnoreMouseEvents on this window. With
+  //     ignoreMouseEvents(true, { forward: true }) we still receive
+  //     mousemove events for hover detection, but click events
+  //     pass through to the window underneath. Flipping to false
+  //     while the cursor is on a button lets the click reach us.
+  // ──────────────────────────────────────────────────────────────────
+
+  let _currentTabId = 0
+
   if (window.seoz && window.seoz.tooltip && window.seoz.tooltip.onUpdate) {
     window.seoz.tooltip.onUpdate((data) => {
       const fav = document.getElementById('fav')
@@ -99,10 +144,10 @@
       title.textContent = data.title || data.url || ''
       url.textContent = data.url || ''
       domain.textContent = data.domain || ''
+      _currentTabId = Number(data.tabId) || 0
 
       if (data.favicon) {
         fav.src = data.favicon
-        // .show is added via onload above
       } else {
         fav.removeAttribute('src')
         fav.classList.remove('show')
@@ -117,6 +162,29 @@
       }
     })
   }
+
+  const card = document.getElementById('card')
+  if (card && window.seoz?.tooltip?.cursorOnCard) {
+    card.addEventListener('mouseenter', () => window.seoz.tooltip.cursorOnCard(true))
+    card.addEventListener('mouseleave', () => window.seoz.tooltip.cursorOnCard(false))
+  }
+
+  document.querySelectorAll('.action').forEach((btn) => {
+    btn.addEventListener('mouseenter', () => {
+      // Re-enable mouse capture so the click below can fire.
+      if (window.seoz?.tooltip?.setInteractive) window.seoz.tooltip.setInteractive(true)
+    })
+    btn.addEventListener('mouseleave', () => {
+      // Back to forward-only — cursor passes through to URL bar etc.
+      if (window.seoz?.tooltip?.setInteractive) window.seoz.tooltip.setInteractive(false)
+    })
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action
+      if (window.seoz?.tooltip?.triggerAction) {
+        window.seoz.tooltip.triggerAction(action, _currentTabId)
+      }
+    })
+  })
 </script>
 </body>
 </html>

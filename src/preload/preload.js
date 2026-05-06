@@ -31,6 +31,16 @@ contextBridge.exposeInMainWorld('seoz', {
   tooltip: {
     show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
     hide: () => ipcRenderer.send('tooltip:hide'),
+    // The tooltip's renderer signals these back to us via main:
+    //   onCursorOnCard(true|false) — cursor entered / left the tooltip.
+    //     Renderer should cancel its hide timer on true, schedule on false.
+    //   onAction({action, tabId}) — user clicked Fäst / Splitvy.
+    onCursorOnCard: (cb) => ipcRenderer.on('tooltip:cursor-on-card', (_e, on) => {
+      try { cb(!!on) } catch (err) { console.error('[onCursorOnCard]', err) }
+    }),
+    onAction: (cb) => ipcRenderer.on('tooltip:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[onAction]', err) }
+    }),
   },
 
   // Password manager (per-profile, encrypted via OS-level safeStorage)

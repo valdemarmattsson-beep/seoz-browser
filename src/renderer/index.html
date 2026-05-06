@@ -1585,20 +1585,28 @@ input,textarea,select{user-select:text}
    The two clip values are different because the URL-suggest dropdown
    anchors below the URL bar (further down the chrome) and can be
    taller than the tab tooltip card. */
+/* Tab tooltip uses a fixed 280px clip — set by JS hover handler with a
+   420ms intent delay matching the CSS opacity transition. */
 body.tab-tip-hovering .tab-handle{
   top:280px !important;
   transition:top .12s ease-out;
 }
-body.url-suggest-clip .tab-handle{
-  top:380px !important;
+/* Generic clip-from-top for chrome dropdowns / context menus / URL
+   suggest. Height is computed dynamically by _refreshOverlayState
+   based on the tallest visible clip-mode overlay (see
+   _CLIP_OPEN_SELECTOR). The CSS variable defaults to 280px so the
+   transition still works smoothly even if the var hasn't been set yet. */
+body.chrome-clip-active .tab-handle{
+  top:var(--chrome-clip-h, 280px) !important;
   transition:top .12s ease-out;
 }
-/* When BOTH classes are active (rare — tooltip + URL suggest), pick
-   the larger clip so neither overlay is occluded. */
-body.tab-tip-hovering.url-suggest-clip .tab-handle{
-  top:380px !important;
+/* When BOTH classes are active simultaneously, pick whichever is
+   larger so neither overlay is occluded. We use max() with the CSS
+   variable falling back to 280px to keep things sensible. */
+body.tab-tip-hovering.chrome-clip-active .tab-handle{
+  top:max(280px, var(--chrome-clip-h, 280px)) !important;
 }
-body:not(.tab-tip-hovering):not(.url-suggest-clip) .tab-handle{ transition:top .1s ease-in }
+body:not(.tab-tip-hovering):not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -4918,37 +4926,38 @@ const _OVERLAY_OPEN_SELECTOR = [
   '#seozPanel.open',
   '#inspectorDrawer.open',
   '#historyOverlay.open',
-  // Dropdowns / menus
-  '.bm-drop.open',
+  '#ppForm.open',
+  // Toasts are small + transient, hide is acceptable since they auto-dismiss
+  '.toast.show',
+  // NB: dropdown-style menus (bookmark drop, chrome menu, ctx menu,
+  // URL suggest, etc.) used to live here but hiding the page entirely
+  // for a small dropdown was bad UX — page went fully black on every
+  // right-click / typed URL. Moved to _CLIP_OPEN_SELECTOR below in
+  // v1.10.105 — that mechanism shrinks the WebContentsView from the
+  // top just enough to expose the dropdown, leaving the page visible.
+  // .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
+  // included — they're always-visible chrome (favicon, find-bar that
+  // overlays the top band) or false-positive triggers (tab-tip-fav
+  // gets .show on every favicon load even when the parent tooltip
+  // is hidden).
+].join(', ')
+
+// Overlays that should clip-from-top instead of hide-entirely. The
+// _refreshOverlayState computation reads each visible element's
+// getBoundingClientRect().bottom and shrinks the WebContentsView so
+// the tallest visible overlay sits in exposed chrome bg. v1.10.105.
+const _CLIP_OPEN_SELECTOR = [
+  '#urlSuggest.open',
+  '#ctxMenu.open',
   '#chromeDd.open',
   '#blockerPopup.open',
-  '#ppForm.open',
-  '#ctxMenu.open',
+  '.bm-drop.open',
   '.client-sel-drop.open',
-  // NB: #urlSuggest.open used to live here (v1.10.97), but the
-  // chrome-overlay-active mechanism hides the WebContentsView
-  // entirely → page goes black while user types in the URL bar.
-  // v1.10.102 moved URL-suggest to the clip-from-top mechanism
-  // (see body.url-suggest-clip rule + _refreshOverlayState below).
-  // .show-modifier overlays (visible-state class)
-  '.toast.show',
   '.mail-acct-menu.show',
   '.mail-folder-menu.show',
   '.mail-compose-tpl-menu.show',
   '.mail-schedule-popup.show',
   '.home-mail-results.show',
-  // NB: tab-tip-hovering was tried in v1.10.97 to hoist the tab tooltip
-  // above the WebContentsView, but hiding the entire page just to show
-  // a hover preview made the active tab go fully black — far worse UX
-  // than the tooltip being invisible. Reverted in v1.10.100. Real fix
-  // would be either (a) shrink the WebContentsView from the top by
-  // tooltip-height (clip approach) or (b) render the tooltip in a
-  // separate floating BrowserWindow. Both are bigger work.
-  // NB: .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
-  // included — they're always-visible chrome (favicon, find-bar that
-  // overlays the top band) or false-positive triggers (tab-tip-fav
-  // gets .show on every favicon load even when the parent tooltip
-  // is hidden).
 ].join(', ')
 
 let _overlayActive = false
@@ -4987,15 +4996,31 @@ function _refreshOverlayState() {
     document.body.classList.toggle('chrome-overlay-active', open)
   }
 
-  // URL-suggest uses the lighter "clip-from-top" mechanism instead of
-  // hiding the WebContentsView entirely. Hiding made the page go black
-  // while the user typed in the URL bar; clipping just shrinks the
-  // page so the dropdown can render in the exposed chrome strip.
-  // Same MutationObserver that drives _refreshOverlayState catches the
-  // .open class change on #urlSuggest, so this runs in lockstep.
-  const us = document.getElementById('urlSuggest')
-  const usOpen = !!(us && us.classList.contains('open') && _isElementActuallyVisible(us))
-  document.body.classList.toggle('url-suggest-clip', usOpen)
+  // Dynamic clip-from-top for chrome dropdowns / context menus / URL
+  // suggestions. Compute the tallest visible clip-mode overlay and
+  // shrink the WebContentsView just enough to expose it. The page
+  // stays visible (just shorter) instead of going fully black.
+  let maxBottom = 0
+  try {
+    document.querySelectorAll(_CLIP_OPEN_SELECTOR).forEach(el => {
+      if (_isElementActuallyVisible(el)) {
+        const r = el.getBoundingClientRect()
+        if (r.bottom > maxBottom) maxBottom = r.bottom
+      }
+    })
+  } catch (_) {}
+  if (maxBottom > 0) {
+    const wvStack = document.getElementById('wvStack')
+    const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
+    // Clip = how far below #wvStack's top edge the overlay reaches,
+    // plus a small buffer so the overlay's bottom border isn't kissing
+    // the WebContentsView edge.
+    const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
+    document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
+    document.body.classList.add('chrome-clip-active')
+  } else {
+    document.body.classList.remove('chrome-clip-active')
+  }
 }
 
 // MutationObserver fires whenever any class attribute changes in the

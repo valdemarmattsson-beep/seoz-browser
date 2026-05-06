@@ -5,6 +5,17 @@
   "main": "src/main/main.js",
   "author": "SEOZ <hello@seoz.io>",
   "license": "MIT",
+  "scripts": {
+    "start": "electron .",
+    "dev": "cross-env NODE_ENV=development electron . --dev",
+    "build:icons": "node scripts/build-icons.mjs",
+    "build:installer-bmps": "node scripts/build-installer-bmps.mjs",
+    "build": "electron-builder --win --x64",
+    "build:mac": "electron-builder --mac",
+    "build:all": "electron-builder --win --mac",
+    "publish": "electron-builder --win --x64 --publish always",
+    "publish:mac": "electron-builder --mac --publish always"
+  },
   "dependencies": {
     "electron-store": "^8.1.0",
     "electron-updater": "^6.8.0",
@@ -12,5 +23,62 @@
     "mailparser": "^3.9.8",
     "nodemailer": "^8.0.7",
     "sanitize-html": "^2.17.3"
+  },
+  "devDependencies": {
+    "cross-env": "^7.0.3",
+    "electron": "^41.0.0",
+    "electron-builder": "^26.0.0",
+    "png-to-ico": "^2.1.8",
+    "png2icons": "^2.0.1",
+    "sharp": "^0.33.5"
+  },
+  "build": {
+    "appId": "se.seoz.browser",
+    "productName": "SEOZ",
+    "icon": "assets/icon.png",
+    "files": [
+      "src/**/*",
+      "assets/**/*",
+      "build/**/*"
+    ],
+    "publish": {
+      "provider": "github",
+      "owner": "valdemarmattsson-beep",
+      "repo": "seoz-browser",
+      "releaseType": "release",
+      "publishAutoUpdate": true
+    },
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "icon": "assets/icon.ico"
+    },
+    "mac": {
+      "target": [
+        {
+          "target": "dmg",
+          "arch": [
+            "x64",
+            "arm64"
+          ]
+        }
+      ],
+      "category": "public.app-category.productivity"
+    },
+    "nsis": {
+      "oneClick": true,
+      "allowElevation": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "SEOZ",
+      "differentialPackage": true,
+      "include": "build/installer.nsh"
+    }
   }
 }

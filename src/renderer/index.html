@@ -15062,7 +15062,7 @@ function buildChromeMenuItems() {
     { kind:'item', id:'find',        icon: ico.search,     label:'Sök på sidan',    shortcut:'Ctrl+F' },
     { kind:'item', id:'print',       icon: ico.printer,    label:'Skriv ut',        shortcut:'Ctrl+P' },
     { kind:'sep' },
-    { kind:'item', id:'inspector',   icon: ico.scan,       label:'SEOZ Inspector',  shortcut:'F12' },
+    { kind:'item', id:'inspector',   icon: ico.scan,       label:'SEOZ Inspector',  shortcut:'Ctrl+Alt+I' },
     { kind:'item', id:'fullscreen',  icon: ico.fullscreen, label:'Helskärm',        shortcut:'F11' },
     { kind:'item', id:'split-toggle',icon: ico.split,      label: splitOpen ? 'Stäng split-vy' : 'Öppna split-vy', shortcut:'Ctrl+\\' },
     { kind:'sep' },
@@ -20806,20 +20806,22 @@ document.addEventListener('keydown', e => {
   else if (ctrl && key === 'd') { e.preventDefault(); toggleBookmark() }
   // Ctrl+P → Print
   else if (ctrl && key === 'p') { e.preventDefault(); doPrint() }
-  // F12 → SEOZ Inspector
-  else if (e.key === 'F12') { e.preventDefault(); toggleInspector() }
-  // Ctrl+Shift+I → DevTools (host renderer)
-  else if (ctrl && e.shiftKey && key === 'i') { e.preventDefault(); SE.toggleDevTools() }
-  // Ctrl+Shift+J → DevTools for the active webview (guest page) —
-  // useful when a site renders blank / errors and you can't right-
-  // click into it (e.g. a modal overlay swallowing pointer events).
-  else if (ctrl && e.shiftKey && key === 'j') {
+  // v1.10.141: F12 + Ctrl+Shift+I now open Chromium DevTools on the
+  // ACTIVE TAB (browser convention — what every other browser does
+  // and what users expect when testing responsive design via Device
+  // Mode). The previous binding had F12=SEOZ Inspector and
+  // Ctrl+Shift+I=DevTools on chrome — both wrong targets for
+  // page-level inspection. SEOZ Inspector moves to Ctrl+Alt+I.
+  else if (e.key === 'F12' || (ctrl && e.shiftKey && key === 'i') || (ctrl && e.shiftKey && key === 'j')) {
     e.preventDefault()
     try {
       if (wv && typeof wv.openDevTools === 'function') wv.openDevTools()
       else toast('Aktiv flik har ingen webview att inspektera', '#e58a00')
     } catch (_) {}
   }
+  // Ctrl+Alt+I → SEOZ Inspector (our SEO analysis panel — moved from
+  // F12 in v1.10.141 so F12 follows the universal browser convention).
+  else if (ctrl && e.altKey && key === 'i') { e.preventDefault(); toggleInspector() }
   // F11 → Fullscreen
   else if (e.key === 'F11') { e.preventDefault(); SE.fullscreen() }
   // Ctrl+Plus → Zoom in

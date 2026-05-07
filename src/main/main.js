@@ -83,44 +83,31 @@ const APP_ICON = nativeImage.createFromPath(
   path.join(__dirname, '../../assets/icon.ico')
 )
 
-// v1.10.135: stamp the SEOZ icon onto detached DevTools windows so
-// the taskbar / titlebar shows our icon instead of Electron's default.
+// (Removed in v1.10.140: _attachDevToolsIconHook from v1.10.135.
+//  The intent was to stamp our SEOZ icon onto detached DevTools so
+//  the titlebar/taskbar shows SEOZ instead of the Electron default.
+//  Diagnostics in v1.10.139 confirmed the approach was unworkable:
 //
-// v1.10.139 — robustified after the v1.10.137 version didn't
-// consistently land. Electron's DevTools window goes through
-// several creation phases (BrowserWindow created → contentView
-// attached → DevTools React app loaded). devtools-opened fires
-// somewhere mid-stream; setIcon has been observed to silently
-// succeed but get overridden when Chromium internally re-applies
-// its own DevTools icon afterwards. We now retry a few times over
-// the first ~600ms after open to win the race.
-function _attachDevToolsIconHook(wc) {
-  if (!APP_ICON || !wc || wc.isDestroyed()) return
-
-  const stamp = () => {
-    try {
-      const dt = wc.devToolsWebContents
-      if (!dt) return false
-      const dwin = BrowserWindow.fromWebContents(dt)
-      if (!dwin || dwin.isDestroyed()) return false
-      dwin.setIcon(APP_ICON)
-      return true
-    } catch (_) { return false }
-  }
-
-  const apply = () => {
-    // First synchronous attempt + a few delayed retries. setIcon is
-    // idempotent and cheap, so over-applying is harmless.
-    stamp()
-    setTimeout(stamp, 50)
-    setTimeout(stamp, 200)
-    setTimeout(stamp, 600)
-  }
-
-  // Use .on() (not .once()) so this works for the lifetime of the
-  // webContents — open + close + open again all get the icon stamped.
-  try { wc.on('devtools-opened', apply) } catch (_) {}
-}
+//  - In Electron 41, DevTools detached windows are NOT registered
+//    as Electron BrowserWindows. BrowserWindow.fromWebContents(
+//    devToolsWebContents) returns the SOURCE window (the parent
+//    chrome window) instead. setIcon was applying to the parent —
+//    which already has APP_ICON from the BrowserWindow constructor
+//    — and never reaching DevTools.
+//  - BrowserWindow.getAllWindows() doesn't include DevTools windows
+//    either. So we have no programmatic handle on them.
+//
+//  Strawberry's app.asar shows the same: no setIcon calls on
+//  DevTools, and WM_GETICON on their DevTools titlebar returns 0
+//  (no explicit icon). Strawberry.exe just has the strawberry logo
+//  embedded as its resource icon, and Windows falls back to that
+//  for any window without WM_GETICON. SEOZ.exe likewise has our
+//  Orbit-S logo embedded (electron-builder picks it up from
+//  build.win.icon = assets/icon.ico). So in PACKAGED builds the
+//  DevTools titlebar already shows SEOZ. The dev-mode `npm start`
+//  shows the Electron logo only because the running executable is
+//  electron.exe, whose embedded resource icon is Electron's. That's
+//  a dev-only artifact.)
 
 // Legacy store — kept for migration & window bounds (shared across profiles)
 const store = new Store({
@@ -3229,17 +3216,7 @@ ipcMain.on('popup-autofill-fill', (_e, { popupId, payload } = {}) => {
 })
 
 // ── DevTools ──
-ipcMain.on('toggle-devtools', () => {
-  if (!win || win.isDestroyed()) return
-  // Attach the icon hook idempotently on every toggle. _attachDevToolsIconHook
-  // uses .on() so duplicate listeners would stack — guard with a flag on
-  // the webContents object so we attach at most once per chrome session.
-  if (!win.webContents._seozDevToolsIconHooked) {
-    _attachDevToolsIconHook(win.webContents)
-    try { win.webContents._seozDevToolsIconHooked = true } catch (_) {}
-  }
-  win.webContents.toggleDevTools()
-})
+ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
 
 // ── Content blocker ──
 ipcMain.handle('blocker-get-enabled', () => blockerEnabled)
@@ -5439,11 +5416,6 @@ ipcMain.on('update-jump-list', () => {
 // nested <webview> (contentsType === 'webview'), which the event does
 // fire for.
 function _setupTabContents(contents) {
-  // Stamp our SEOZ icon on the detached DevTools window when this
-  // tab's DevTools opens. Without this Electron's default Atom icon
-  // shows up in the taskbar / titlebar.
-  _attachDevToolsIconHook(contents)
-
   // Keyboard shortcut interception. With WebContentsView, keyboard
   // events fire in the tab's renderer (not the chrome's renderer where
   // our custom keydown handlers live), so chrome shortcuts like Ctrl+H

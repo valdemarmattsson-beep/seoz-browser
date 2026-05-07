@@ -1662,10 +1662,11 @@ input,textarea,select{user-select:text}
 
    NB: tab-tip-hovering used to also live here (with a static 280px
    clip). v1.10.107: tooltip moved to a separate floating BrowserWindow.
-   v1.10.116: switched to a sibling WebContentsView. v1.10.135: brought
-   back as a DOM overlay (#tabTooltipEl) — tabs are at z=0 in the
-   contentView stack so DOM elements still composite above page
-   content even when extended into the page area. */
+   v1.10.116: switched to a sibling WebContentsView. v1.10.135: tried
+   as a DOM overlay; reverted in v1.10.136 because the chrome
+   renderer is contentView's primary paint surface — child views
+   (tabs) always composite ON TOP of it, so DOM popups got hidden
+   wherever they extended into the page area. Sibling WCV stays. */
 body.chrome-clip-active .tab-handle{
   top:var(--chrome-clip-h, 280px) !important;
   transition:top .12s ease-out;
@@ -14934,12 +14935,11 @@ SE.on('tab-context-action', ({ action, payload }) => {
   }
 })
 
-// Close popup on outside click
-document.addEventListener('click', e => {
-  if (!e.target.closest('#blockerWrap')) {
-    document.getElementById('blockerPopup').classList.remove('open')
-  }
-})
+// (Removed in v1.10.137: outside-click handler for the old in-DOM
+// #blockerPopup. Shield popup is now a sibling WebContentsView (see
+// _ensureShieldView in main.js) with its own close-on-blur logic, so
+// this handler was dead code that threw NullReferenceErrors on every
+// click anywhere on the page.)
 
 // ══════════════════════════════════════════════════════
 //  CHROME MENU (three-dot dropdown)

@@ -5193,22 +5193,28 @@ const CHROME_SPOOF_SCRIPT = `
 // in main (always renders on top of WebContentsView, no z-order
 // band-aid needed), we let the contextmenu event propagate untouched.
 const WV_CONTEXT_MENU_SCRIPT = `
+  // We use console.debug (not .log) for these so DevTools' default
+  // level filter hides them — they're our chrome<->tab IPC channel
+  // (no real ipcRenderer access from page context), not user-facing
+  // logs. The chrome's 'console-message' listener fires for all
+  // verbosity levels, so the IPC keeps working. (v1.10.139.)
+
   // Ctrl+scroll zoom — prevent default and send via console
   document.addEventListener('wheel', (e) => {
     if (!e.ctrlKey) return
     e.preventDefault()
-    console.log('[SEOZ-ZOOM]' + (e.deltaY < 0 ? 'in' : 'out'))
+    console.debug('[SEOZ-ZOOM]' + (e.deltaY < 0 ? 'in' : 'out'))
   }, { passive: false })
 
   // Left-click closes context menu in parent
   document.addEventListener('click', () => {
-    console.log('[SEOZ-CLICK]')
+    console.debug('[SEOZ-CLICK]')
   })
 
   // Hover over links — show URL preview in parent
   document.addEventListener('mouseover', (e) => {
     const a = e.target.closest('a[href]')
-    console.log('[SEOZ-HOVER]' + (a ? a.href : ''))
+    console.debug('[SEOZ-HOVER]' + (a ? a.href : ''))
   })
 `
 
@@ -13956,6 +13962,19 @@ async function refreshClientsKeepDropOpen(opts = {}) {
   const key = await SE.getApiKey()
   if (!key) return
   try {
+    // The user-facing refresh path (the ↻ button in the picker, plus
+    // the keyboard / explicit `forceRefreshClients` entry points) does
+    // a HARD refresh: wipe Electron's HTTP cache + seoz.io's
+    // CacheStorage first, so we know the response we're about to read
+    // is freshly fetched from the origin. The auto-sync path skips
+    // this — it runs every 5 min and the cache-buster + no-store
+    // headers are normally enough.
+    if (opts.verbose) {
+      try {
+        const r = await SE.apiCacheClear?.()
+        if (r && !r.ok) console.warn('[seoz-clients] apiCacheClear failed:', r.error)
+      } catch (err) { console.warn('[seoz-clients] apiCacheClear threw:', err) }
+    }
     const res = await SE.triggerSync(key)
     if (!res || !res.ok) {
       if (opts.verbose) toast('Synk misslyckades: ' + (res?.error || 'okänt fel'), '#dc2626')
@@ -14019,6 +14038,47 @@ async function refreshClientsKeepDropOpen(opts = {}) {
 // header so the user can force a fresh fetch without waiting for
 // auto-sync.
 window.forceRefreshClients = () => refreshClientsKeepDropOpen({ verbose: true })
+
+// Deep diagnostic — call from DevTools console with
+//   await seozDebugClients()
+// Compares (1) browser-local synced.clients (2) server response
+// after a hard cache wipe (3) which rows differ. Useful when a user
+// reports "klient X är borttagen i plattformen men syns kvar" — tells
+// you in seconds whether the bug is browser-local or server-side.
+window.seozDebugClients = async () => {
+  const key = await SE.getApiKey()
+  if (!key) { console.error('[seoz-debug-clients] Ingen API-nyckel — kan inte synka'); return null }
+  console.group('[seoz-debug-clients]')
+  try {
+    console.log('Lokalt (synced.clients):')
+    console.table((synced.clients || []).map(c => ({
+      id: c.id, name: c.name, domain: c.domain || c.url || '', score: c.seoScore,
+    })))
+    console.log('Wipar HTTP-cache + seoz.io CacheStorage…')
+    const cleared = await SE.apiCacheClear?.()
+    console.log('Cache-wipe:', cleared)
+    console.log('Hämtar fräsch /api/browser/clients…')
+    const res = await SE.triggerSync(key)
+    if (!res || !res.ok) {
+      console.error('Synk misslyckades:', res)
+      return res
+    }
+    console.log('Server (efter wipe):')
+    console.table((res.clients || []).map(c => ({
+      id: c.id, name: c.name, domain: c.domain || c.url || '', score: c.seoScore,
+    })))
+    const local  = new Set((synced.clients || []).map(c => c.name))
+    const server = new Set((res.clients || []).map(c => c.name))
+    const onlyLocal  = [...local].filter(n => !server.has(n))
+    const onlyServer = [...server].filter(n => !local.has(n))
+    if (onlyLocal.length)  console.warn('Bara lokalt (browser-cache):', onlyLocal)
+    if (onlyServer.length) console.info('Bara på server (browser ur synk):', onlyServer)
+    if (!onlyLocal.length && !onlyServer.length) console.log('✓ Lokal och server matchar')
+    return res
+  } finally {
+    console.groupEnd()
+  }
+}
 
 function closeClientDrop() {
   if (!_clientDropOpen) return

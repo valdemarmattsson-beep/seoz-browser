@@ -334,6 +334,12 @@ contextBridge.exposeInMainWorld('seoz', {
   // SEOZ API
   triggerSync: (apiKey) => ipcRenderer.invoke('trigger-sync', apiKey),
   fetchApi:    (opts)   => ipcRenderer.invoke('fetch-browser-api', opts),
+  // Nuke Electron's HTTP cache + seoz.io's CacheStorage / SW so the
+  // next sync hits the origin uncontaminated. Used by the client
+  // picker's "Tvinga uppdatering" path when a soft refresh keeps
+  // serving stale rows from the disk cache. Cookies / localStorage
+  // are not touched. Returns { ok, durationMs }.
+  apiCacheClear: () => ipcRenderer.invoke('api-cache-clear'),
 
   // Agent Ready — grade any URL on agent/LLM-readiness
   agentReadyScan: (url) => ipcRenderer.invoke('fetch-agent-ready', url),

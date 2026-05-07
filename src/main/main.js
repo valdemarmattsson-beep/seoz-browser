@@ -1,5 +1,13 @@
 'use strict'
 
+// v1.10.139: suppress Electron's "Insecure Content-Security-Policy"
+// dev-mode warning. The warning auto-disappears in packaged builds
+// (Electron checks app.isPackaged), but it spammed our DevTools
+// console during development. Our chrome runs locally with strict
+// preload + contextIsolation; the warning is informational, not a
+// real risk for our workflow.
+process.env.ELECTRON_DISABLE_SECURITY_WARNINGS = 'true'
+
 const { app, BrowserWindow, WebContentsView, ipcMain, nativeTheme, shell, Notification, nativeImage, net, session, dialog, safeStorage, screen, Menu, webContents } = require('electron')
 const path = require('path')
 const fs = require('fs')
@@ -77,22 +85,38 @@ const APP_ICON = nativeImage.createFromPath(
 
 // v1.10.135: stamp the SEOZ icon onto detached DevTools windows so
 // the taskbar / titlebar shows our icon instead of Electron's default.
-// Electron creates the detached DevTools BrowserWindow internally
-// without a way to pass an icon at open time, so we hook the
-// 'devtools-opened' event (fires after the DevTools webContents has
-// loaded its UI; the host BrowserWindow exists by then) and call
-// setIcon on it. Idempotent — re-runs on every devtools-opened, so
-// closing + re-opening DevTools picks up the icon again.
+//
+// v1.10.139 — robustified after the v1.10.137 version didn't
+// consistently land. Electron's DevTools window goes through
+// several creation phases (BrowserWindow created → contentView
+// attached → DevTools React app loaded). devtools-opened fires
+// somewhere mid-stream; setIcon has been observed to silently
+// succeed but get overridden when Chromium internally re-applies
+// its own DevTools icon afterwards. We now retry a few times over
+// the first ~600ms after open to win the race.
 function _attachDevToolsIconHook(wc) {
   if (!APP_ICON || !wc || wc.isDestroyed()) return
-  const apply = () => {
+
+  const stamp = () => {
     try {
       const dt = wc.devToolsWebContents
-      if (!dt) return
+      if (!dt) return false
       const dwin = BrowserWindow.fromWebContents(dt)
-      if (dwin && !dwin.isDestroyed()) dwin.setIcon(APP_ICON)
-    } catch (_) {}
+      if (!dwin || dwin.isDestroyed()) return false
+      dwin.setIcon(APP_ICON)
+      return true
+    } catch (_) { return false }
   }
+
+  const apply = () => {
+    // First synchronous attempt + a few delayed retries. setIcon is
+    // idempotent and cheap, so over-applying is harmless.
+    stamp()
+    setTimeout(stamp, 50)
+    setTimeout(stamp, 200)
+    setTimeout(stamp, 600)
+  }
+
   // Use .on() (not .once()) so this works for the lifetime of the
   // webContents — open + close + open again all get the icon stamped.
   try { wc.on('devtools-opened', apply) } catch (_) {}
@@ -3553,6 +3577,34 @@ ipcMain.handle('trigger-sync', async (_, apiKey) => doAPISync(apiKey))
 
 ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params, method, body }) => {
   return apiFetch(endpoint, apiKey, { params, method, body })
+})
+
+// Hard-clear the Electron HTTP cache + service-worker / cache-storage
+// for seoz.io specifically. Fixes the "deleted client still shows" bug
+// where Electron's `net` module hands us a stale 200-response for
+// /api/browser/clients despite `cache: no-store` headers + the `_t=`
+// cache-buster. Cookies are NOT cleared — the user stays logged in.
+//
+// Returns { ok, durationMs } so the renderer can toast meaningfully.
+ipcMain.handle('api-cache-clear', async () => {
+  const t0 = Date.now()
+  try {
+    const sess = session.defaultSession
+    // Whole-session HTTP disk + memory cache. Cheap (~50ms typical) and
+    // doesn't touch cookies / localStorage / IndexedDB unless we ask.
+    await sess.clearCache()
+    // Per-origin storage that can hold a stale response: SW caches +
+    // CacheStorage entries an installed Service Worker may have created.
+    // (cookies + indexeddb + localstorage are deliberately NOT in the
+    // storages list — those hold session + user data we want to keep.)
+    await sess.clearStorageData({
+      origin: 'https://seoz.io',
+      storages: ['cachestorage', 'serviceworkers'],
+    })
+    return { ok: true, durationMs: Date.now() - t0 }
+  } catch (err) {
+    return { ok: false, error: String(err?.message || err), durationMs: Date.now() - t0 }
+  }
 })
 
 // ════════════════════════════════════════════════════════════════════

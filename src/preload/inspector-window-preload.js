@@ -95,5 +95,17 @@ contextBridge.exposeInMainWorld('seoz', {
     getNetwork:  ()          => ipcRenderer.invoke('inspector:get-network'),
     getElements: ()          => ipcRenderer.invoke('inspector:get-elements'),
     getConsole:  ()          => ipcRenderer.invoke('inspector:get-console'),
+    // Tracking-tag detector — returns
+    //   { items, counts, dataLayer, scriptCount, cookieCount }
+    // describing analytics / marketing pixels / consent banners / etc.
+    // detected on the active page.
+    getTracking: ()          => ipcRenderer.invoke('inspector:get-tracking'),
+
+    // Create a task in the chrome workspace's active client. payload is
+    //   { title, description?, url?, severity?, skill_type?, effort_h? }
+    // — clientId is forced to the active client by the chrome-side
+    // bridge handler so the inspector window can't smuggle a
+    // different one in. Returns { ok, task?, error? }.
+    createTask:  (payload)   => ipcRenderer.invoke('inspector:create-task', payload || {}),
   },
 })

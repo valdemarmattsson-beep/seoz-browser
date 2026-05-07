@@ -31,33 +31,12 @@ contextBridge.exposeInMainWorld('seoz', {
     try { cb(payload || {}) } catch (err) { console.error('[onTabMenuAction]', err) }
   }),
 
-  // Tab-preview tooltip — backed by a separate transparent
-  // BrowserWindow in main. This is the only way to render a tooltip
-  // OVER a WebContentsView (the page); HTML z-index can't reach
-  // across that native-view boundary. anchorX/Y are viewport coords
-  // in the parent window; main converts to screen coords.
-  tooltip: {
-    // v1.10.116: tab tooltip is a sibling WebContentsView under the
-    // main BrowserWindow's contentView (not a separate alwaysOnTop
-    // BrowserWindow as in v1.10.107-1.10.115). Same API surface —
-    // show/hide/onCursorOnCard/onAction are all the renderer needs.
-    show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
-    hide: () => ipcRenderer.send('tooltip:hide'),
-    // The tooltip's renderer signals these back to us via main:
-    //   onCursorOnCard(true|false) — cursor entered / left the tooltip.
-    //     Renderer should cancel its hide timer on true, schedule on false.
-    //   onAction({action, tabId}) — user clicked Fäst / Splitvy.
-    onCursorOnCard: (cb) => ipcRenderer.on('tooltip:cursor-on-card', (_e, on) => {
-      try { cb(!!on) } catch (err) { console.error('[onCursorOnCard]', err) }
-    }),
-    onAction: (cb) => ipcRenderer.on('tooltip:action', (_e, payload) => {
-      try { cb(payload || {}) } catch (err) { console.error('[onAction]', err) }
-    }),
-    // NB: onForceHide used to live here (v1.10.114) for blur/minimize
-    // cleanup. Removed in v1.10.116 — the WebContentsView is a child
-    // of the main window so it's automatically hidden when the parent
-    // is occluded. No explicit cleanup needed.
-  },
+  // Tab-preview tooltip / dock-icon hover label / URL-suggest dropdown
+  // — these used to be exposed here as IPC bridges to sibling
+  // WebContentsViews. v1.10.135 moved them back to plain DOM overlays
+  // in the chrome renderer so they reframe correctly under DevTools
+  // Device Mode. The renderer talks to itself via direct DOM now;
+  // no IPC needed.
 
   // Auto-recovery from Google "Inloggningen misslyckades" — clears
   // cookies + storage for google.com hosts so the next sign-in gets
@@ -129,28 +108,8 @@ contextBridge.exposeInMainWorld('seoz', {
     }),
   },
 
-  // Generic chrome-label tooltip — single shared WebContentsView used
-  // for hover labels on dock icons, etc. Floats above the page like
-  // the tab tooltip / Shield popup.
-  chromeLabel: {
-    show: (anchorX, anchorY, text, side) => ipcRenderer.send('chrome-label:show', { anchorX, anchorY, text, side }),
-    hide: ()                              => ipcRenderer.send('chrome-label:hide'),
-  },
-
-  // URL suggest dropdown — sibling WebContentsView. Chrome computes
-  // matches and pushes them; popup renders + emits hover/pick back.
-  urlSuggest: {
-    show:      (anchorX, anchorY, width, items, selIdx, query) =>
-                 ipcRenderer.send('urlSuggest:show', { anchorX, anchorY, width, items, selIdx, query }),
-    hide:      ()    => ipcRenderer.send('urlSuggest:hide'),
-    updateSel: (idx) => ipcRenderer.send('urlSuggest:update-sel', idx),
-    onPick:    (cb)  => ipcRenderer.on('urlSuggest:pick', (_e, url) => {
-      try { cb(url) } catch (err) { console.error('[urlSuggest onPick]', err) }
-    }),
-    onHover:   (cb)  => ipcRenderer.on('urlSuggest:hover', (_e, idx) => {
-      try { cb(idx) } catch (err) { console.error('[urlSuggest onHover]', err) }
-    }),
-  },
+  // chromeLabel + urlSuggest bridges removed in v1.10.135 — both are
+  // now DOM overlays (see comment on tooltip above).
 
   // SEOZ Shield popup — sibling WebContentsView that floats above the
   // page (so the page stays visible under the popup, no chrome-clip
@@ -218,6 +177,64 @@ contextBridge.exposeInMainWorld('seoz', {
     onClosed: (cb) => ipcRenderer.on('bm-folder:closed', () => {
       try { cb() } catch (err) { console.error('[bmFolder onClosed]', err) }
     }),
+  },
+
+  // SEOZ Inspector — separate BrowserWindow (DevTools-style). The
+  // chrome renderer is the data provider (it owns the active tab); the
+  // inspector window is a renderer-only mirror. Methods here are split
+  // by direction:
+  //
+  //   chrome → main (open/close/forward bridge replies)
+  //   main  → chrome (request page-data, fulfil bridge requests, etc.)
+  //
+  // The inspector window itself uses its own preload
+  // (inspector-window-preload.js) — these bridges are only consumed by
+  // the chrome renderer.
+  inspectorBridge: {
+    // chrome → main: open the inspector window (or focus existing one).
+    open:  () => ipcRenderer.send('inspector:open'),
+    // chrome → main: close the inspector window.
+    close: () => ipcRenderer.send('inspector:close'),
+
+    // chrome → main: results from analyzePage / live updates. Main
+    // forwards to the inspector window.
+    sendData:           (payload) => ipcRenderer.send('inspector:data-ready', payload || {}),
+    sendActiveTab:      (payload) => ipcRenderer.send('inspector:active-tab-changed', payload || {}),
+    sendConsoleMessage: (payload) => ipcRenderer.send('inspector:console-message', payload || {}),
+    sendConsoleClear:   ()        => ipcRenderer.send('inspector:console-clear'),
+    sendElementPicked:  (payload) => ipcRenderer.send('inspector:element-picked', payload || {}),
+
+    // chrome → main: reply to an invoke-bridge request from inspector
+    // window (matches a pending promise in main keyed by reqId).
+    sendBridgeReply:    (payload) => ipcRenderer.send('inspector:bridge-reply', payload || {}),
+
+    // main → chrome: instruct chrome to refresh / fulfil an invoke
+    // request. Returns an unsubscribe fn.
+    onRequestPageData: (cb) => {
+      const handler = () => { try { cb() } catch (err) { console.error('[inspectorBridge onRequestPageData]', err) } }
+      ipcRenderer.on('inspector:request-page-data', handler)
+      return () => ipcRenderer.removeListener('inspector:request-page-data', handler)
+    },
+    onTogglePicker: (cb) => {
+      const handler = (_e, payload) => { try { cb(payload || {}) } catch (err) { console.error('[inspectorBridge onTogglePicker]', err) } }
+      ipcRenderer.on('inspector:toggle-picker', handler)
+      return () => ipcRenderer.removeListener('inspector:toggle-picker', handler)
+    },
+    onDownloadImage: (cb) => {
+      const handler = (_e, payload) => { try { cb(payload || {}) } catch (err) { console.error('[inspectorBridge onDownloadImage]', err) } }
+      ipcRenderer.on('inspector:download-image', handler)
+      return () => ipcRenderer.removeListener('inspector:download-image', handler)
+    },
+    onBridgeRequest: (cb) => {
+      const handler = (_e, payload) => { try { cb(payload || {}) } catch (err) { console.error('[inspectorBridge onBridgeRequest]', err) } }
+      ipcRenderer.on('inspector:bridge-request', handler)
+      return () => ipcRenderer.removeListener('inspector:bridge-request', handler)
+    },
+    onClosed: (cb) => {
+      const handler = () => { try { cb() } catch (err) { console.error('[inspectorBridge onClosed]', err) } }
+      ipcRenderer.on('inspector:closed', handler)
+      return () => ipcRenderer.removeListener('inspector:closed', handler)
+    },
   },
 
   // Password manager (per-profile, encrypted via OS-level safeStorage)

@@ -606,11 +606,12 @@ class TabManager {
 
     // Attach as a child view of the host window's contentView. The
     // crucial trick: index=0 means "bottom of the z-stack", so the
-    // tab WebContentsView always sits BELOW any floating views
-    // (tooltip / Shield popup / site-info / url-suggest / chrome-
-    // label) the host has already attached. Without index=0 the new
-    // tab goes to the end of the children array = top, briefly
-    // covering popups during fast tab swaps.
+    // tab WebContentsView always sits BELOW the chrome renderer (so
+    // DOM overlays like the URL-suggest dropdown / tab tooltip /
+    // dock label composite above page content) AND below any
+    // remaining sibling-view popups (Shield, Site Info). Without
+    // index=0 the new tab goes to the end of the children array =
+    // top, briefly covering everything during fast tab swaps.
     try {
       const host = this.hostWindow?.contentView
       if (host) {
@@ -632,9 +633,11 @@ class TabManager {
     try { view.setVisible(!!visible) } catch (_) {}
 
     // Tab z-order was just bumped to the top of contentView — that
-    // pushes any floating sibling views (tab tooltip, Shield popup,
-    // site-info, url-suggest, chrome-label) UNDER the new tab. Let
-    // the host re-bump them so they stay visible across tab swaps.
+    // pushes the remaining floating sibling views (Shield popup,
+    // Site Info) UNDER the new tab. Let the host re-bump them so
+    // they stay visible across tab swaps. (URL-suggest, tab tooltip,
+    // and dock label are now DOM overlays in the chrome renderer
+    // and don't need this — they already z-order correctly.)
     if (typeof this.onTopBumped === 'function') {
       try { this.onTopBumped() } catch (_) {}
     }

@@ -1661,25 +1661,20 @@ input,textarea,select{user-select:text}
    transition still works smoothly even if the var hasn't been set yet.
 
    NB: tab-tip-hovering used to also live here (with a static 280px
-   clip) but the tab tooltip moved to a separate floating BrowserWindow
-   in v1.10.107 — see seoz.tooltip.show() in the renderer + tooltip-
-   preload.js + the tooltip BrowserWindow setup in main.js. The page no
-   longer needs to clip on tab hover; the tooltip floats over it. */
+   clip). v1.10.107: tooltip moved to a separate floating BrowserWindow.
+   v1.10.116: switched to a sibling WebContentsView. v1.10.135: brought
+   back as a DOM overlay (#tabTooltipEl) — tabs are at z=0 in the
+   contentView stack so DOM elements still composite above page
+   content even when extended into the page area. */
 body.chrome-clip-active .tab-handle{
   top:var(--chrome-clip-h, 280px) !important;
   transition:top .12s ease-out;
 }
 body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
-/* Inspector lives in DOM as a fixed-position floating panel — JS
-   keeps --page-bottom-clip in sync with inspector.top (= viewport
-   height − inspector.top) so each .tab-handle's bottom edge always
-   lands right above the inspector. Page WebContentsView shrinks
-   accordingly, regardless of where the user drags the inspector. */
-body.inspector-open .tab-handle{
-  bottom:var(--page-bottom-clip, 320px) !important;
-  transition:bottom .12s ease-out;
-}
-body:not(.inspector-open) .tab-handle{ transition:bottom .1s ease-in }
+/* The inspector used to live in-DOM as a bottom-docked floating panel
+   that shrunk every .tab-handle from the bottom via --page-bottom-clip.
+   v1.10.135 promoted it to a separate BrowserWindow so this clip rule
+   is gone with it. Kept the comment as a paper-trail for git archeology. */
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -1808,6 +1803,31 @@ body:not(.inspector-open) .tab-handle{ transition:bottom .1s ease-in }
 .url-wrap{position:relative}
 .url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
 .url-suggest.open{display:block}
+/* Tab-preview tooltip — DOM overlay (v1.10.135). Replaces the
+   sibling-WebContentsView so it scales correctly under DevTools
+   Device Mode. Tabs are at z=0 in the BrowserWindow stack
+   (addChildView(view, 0)), so DOM elements painted by the chrome
+   renderer in the page area DO render above the active tab. */
+.tab-tooltip{position:fixed;z-index:1000;background:#1a1d23;border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:10px 12px;min-width:220px;max-width:320px;display:none;color:#f8f8f8;-webkit-user-select:none;user-select:none;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
+.tab-tooltip.open{display:block}
+.tt-preview{display:none;width:calc(100% + 24px);margin:-10px -12px 10px;height:140px;object-fit:cover;object-position:top center;background:#0f1116;border-bottom:1px solid rgba(255,255,255,.08)}
+.tt-preview.show{display:block}
+.tt-head{display:flex;gap:8px;align-items:center;margin-bottom:6px}
+.tt-fav{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:contain;display:none}
+.tt-fav.show{display:block}
+.tt-title{flex:1;min-width:0;font-size:12px;font-weight:600;color:#f8f8f8;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tt-url{font-size:11px;color:rgba(255,255,255,.55);line-height:1.4;word-break:break-all;margin-bottom:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
+.tt-domain{font-size:10.5px;color:rgba(255,255,255,.4);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.tt-actions{display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}
+.tt-action{flex:1;height:28px;display:inline-flex;align-items:center;justify-content:center;gap:5px;background:transparent;border:1px solid rgba(255,255,255,.08);border-radius:6px;color:rgba(255,255,255,.65);font:inherit;font-size:11px;font-weight:500;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
+.tt-action:hover{background:rgba(70,128,255,.12);border-color:rgba(70,128,255,.45);color:#f8f8f8}
+.tt-action svg{width:12px;height:12px}
+/* Dock-icon hover label — DOM overlay (v1.10.135). Same visual as
+   the previous chrome-label WebContentsView but positioned in the
+   chrome renderer so it survives Device Mode reframing. */
+.dock-label{position:fixed;z-index:1000;background:#f0f4f8;color:#131920;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);display:none;pointer-events:none}
+.dock-label.open{display:block}
+.dock-label::after{content:'';position:absolute;left:100%;top:50%;transform:translateY(-50%);border:4px solid transparent;border-left-color:#f0f4f8}
 .url-sg{padding:6px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background .1s}
 .url-sg:hover,.url-sg.sel{background:rgba(255,255,255,.06)}
 .url-sg img{width:14px;height:14px;border-radius:2px;flex-shrink:0}
@@ -3579,118 +3599,11 @@ body.no-seoz .seoz-panel { display:none !important }
 .history-item-time{font-size:10px;color:var(--muted);flex-shrink:0}
 .history-empty{padding:30px;text-align:center;font-size:12px;color:var(--muted)}
 
-/* ── SEOZ INSPECTOR (floating panel) ──
-   Originally a position:absolute bottom-docked drawer. Now a
-   draggable + resizable position:fixed floating panel — header is
-   the move-handle, bottom-right corner is the resize-handle. Default
-   state on first open mimics the old bottom drawer (full-width, 320px
-   tall, anchored to viewport bottom) so existing muscle memory works.
-   Page WebContentsView shrinks via `body.inspector-open` rule + the
-   --page-bottom-clip CSS var that JS keeps in sync with inspector.top. */
-.inspector-drawer{
-  position:fixed;left:0;right:0;bottom:0;z-index:100;
-  height:0;overflow:hidden;
-  background:var(--card);
-  border:1px solid var(--border);
-  display:flex;flex-direction:column;
-  transition:height .2s ease, top .2s ease, left .2s ease, width .2s ease;
-  user-select:text;-webkit-user-select:text;cursor:auto;
-  box-shadow:0 -4px 24px rgba(0,0,0,.35);
-}
-.inspector-drawer.open{height:320px;border-top:2px solid var(--p)}
-/* Floating mode kicks in once the user drags or resizes the inspector
-   away from its full-width bottom-dock default. JS toggles this class
-   to disable the right:0 / left:0 stretching so inline left/top/width
-   take effect. */
-.inspector-drawer.floating{
-  left:auto;right:auto;bottom:auto;
-  border-radius:8px;
-  border:1px solid var(--border);
-  border-top:1px solid var(--p);
-  box-shadow:0 8px 32px rgba(0,0,0,.45);
-}
-.inspector-drawer.resizing,
-.inspector-drawer.dragging{transition:none!important}
-.inspector-hdr{
-  height:36px;flex-shrink:0;
-  display:flex;align-items:center;padding:0 12px;gap:8px;
-  border-bottom:1px solid var(--border);background:var(--panel);
-  /* Header is the drag-to-move handle. Vertical-resize from header has
-     been replaced by the bottom-right corner handle below. */
-  cursor:move;
-  user-select:none;-webkit-user-select:none;
-}
-/* Bottom-right resize handle — visible only when floating, since
-   bottom-docked the panel takes full width and resizes from the top
-   edge via header drag (legacy behaviour). */
-.inspector-resize{
-  position:absolute;right:0;bottom:0;
-  width:14px;height:14px;cursor:nwse-resize;
-  z-index:2;
-  background:linear-gradient(135deg, transparent 50%, var(--ink-3) 50%, var(--ink-3) 65%, transparent 65%, transparent 80%, var(--ink-3) 80%);
-}
-.inspector-drawer:not(.floating) .inspector-resize{display:none}
-.inspector-hdr-title{font-size:11px;font-weight:700;color:var(--p);display:flex;align-items:center;gap:5px}
-.inspector-tabs{display:flex;align-items:center;gap:0;margin-left:8px}
-.inspector-tab{
-  padding:4px 12px;font-size:10px;font-weight:600;color:var(--muted);cursor:pointer;
-  border-bottom:2px solid transparent;transition:all .12s;
-}
-.inspector-tab:hover{color:var(--txt)}
-.inspector-tab.active{color:var(--p);border-bottom-color:var(--p)}
-.inspector-hdr-spacer{flex:1}
-.inspector-btn{width:24px;height:24px;border-radius:5px;border:none;background:none;color:var(--muted);cursor:pointer;display:flex;align-items:center;justify-content:center;font-size:12px;transition:background .12s}
-.inspector-btn:hover{background:rgba(255,255,255,.08)}
-.inspector-body{flex:1;overflow-y:auto;padding:10px 14px;font-size:11px;line-height:1.7}
-.insp-section{margin-bottom:12px}
-.insp-section-title{font-size:9px;font-weight:800;text-transform:uppercase;letter-spacing:.07em;color:var(--p);margin-bottom:4px}
-.insp-row{display:flex;align-items:flex-start;gap:8px;padding:3px 0;border-bottom:1px solid rgba(255,255,255,.03)}
-.insp-label{width:120px;flex-shrink:0;font-size:10px;font-weight:600;color:var(--muted)}
-.insp-value{flex:1;font-size:11px;color:var(--head);word-break:break-word}
-.insp-value.ok{color:var(--g)}.insp-value.warn{color:var(--w)}.insp-value.err{color:var(--r)}
-.insp-tag{display:inline-block;padding:1px 6px;border-radius:3px;font-size:9px;font-weight:700;margin:0 2px 2px 0}
-.insp-tag.green{background:rgba(44,168,127,.12);color:var(--g)}
-.insp-tag.yellow{background:rgba(229,138,0,.12);color:var(--w)}
-.insp-tag.red{background:rgba(220,38,38,.12);color:var(--r)}
-.insp-tag.blue{background:rgba(70,128,255,.12);color:var(--p)}
-.insp-code{font-family:'Consolas','Monaco',monospace;font-size:10px;background:var(--panel);border:1px solid var(--border);border-radius:4px;padding:6px 8px;margin:4px 0;white-space:pre-wrap;word-break:break-all;max-height:120px;overflow-y:auto}
-.insp-heading-tree{margin:4px 0}
-.insp-heading-tree div{padding:1px 0}
-.insp-h-indent{display:inline-block;width:16px}
-.insp-link-item{padding:2px 0;display:flex;gap:6px;align-items:baseline}
-.insp-link-item a{color:var(--p);text-decoration:none;font-size:10px;word-break:break-all}
-.insp-link-item a:hover{text-decoration:underline}
-.insp-link-status{font-size:9px;font-weight:700;flex-shrink:0}
-.insp-meter{height:6px;border-radius:3px;background:var(--border);overflow:hidden;margin:2px 0}
-.insp-meter-fill{height:100%;border-radius:3px;transition:width .3s}
-
-/* Console */
-.console-entry{padding:3px 8px;font-family:'Consolas','Monaco',monospace;font-size:10px;border-bottom:1px solid rgba(255,255,255,.03);display:flex;gap:6px;align-items:flex-start}
-.console-entry.error{background:rgba(220,38,38,.06);color:var(--r)}
-.console-entry.warn{background:rgba(229,138,0,.06);color:var(--w)}
-.console-entry.info{color:var(--txt)}
-.console-entry .con-type{width:16px;flex-shrink:0;text-align:center;font-size:9px}
-.console-entry .con-msg{flex:1;word-break:break-word;white-space:pre-wrap}
-.console-entry .con-src{flex-shrink:0;font-size:9px;color:var(--muted);max-width:140px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-
-/* Network */
-.net-table{width:100%;border-collapse:collapse;font-size:10px}
-.net-table th{position:sticky;top:0;background:var(--panel);text-align:left;padding:4px 6px;font-weight:700;color:var(--muted);font-size:9px;text-transform:uppercase;letter-spacing:.04em;border-bottom:1px solid var(--border)}
-.net-table td{padding:3px 6px;border-bottom:1px solid rgba(255,255,255,.03);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:200px}
-.net-table tr:hover td{background:rgba(255,255,255,.03)}
-.net-bar{height:4px;border-radius:2px;background:var(--border);min-width:30px;position:relative}
-.net-bar-fill{height:100%;border-radius:2px;position:absolute;left:0;top:0}
-.net-status{font-weight:700}
-.net-status.s2{color:var(--g)}.net-status.s3{color:var(--p)}.net-status.s4{color:var(--w)}.net-status.s5{color:var(--r)}
-
-/* Elements */
-.elem-tree{font-family:'Consolas','Monaco',monospace;font-size:10px;line-height:1.6}
-.elem-node{padding:1px 0;cursor:pointer;white-space:nowrap}
-.elem-node:hover{background:rgba(70,128,255,.08)}
-.elem-tag{color:#e06c75}.elem-attr{color:#d19a66}.elem-str{color:#98c379}.elem-text{color:var(--muted);font-style:italic}
-.elem-toggle{display:inline-block;width:12px;color:var(--muted);cursor:pointer;text-align:center;font-size:9px}
-.elem-picker-btn{font-size:14px;padding:2px 6px;border-radius:4px;cursor:pointer;border:1px solid var(--border);background:none;color:var(--muted);transition:all .12s}
-.elem-picker-btn.active{background:var(--p);color:#fff;border-color:var(--p)}
+/* SEOZ Inspector CSS lived here pre-v1.10.135 (`.inspector-drawer`,
+   `.inspector-hdr`, `.insp-*`, `.console-entry`, `.net-table`,
+   `.elem-tree`). It moved to inspector-window.html when the inspector
+   became its own BrowserWindow. The chrome renderer no longer renders
+   inspector chrome of any kind — see seoz.inspectorBridge in preload.js. */
 
 /* ── UPDATE BANNER ── */
 .update-banner{
@@ -3902,9 +3815,12 @@ body.no-seoz .seoz-panel { display:none !important }
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
         <button class="bm-star" id="siteInfoBtn" onclick="toggleSiteInfo(event)" title="Webbplatsinformation" aria-label="Webbplatsinformation" style="margin-left:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
-        <!-- URL suggest dropdown is now a sibling WebContentsView
-             (see main.js _ensureUrlSuggestView). It floats above the
-             page WebContentsView instead of competing via clip-from-top. -->
+        <!-- URL suggest dropdown — DOM overlay (v1.10.135). Lives in
+             chrome renderer so it scales correctly under DevTools
+             Device Mode. Tab WebContentsView is at z=0 (bottom) thanks
+             to addChildView(view, 0), so this dropdown extending below
+             the URL bar still renders above page content. -->
+        <div class="url-suggest" id="urlSuggestPanel" role="listbox" aria-label="URL-förslag"></div>
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow" aria-label="Öppna SEOZ Flow"><svg width="17" height="17" viewBox="0 0 200 200" fill="none" aria-hidden="true"><circle cx="100" cy="100" r="8" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
@@ -4282,37 +4198,13 @@ body.no-seoz .seoz-panel { display:none !important }
         </div>
       </div>
       <!-- Voice button moved to dock sidebar -->
-      <!-- SEOZ Inspector drawer -->
-      <div class="inspector-drawer" id="inspectorDrawer">
-        <div class="inspector-hdr" id="inspectorHdr">
-          <div class="inspector-hdr-title"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>SEOZ Inspector</div>
-          <div class="inspector-tabs" id="inspectorTabs">
-            <div class="inspector-tab active" data-tab="overview" onclick="inspectorSwitchTab('overview')">Översikt</div>
-            <div class="inspector-tab" data-tab="meta" onclick="inspectorSwitchTab('meta')">Meta</div>
-            <div class="inspector-tab" data-tab="headings" onclick="inspectorSwitchTab('headings')">Rubriker</div>
-            <div class="inspector-tab" data-tab="links" onclick="inspectorSwitchTab('links')">Länkar</div>
-            <div class="inspector-tab" data-tab="images" onclick="inspectorSwitchTab('images')">Bilder</div>
-            <div class="inspector-tab" data-tab="schema" onclick="inspectorSwitchTab('schema')">Schema</div>
-            <div class="inspector-tab" data-tab="perf" onclick="inspectorSwitchTab('perf')">Prestanda</div>
-            <div class="inspector-tab" data-tab="console" onclick="inspectorSwitchTab('console')">Konsol</div>
-            <div class="inspector-tab" data-tab="network" onclick="inspectorSwitchTab('network')">Nätverk</div>
-            <div class="inspector-tab" data-tab="elements" onclick="inspectorSwitchTab('elements')">Element</div>
-            <div class="inspector-tab" data-tab="source" onclick="inspectorSwitchTab('source')">HTML</div>
-            <div class="inspector-tab" data-tab="raw" onclick="inspectorSwitchTab('raw')">Rådata</div>
-          </div>
-          <div class="inspector-hdr-spacer"></div>
-          <button class="inspector-btn" id="elemPickerBtn" onclick="toggleElementPicker()" title="Välj element" style="font-size:14px;display:none">⊹</button>
-          <button class="inspector-btn" onclick="runInspector()" title="Uppdatera analys">↻</button>
-          <button class="inspector-btn" onclick="copyInspectorData()" title="Kopiera JSON" aria-label="Kopiera JSON"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg></button>
-          <button class="inspector-btn" onclick="closeInspector()" title="Stäng"><svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg></button>
-        </div>
-        <div class="inspector-body" id="inspectorBody">
-          <div style="text-align:center;padding:30px;color:var(--muted)">Tryck ↻ eller F12 för att analysera sidan</div>
-        </div>
-        <!-- Bottom-right resize grip — visible only when .floating class
-             is set (i.e. user dragged inspector off the bottom dock). -->
-        <div class="inspector-resize" id="inspectorResize" title="Dra för att ändra storlek"></div>
-      </div>
+      <!-- SEOZ Inspector — moved to a separate BrowserWindow in
+           v1.10.135 (DevTools-style). Markup, CSS and drag-resize JS
+           previously here are gone; the chrome renderer is now only
+           the data provider for that window. See:
+             - src/renderer/inspector-window.html (UI)
+             - src/preload/inspector-window-preload.js (window bridge)
+             - main.js inspector-window section (BrowserWindow lifecycle) -->
     </div>
 
     <!-- SEOZ Panel -->
@@ -5109,8 +5001,8 @@ const _OVERLAY_OPEN_SELECTOR = [
   '#saveTabsModal.open',
   // Side panels / drawers
   // '#seozPanel.open' — flex sibling, shrinks page via layout already.
-  // '#inspectorDrawer.open' — floating panel with body.inspector-open
-  //  setting --page-bottom-clip; doesn't need hide.
+  // (#inspectorDrawer was removed in v1.10.135 — inspector is its own
+  // BrowserWindow now and doesn't need page-clipping at all.)
   '#historyOverlay.open',
   '#ppForm.open',
   // (.toast.show removed v1.10.134 — toast() uses .toast.on, this
@@ -5777,6 +5669,25 @@ function _attachWebviewListeners(el, tabId) {
     // tab — background tabs hitting this URL are typically OAuth
     // redirects we don't want to interrupt.
     if (_isActive()) _maybeShowGoogleRejectionBanner(e.url)
+    // Reset the inspector window's console buffer + push fresh
+    // page-analysis on top-level navigations of the active tab. Only
+    // the active tab is visible in the inspector — background tabs'
+    // navigations don't matter to the window.
+    if (_isActive()) {
+      try { consoleMessages = [] } catch (_) {}
+      try { SE.inspectorBridge?.sendConsoleClear?.() } catch (_) {}
+      try {
+        const url = e.url || (t && t.url) || ''
+        const scheme = url.startsWith('https://') ? 'https' :
+                       url.startsWith('http://')  ? 'http'  :
+                       url.startsWith('seoz://')  ? 'seoz'  :
+                       url.includes(':') ? url.split(':')[0] : ''
+        SE.inspectorBridge?.sendActiveTab?.({ url, title: t?.title || '', scheme })
+      } catch (_) {}
+      // Defer the analyze-run so the page has a chance to settle —
+      // resource-timing entries arrive after did-navigate fires.
+      setTimeout(() => { if (_inspectorOpen && _isActive()) _inspectorRunAnalyze() }, 600)
+    }
   })
 
   // Password autofill IPC — guest webview-preload.js sends these.
@@ -5886,11 +5797,11 @@ function _attachWebviewListeners(el, tabId) {
       if (!_isActive()) return
       try {
         const data = JSON.parse(e.message.replace('[SEOZ-PICK]', ''))
-        if (typeof elemPickerActive !== 'undefined') {
-          elemPickerActive = false
-          const btn = document.getElementById('elemPickerBtn')
-          if (btn) btn.classList.remove('active')
-        }
+        // Tear down the in-page picker overlay — same JS the inspector
+        // window would have sent via inspectorBridge.togglePicker(false),
+        // but we run it inline so the highlight box clears immediately
+        // even if the inspector window has been closed since picker
+        // start.
         el.executeJavaScript(`
           if (window.__seozPicker) {
             document.removeEventListener('mousemove', window.__seozPickerHandler, true);
@@ -5900,35 +5811,28 @@ function _attachWebviewListeners(el, tabId) {
             window.__seozPicker = false;
           }
         `)
-        if (typeof inspectorSwitchTab === 'function') inspectorSwitchTab('elements')
-        const body = document.getElementById('inspectorBody')
-        if (body && typeof esc === 'function') {
-          let html = '<div class="insp-section"><div class="insp-section-title">Valt element</div>'
-          html += '<div class="insp-row"><div class="insp-label">Tagg</div><div class="insp-value"><span class="elem-tag">' + esc(data.tag) + '</span></div></div>'
-          if (data.id) html += '<div class="insp-row"><div class="insp-label">ID</div><div class="insp-value">#' + esc(data.id) + '</div></div>'
-          if (data.class) html += '<div class="insp-row"><div class="insp-label">Klass</div><div class="insp-value">' + esc(data.class) + '</div></div>'
-          if (data.text) html += '<div class="insp-row"><div class="insp-label">Text</div><div class="insp-value">' + esc(data.text) + '</div></div>'
-          html += '<div class="insp-row"><div class="insp-label">HTML</div><div class="insp-value"><div class="insp-code">' + esc(data.html) + '</div></div></div>'
-          html += '</div>'
-          body.innerHTML = html
-        }
+        // Forward the pick to the inspector window — main drops the
+        // event silently if no window is open, so this is safe to call
+        // unconditionally.
+        try { SE.inspectorBridge?.sendElementPicked?.(data) } catch (_) {}
       } catch(_) {}
       return
     }
     if (typeof consoleMessages !== 'undefined') {
       const types = { 0: 'info', 1: 'info', 2: 'warn', 3: 'error' }
-      consoleMessages.push({
+      const entry = {
         type: types[e.level] || 'info',
         message: e.message,
         source: e.sourceId || '',
         line: e.lineNumber || 0,
-        time: Date.now()
-      })
+        time: Date.now(),
+      }
+      consoleMessages.push(entry)
       if (consoleMessages.length > 500) consoleMessages.shift()
-      // Live update if console tab is open
-      if (_isActive() && typeof inspectorTab !== 'undefined' && inspectorTab === 'console') {
-        const drawer = document.getElementById('inspectorDrawer')
-        if (drawer && drawer.classList.contains('open') && typeof renderInspector === 'function') renderInspector()
+      // Forward to the inspector window if it's open. Main drops the
+      // event when the window is closed so no explicit gate needed.
+      if (_isActive()) {
+        try { SE.inspectorBridge?.sendConsoleMessage?.(entry) } catch (_) {}
       }
     }
   })
@@ -9294,14 +9198,13 @@ function renderTabs() {
         // 420ms intent delay — quick hovers (e.g. moving the cursor
         // across the tab strip) don't pop a tooltip.
         window._tabTipShowTimer = setTimeout(() => {
-          if (!window.seoz?.tooltip) return
           let domain = ''
           try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
           // First show: render text content immediately + any cached
           // preview. Don't block on capturePage — that takes 50-200ms
           // and would make the tooltip feel sluggish.
           const cached = _tabPreviewCache.get(tab.id)
-          window.seoz.tooltip.show(left, rect.bottom + 4, {
+          _tabTipShow(left, rect.bottom + 4, {
             tabId: tab.id,
             title: tab.title || tab.url || '',
             url: tab.url || '',
@@ -9321,12 +9224,9 @@ function renderTabs() {
         // Short grace before hiding — gives the user a moment in case
         // the cursor is just transiting between adjacent tabs OR
         // moving onto the tooltip itself to click an action button.
-        // The tooltip's renderer also signals back via cursor-on-card
-        // to cancel this timer mid-flight if the cursor lands on the
-        // card (see _tabTipInstallTooltipBridges below).
-        window._tabTipHideTimer = setTimeout(() => {
-          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
-        }, 180)
+        // The tooltip's mouseenter handler cancels this timer
+        // mid-flight if the cursor lands on the card.
+        window._tabTipHideTimer = setTimeout(_tabTipHide, 180)
       })
       // DIAGNOSTIC v1.10.118: minimal contextmenu handler.
       // Tooltip is already disabled (v1.10.117). Now we also short-
@@ -9537,7 +9437,7 @@ const _tabPreviewCache = new Map()
 // has hovered another tab or moved away by the time the capture
 // resolves, we skip the update — no point pushing a stale preview.
 async function _captureAndUpdateTooltip(tab, anchor) {
-  if (!tab || !window.seoz?.tooltip) return
+  if (!tab) return
   const handle = _tabWebviews.get(tab.id)
   if (!handle || typeof handle.capturePage !== 'function') return
   // Skip overlay tabs (home/mail/settings) — capturing them gives a
@@ -9563,9 +9463,13 @@ async function _captureAndUpdateTooltip(tab, anchor) {
   // we skip. If it's null we assume current tooltip is for our tab
   // (no stronger guarantee without round-tripping through main).
   if (window._tabTipShowTimer) return
+  // Tooltip might have been hidden between capture start and now.
+  // Only update if it's still showing for the same tab.
+  const ttEl = document.getElementById('tabTooltipEl')
+  if (!ttEl || !ttEl.classList.contains('open') || Number(ttEl.dataset.tabId) !== startTabId) return
   let domain = ''
   try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
-  window.seoz.tooltip.show(anchor.left, anchor.top, {
+  _tabTipShow(anchor.left, anchor.top, {
     tabId: startTabId,
     title: tab.title || tab.url || '',
     url: tab.url || '',
@@ -9575,39 +9479,78 @@ async function _captureAndUpdateTooltip(tab, anchor) {
   })
 }
 
-// ── Floating-window tooltip bridge ──────────────────────────────────
-// The tooltip lives in its own transparent BrowserWindow (see main.js
-// _tooltipWin + tooltip-preload.js). It signals back three things:
-//
-//   1) cursor-on-card: cursor entered or left the card. We cancel our
-//      pending hide timer when the cursor lands on it so the tooltip
-//      stays visible while the user reaches for an action button.
-//   2) action: user clicked Fäst / Splitvy. We route into the same
-//      logic the v1.10.106 in-DOM data-tip-action handler used.
-//   3) force-hide: main hid the tooltip because the window lost
-//      focus / was minimized. We clear any pending timers so a stale
-//      delayed show doesn't pop it back up after defocus.
-;(function _wireTooltipBridge() {
-  if (!window.seoz?.tooltip) return
-  if (typeof window.seoz.tooltip.onCursorOnCard === 'function') {
-    window.seoz.tooltip.onCursorOnCard((on) => {
-      if (on) {
-        // Cursor on tooltip → cancel any pending hide so the tooltip
-        // doesn't fade while the user is on it.
-        clearTimeout(window._tabTipHideTimer)
-      } else {
-        // Cursor left tooltip → fade after a short delay (matching
-        // the tab mouseleave grace).
-        clearTimeout(window._tabTipHideTimer)
-        window._tabTipHideTimer = setTimeout(() => {
-          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
-        }, 180)
-      }
-    })
+// ── Tab-tooltip DOM overlay (v1.10.135) ─────────────────────────────
+// Replaces the previous sibling-WebContentsView (_ensureTooltipView in
+// main.js) with a plain DOM overlay. Same visual + behaviour but
+// works correctly under DevTools Device Mode because positioning is
+// in renderer coordinates instead of BrowserWindow pixel-space.
+function _tabTipShow(anchorX, anchorY, data) {
+  const el = document.getElementById('tabTooltipEl')
+  if (!el) return
+  // Update content
+  document.getElementById('ttTitle').textContent  = data.title || data.url || ''
+  document.getElementById('ttUrl').textContent    = data.url    || ''
+  document.getElementById('ttDomain').textContent = data.domain || ''
+  el.dataset.tabId = String(data.tabId || 0)
+
+  const fav = document.getElementById('ttFav')
+  if (data.favicon) {
+    if (fav.src !== data.favicon) fav.src = data.favicon
+  } else {
+    fav.removeAttribute('src')
+    fav.classList.remove('show')
   }
-  if (typeof window.seoz.tooltip.onAction === 'function') {
-    window.seoz.tooltip.onAction(({ action, tabId }) => {
-      tabId = Number(tabId) || 0
+
+  const preview = document.getElementById('ttPreview')
+  if (data.preview) {
+    if (preview.src !== data.preview) preview.src = data.preview
+  } else {
+    preview.removeAttribute('src')
+    preview.classList.remove('show')
+  }
+
+  // Open + position. Clamp to viewport so it doesn't get cut off at
+  // window edges. tooltip is fixed-positioned so coordinates are
+  // viewport-relative which matches anchorX/Y.
+  el.classList.add('open')
+  // Need bounds AFTER showing to measure. requestAnimationFrame so
+  // the browser has a frame to lay out.
+  requestAnimationFrame(() => {
+    const r = el.getBoundingClientRect()
+    const vw = document.documentElement.clientWidth
+    const vh = document.documentElement.clientHeight
+    let x = Math.max(4, Math.min(vw - r.width - 4, anchorX))
+    let y = Math.max(4, Math.min(vh - r.height - 4, anchorY))
+    el.style.left = x + 'px'
+    el.style.top  = y + 'px'
+  })
+}
+
+function _tabTipHide() {
+  const el = document.getElementById('tabTooltipEl')
+  if (!el) return
+  el.classList.remove('open')
+  el.dataset.tabId = ''
+}
+
+// Wire mouseenter/mouseleave on the tooltip card itself so we cancel
+// the hide timer when cursor lands on it (so user can click an
+// action button without the tooltip fading mid-reach), and the
+// action buttons.
+;(function _wireTabTip() {
+  const el = document.getElementById('tabTooltipEl')
+  if (!el) return
+  el.addEventListener('mouseenter', () => {
+    clearTimeout(window._tabTipHideTimer)
+  })
+  el.addEventListener('mouseleave', () => {
+    clearTimeout(window._tabTipHideTimer)
+    window._tabTipHideTimer = setTimeout(_tabTipHide, 180)
+  })
+  el.querySelectorAll('.tt-action').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action
+      const tabId = Number(el.dataset.tabId) || 0
       if (!tabId) return
       if (action === 'split') {
         if (activeId !== tabId) switchTab(tabId)
@@ -9616,14 +9559,12 @@ async function _captureAndUpdateTooltip(tab, anchor) {
       } else if (action === 'pin') {
         toast('Fästa flikar kommer i nästa version', '#94a3b8')
       }
+      _tabTipHide()
     })
-  }
-  // v1.10.116: removed onForceHide bridge — the WebContentsView
-  // tooltip is a child of the main window so blur/minimize hides
-  // it automatically (no ghost over other apps). The renderer's
-  // pending timers are bounded by 420ms / 180ms so even if they do
-  // fire after blur, the IPC just calls show() on a hidden view
-  // that's still child-of-occluded-parent. Harmless.
+  })
+})()
+
+;(function _wireTabContextMenuBridge() {
 
   // v1.10.118: native tab context menu — main calls Menu.popup()
   // and sends back the chosen action via IPC. Each action maps to
@@ -9840,6 +9781,28 @@ function switchTab(id) {
   // Refresh the preview thumbnail when the user comes back to a
   // tab — the page may have updated since it was last captured.
   if (tab && !isOverlayUrl(tab.url)) _scheduleTabPreviewCapture(id)
+  // Notify the inspector window so it can show "Analyserar..." while
+  // chrome runs analyzePage on the new active tab. Sent for every
+  // tab-switch — main short-circuits if the window is closed, so
+  // there's no perf impact from the unconditional send.
+  if (tab) {
+    try {
+      const url = tab.url || ''
+      const scheme = url.startsWith('https://') ? 'https' :
+                     url.startsWith('http://')  ? 'http'  :
+                     url.startsWith('seoz://')  ? 'seoz'  :
+                     url.includes(':') ? url.split(':')[0] : ''
+      SE.inspectorBridge?.sendActiveTab?.({ url, title: tab.title || '', scheme })
+    } catch (_) {}
+    // Also wipe the per-tab console buffer + push fresh page-analysis
+    // when the inspector is open, so the user always sees the active
+    // tab instead of stale data from the previous one.
+    if (_inspectorOpen) {
+      try { consoleMessages = [] } catch (_) {}
+      try { SE.inspectorBridge?.sendConsoleClear?.() } catch (_) {}
+      setTimeout(() => { if (_inspectorOpen) _inspectorRunAnalyze() }, 100)
+    }
+  }
 }
 
 function closeTab(e, id) {
@@ -10297,15 +10260,16 @@ function toggleDock() {
   }
 }
 
-// ── Dock-icon hover labels via floating WebContentsView ──────────
-// The in-DOM .dtt tooltips were getting clipped by the page
-// WebContentsView's z-order. We now render them via a single shared
-// chrome-label view (see main.js _ensureChromeLabelView) that sits
-// above the page in the contentView tree. The .dtt nodes still hold
-// the label text — we read textContent on mouseenter and forward it.
+// ── Dock-icon hover labels — DOM overlay (v1.10.135) ────────────────
+// Was a sibling chrome-label WebContentsView (v1.10.116-1.10.134).
+// Now a plain fixed-positioned <div> in the chrome renderer so it
+// reframes correctly under DevTools Device Mode. Page WebContentsView
+// is at z=0 (addChildView(view, 0)) so this DOM element renders
+// above tab content even when it sits over the page area.
 function _wireDockTooltips() {
   const dock = document.querySelector('.dock')
-  if (!dock || !window.seoz?.chromeLabel) return
+  const labelEl = document.getElementById('dockLabelEl')
+  if (!dock || !labelEl) return
   let _hoverTimer = null
   let _shown = false
   const showFor = (di) => {
@@ -10313,15 +10277,27 @@ function _wireDockTooltips() {
     if (!dtt) return
     const text = (dtt.textContent || '').trim()
     if (!text) return
+    labelEl.textContent = text
+    labelEl.classList.add('open')
+    // Position so the label sits to the LEFT of the dock icon, with
+    // the right-pointing arrow (::after) touching the icon. Measure
+    // post-render so we know the label's width.
     const r = di.getBoundingClientRect()
-    // anchorX = LEFT edge of the dock icon → label sits to its LEFT.
-    // anchorY = vertical centre of the icon.
-    window.seoz.chromeLabel.show(Math.round(r.left), Math.round(r.top + r.height / 2), text, 'left')
+    requestAnimationFrame(() => {
+      const lr = labelEl.getBoundingClientRect()
+      // Right edge of label aligns with left edge of icon (minus a
+      // tiny gap so the arrow has visual space).
+      const x = Math.max(2, Math.round(r.left - lr.width - 4))
+      // Vertically centre on the icon.
+      const y = Math.max(2, Math.round(r.top + r.height / 2 - lr.height / 2))
+      labelEl.style.left = x + 'px'
+      labelEl.style.top  = y + 'px'
+    })
     _shown = true
   }
   const hide = () => {
     if (!_shown) return
-    try { window.seoz.chromeLabel.hide() } catch (_) {}
+    labelEl.classList.remove('open')
     _shown = false
   }
   // Event delegation — one set of listeners covers all .di children
@@ -14348,7 +14324,7 @@ function showCtx(e, items) {
   try {
     clearTimeout(window._tabTipShowTimer)
     clearTimeout(window._tabTipHideTimer)
-    if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
+    if (typeof _tabTipHide === 'function') _tabTipHide()
   } catch (_) {}
 
   // Snapshot the click coords — the MouseEvent itself is fine to
@@ -15913,18 +15889,25 @@ function clearHistory() {
 // ══════════════════════════════════════════════════════
 //  URL AUTOCOMPLETE
 //
-//  v1.10.133: dropdown is now rendered by a separate WebContentsView
-//  (see main.js _ensureUrlSuggestView) so it z-orders above the page
-//  WebContentsView. Chrome still owns the source of truth (history
-//  data + match logic + keyboard selection) and pushes the rendered
-//  list into the popup via IPC. Popup emits hover/pick back.
+//  v1.10.135: dropdown is back to a DOM overlay inside the chrome
+//  renderer. The previous sibling-WebContentsView approach worked
+//  visually but broke under DevTools Device Mode (the popup view's
+//  bounds live in BrowserWindow pixel-space, not the renderer's
+//  CSS viewport, so it floated detached when the renderer was
+//  scaled). Z-order is no longer a problem either — addChildView(
+//  view, 0) (v1.10.134) keeps tabs at the bottom of the stack, so
+//  DOM elements painted by the chrome renderer DO render above the
+//  active tab WebContentsView even when they extend below the URL
+//  bar visually.
 // ══════════════════════════════════════════════════════
 ;(function(){
   const input = document.getElementById('urlInput')
-  const wrap = input?.closest('.url-wrap')
+  const wrap  = input?.closest('.url-wrap')
+  const panel = document.getElementById('urlSuggestPanel')
+  if (!input || !wrap || !panel) return
+
   let selIdx = -1
   let matches = []
-  let _open = false
   let _query = ''
 
   function dedupe(arr) {
@@ -15932,20 +15915,47 @@ function clearHistory() {
     return arr.filter(h => { if (seen.has(h.url)) return false; seen.add(h.url); return true })
   }
 
-  function pushItems() {
-    if (!_open) return
-    if (!window.seoz?.urlSuggest) return
-    if (!wrap) return
-    const r = wrap.getBoundingClientRect()
-    // anchor at the bottom-left of the URL bar wrapper, full width.
-    window.seoz.urlSuggest.show(
-      Math.round(r.left),
-      Math.round(r.bottom + 4),
-      Math.round(r.width),
-      matches,
-      selIdx,
-      _query,
-    )
+  function escHTML(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
+
+  function highlight(text, q) {
+    if (!q) return escHTML(text)
+    const t = String(text || '')
+    const i = t.toLowerCase().indexOf(String(q).toLowerCase())
+    if (i === -1) return escHTML(t)
+    return escHTML(t.slice(0, i)) +
+           '<span class="url-sg-match">' + escHTML(t.slice(i, i + q.length)) + '</span>' +
+           escHTML(t.slice(i + q.length))
+  }
+
+  function render() {
+    panel.innerHTML = matches.map((h, i) => {
+      const fav = h.favicon
+        ? `<img src="${escHTML(h.favicon)}" onerror="this.style.display='none'">`
+        : '<span style="width:14px;flex-shrink:0"></span>'
+      return `<div class="url-sg ${i === selIdx ? 'sel' : ''}" data-i="${i}" role="option" aria-selected="${i === selIdx}">
+        ${fav}
+        <div class="url-sg-info">
+          <div class="url-sg-title">${highlight(h.title || '', _query)}</div>
+          <div class="url-sg-url">${highlight(h.url || '', _query)}</div>
+        </div>
+      </div>`
+    }).join('')
+  }
+
+  function updateSelHighlight() {
+    panel.querySelectorAll('.url-sg').forEach((el, i) => {
+      const sel = i === selIdx
+      el.classList.toggle('sel', sel)
+      el.setAttribute('aria-selected', sel ? 'true' : 'false')
+    })
+    if (selIdx >= 0) {
+      const el = panel.querySelectorAll('.url-sg')[selIdx]
+      if (el) el.scrollIntoView({ block: 'nearest' })
+    }
   }
 
   function showSuggestions() {
@@ -15966,49 +15976,66 @@ function clearHistory() {
         const bIsRoot = bPath === '/' || bPath === ''
         if (aIsRoot && !bIsRoot) return -1
         if (!aIsRoot && bIsRoot) return 1
-        // Then shorter paths first
         return aPath.length - bPath.length
       } catch(_) { return 0 }
     }).slice(0, 8)
     if (!matches.length) { hideSuggestions(); return }
     selIdx = -1
-    _open = true
-    pushItems()
+    render()
+    panel.classList.add('open')
   }
 
   function hideSuggestions() {
-    _open = false
     selIdx = -1
     matches = []
-    try { window.seoz?.urlSuggest?.hide?.() } catch (_) {}
+    panel.classList.remove('open')
+    panel.innerHTML = ''
   }
 
-  function updateSel() {
-    try { window.seoz?.urlSuggest?.updateSel?.(selIdx) } catch (_) {}
-  }
+  // Click on item → navigate. mousedown so we fire before the URL
+  // input's blur handler hides us (blur uses 150ms grace, but
+  // mousedown fires first regardless).
+  panel.addEventListener('mousedown', (e) => {
+    e.preventDefault() // don't steal focus from input mid-click
+    const item = e.target.closest && e.target.closest('.url-sg')
+    if (!item) return
+    const i = Number(item.dataset.i)
+    const h = matches[i]
+    if (h && h.url) {
+      hideSuggestions()
+      doNav(h.url)
+    }
+  })
+
+  // Hover → keep selIdx in sync so keyboard nav resumes from where
+  // the mouse last was.
+  panel.addEventListener('mouseover', (e) => {
+    const item = e.target.closest && e.target.closest('.url-sg')
+    if (!item) return
+    const i = Number(item.dataset.i)
+    if (i !== selIdx) {
+      selIdx = i
+      updateSelHighlight()
+    }
+  })
 
   input.addEventListener('input', showSuggestions)
   input.addEventListener('focus', () => { if (input.value.trim()) showSuggestions() })
-  // Delay hide so a click in the popup (which steals focus from the
-  // URL input → blur fires) can still register before we hide. The
-  // popup's mousedown handler emits 'pick' synchronously so 150ms is
-  // ample headroom.
+  // 150ms grace before hiding so a click on a panel item still
+  // registers (mousedown above fires before the input's blur
+  // synthesises a hide).
   input.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
 
-  // Window resize / scroll — reposition. The URL bar's bounds may
-  // change when the user resizes the chrome window.
-  window.addEventListener('resize', () => { if (_open) pushItems() })
-
   input.addEventListener('keydown', e => {
-    if (!_open || !matches.length) return
+    if (!matches.length || !panel.classList.contains('open')) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       selIdx = (selIdx + 1) % matches.length
-      updateSel()
+      updateSelHighlight()
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       selIdx = selIdx <= 0 ? matches.length - 1 : selIdx - 1
-      updateSel()
+      updateSelHighlight()
     } else if (e.key === 'Enter' && selIdx >= 0) {
       e.preventDefault()
       const url = matches[selIdx].url
@@ -16018,23 +16045,6 @@ function clearHistory() {
       hideSuggestions()
     }
   })
-
-  // Wire popup → chrome events.
-  if (window.seoz?.urlSuggest?.onPick) {
-    window.seoz.urlSuggest.onPick((url) => {
-      hideSuggestions()
-      if (url) doNav(url)
-    })
-  }
-  if (window.seoz?.urlSuggest?.onHover) {
-    window.seoz.urlSuggest.onHover((idx) => {
-      if (typeof idx === 'number' && idx >= 0 && idx < matches.length) {
-        selIdx = idx
-        // No need to push back to popup — popup updates its own
-        // highlight on hover. We just record state for keyboard nav.
-      }
-    })
-  }
 })()
 
 // ══════════════════════════════════════════════════════
@@ -19511,182 +19521,591 @@ window.__mcpExecute = async function(toolName, args, sessionId) {
 }
 
 // ══════════════════════════════════════════════════════
-//  SEOZ INSPECTOR — full page SEO analysis
+//  SEOZ INSPECTOR — chrome-side data provider for the
+//  separate inspector BrowserWindow (v1.10.135+).
+//
+//  Pre-v1.10.135 the inspector lived as an in-DOM drawer here. All
+//  the renderInsp* functions, the drag-resize IIFE, the in-DOM
+//  state — gone. What remains is:
+//    1. analyzePage JS string (run on active tab via wv.executeJS)
+//    2. Source / Network / Elements wv.executeJS strings
+//    3. `_inspectorOpen` mirror-state flag synced with main
+//    4. Bridge listeners that respond to main's IPC requests
+//    5. Tiny openInspector/closeInspector/toggleInspector wrappers
+//       around seoz.inspectorBridge for legacy call sites
+//
+//  Console buffer (`consoleMessages`) lives further down — it's the
+//  same array consumed by the active-tab console-message listener.
 // ══════════════════════════════════════════════════════
-let inspectorData = null
-let inspectorTab = 'overview'
 
-function openInspector() {
-  const drawer = document.getElementById('inspectorDrawer')
-  drawer.classList.add('open')
-  // body.inspector-open + --page-bottom-clip together shrink each
-  // .tab-handle from the bottom by enough to leave the inspector's
-  // area exposed (chrome bg). Without this the drawer overlays the
-  // page and everything went black (the generic clip-from-top
-  // mechanism doesn't fit a bottom-anchored panel).
-  document.body.classList.add('inspector-open')
-  // Set initial clip — drawer hasn't been measured yet at this exact
-  // microtask, so wait one frame before reading its bounds.
-  requestAnimationFrame(() => { try { drawer._syncPageClip && drawer._syncPageClip() } catch (_) {} })
-  runInspector()
-}
-function closeInspector() {
-  const drawer = document.getElementById('inspectorDrawer')
-  drawer.classList.remove('open', 'floating')
-  // Clear all inline styles left by drag/resize so the next open
-  // returns to the default full-width bottom-dock layout.
-  drawer.style.cssText = ''
-  document.body.classList.remove('inspector-open')
-  document.documentElement.style.removeProperty('--page-bottom-clip')
-}
-function toggleInspector() {
-  const d = document.getElementById('inspectorDrawer')
-  if (d.classList.contains('open')) closeInspector()
-  else openInspector()
-}
+// Tracks whether the inspector BrowserWindow is currently open. Set
+// when chrome calls open(), cleared when the window emits 'closed'
+// back to chrome via main.
+let _inspectorOpen = false
 
-function inspectorSwitchTab(tab) {
-  inspectorTab = tab
-  document.querySelectorAll('.inspector-tab').forEach(t => t.classList.toggle('active', t.dataset.tab === tab))
-  renderInspector()
-}
+// Cache of the most recent analyzePage blob for the active tab —
+// used to short-circuit duplicate analyses on tab-switch when the
+// data hasn't changed (negligible perf win, but also keeps the
+// inspector window from flicker-clearing on a fast switch-back).
+let _lastInspectorData = null
 
-async function runInspector() {
-  const body = document.getElementById('inspectorBody')
-  body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar sida...</div>'
+// Page-analysis JS — runs in the active tab's wv.executeJavaScript.
+// Returns the full `data` blob the inspector window renders.
+const _INSPECTOR_ANALYZE_JS = `(function(){
+  const d = document;
+  const url = location.href;
+  const canonical = d.querySelector('link[rel="canonical"]');
+  const title = d.title || '';
+  const metaDesc = d.querySelector('meta[name="description"]')?.content || '';
+  const metaKw = d.querySelector('meta[name="keywords"]')?.content || '';
+  const robots = d.querySelector('meta[name="robots"]')?.content || '';
+  const ogTitle = d.querySelector('meta[property="og:title"]')?.content || '';
+  const ogDesc = d.querySelector('meta[property="og:description"]')?.content || '';
+  const ogImage = d.querySelector('meta[property="og:image"]')?.content || '';
+  const ogType = d.querySelector('meta[property="og:type"]')?.content || '';
+  const ogUrl = d.querySelector('meta[property="og:url"]')?.content || '';
+  const ogSiteName = d.querySelector('meta[property="og:site_name"]')?.content || '';
+  const twCard = d.querySelector('meta[name="twitter:card"]')?.content || '';
+  const twTitle = d.querySelector('meta[name="twitter:title"]')?.content || '';
+  const twDesc = d.querySelector('meta[name="twitter:description"]')?.content || '';
+  const twImage = d.querySelector('meta[name="twitter:image"]')?.content || '';
+  const viewport = d.querySelector('meta[name="viewport"]')?.content || '';
+  const charset = d.characterSet || '';
+  const lang = d.documentElement.lang || '';
+  const generator = d.querySelector('meta[name="generator"]')?.content || '';
 
+  const headings = [];
+  d.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
+    headings.push({ level: parseInt(h.tagName[1]), text: h.textContent.trim().substring(0,200) });
+  });
+
+  const links = [];
+  const intLinks = new Set();
+  const extLinks = new Set();
+  d.querySelectorAll('a[href]').forEach(a => {
+    const href = a.href;
+    const text = a.textContent.trim().substring(0,100);
+    const rel = a.getAttribute('rel') || '';
+    const isExt = href && !href.startsWith(location.origin) && href.startsWith('http');
+    if (isExt) extLinks.add(href); else if (href.startsWith(location.origin)) intLinks.add(href);
+    if (links.length < 200) links.push({ href, text, rel, external: isExt, nofollow: rel.includes('nofollow') });
+  });
+
+  const images = [];
+  d.querySelectorAll('img').forEach(img => {
+    images.push({
+      src: img.src?.substring(0,300) || '',
+      alt: img.alt || '',
+      width: img.naturalWidth || img.width || 0,
+      height: img.naturalHeight || img.height || 0,
+      loading: img.loading || '',
+      hasAlt: !!img.alt,
+    });
+  });
+  const imagesNoAlt = images.filter(i => !i.hasAlt).length;
+
+  const schemas = [];
+  d.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
+    try { schemas.push(JSON.parse(s.textContent)); } catch(_) { schemas.push({_error:'Parse error', raw:s.textContent.substring(0,500)}); }
+  });
+
+  const perf = performance.getEntriesByType('navigation')[0] || {};
+  const resources = performance.getEntriesByType('resource');
+  const totalSize = resources.reduce((s,r) => s + (r.transferSize || 0), 0);
+  const jsResources = resources.filter(r => r.initiatorType === 'script' || r.name.includes('.js'));
+  const cssResources = resources.filter(r => r.initiatorType === 'css' || r.name.includes('.css'));
+  const imgResources = resources.filter(r => r.initiatorType === 'img' || r.name.match(/\\.(png|jpg|jpeg|gif|webp|svg|avif)/i));
+
+  const bodyText = d.body?.innerText || '';
+  const wordCount = bodyText.split(/\\s+/).filter(w => w.length > 0).length;
+
+  const hreflangs = [];
+  d.querySelectorAll('link[rel="alternate"][hreflang]').forEach(l => {
+    hreflangs.push({ lang: l.hreflang, href: l.href });
+  });
+
+  const favicon = d.querySelector('link[rel="icon"]')?.href || d.querySelector('link[rel="shortcut icon"]')?.href || '';
+
+  const hasH1 = headings.some(h => h.level === 1);
+  const h1Count = headings.filter(h => h.level === 1).length;
+
+  return {
+    url, canonical: canonical?.href || '', title, titleLen: title.length,
+    metaDesc, metaDescLen: metaDesc.length, metaKw, robots,
+    og: { title:ogTitle, desc:ogDesc, image:ogImage, type:ogType, url:ogUrl, siteName:ogSiteName },
+    tw: { card:twCard, title:twTitle, desc:twDesc, image:twImage },
+    viewport, charset, lang, generator, favicon,
+    headings, h1Count, hasH1,
+    links, intLinkCount: intLinks.size, extLinkCount: extLinks.size, totalLinks: links.length,
+    images, imagesNoAlt, imageCount: images.length,
+    schemas,
+    hreflangs,
+    wordCount,
+    perf: {
+      domContentLoaded: Math.round(perf.domContentLoadedEventEnd - perf.startTime || 0),
+      loadComplete: Math.round(perf.loadEventEnd - perf.startTime || 0),
+      ttfb: Math.round(perf.responseStart - perf.startTime || 0),
+      domInteractive: Math.round(perf.domInteractive - perf.startTime || 0),
+      resourceCount: resources.length,
+      totalTransferSize: totalSize,
+      jsCount: jsResources.length,
+      cssCount: cssResources.length,
+      imgCount: imgResources.length,
+      jsSize: jsResources.reduce((s,r) => s + (r.transferSize||0), 0),
+      cssSize: cssResources.reduce((s,r) => s + (r.transferSize||0), 0),
+      imgSize: imgResources.reduce((s,r) => s + (r.transferSize||0), 0),
+    },
+  };
+})()`
+
+// Page-source extractor — returns the full HTML outerHTML with a
+// reconstructed DOCTYPE prefix so the inspector window can show
+// what the server actually sent (after JS rewrites).
+const _INSPECTOR_SOURCE_JS = `(function(){
+  const doctype = document.doctype
+    ? '<!DOCTYPE ' + document.doctype.name + (document.doctype.publicId ? ' PUBLIC "' + document.doctype.publicId + '"' : '') + (document.doctype.systemId ? ' "' + document.doctype.systemId + '"' : '') + '>\\n'
+    : '';
+  return doctype + document.documentElement.outerHTML;
+})()`
+
+// Resource-timing extractor — returns the last 300 entries from
+// performance.getEntriesByType('resource').
+const _INSPECTOR_NETWORK_JS = `(function(){
+  const entries = performance.getEntriesByType('resource');
+  return entries.map(e => ({
+    name: e.name,
+    type: e.initiatorType || 'other',
+    size: e.transferSize || 0,
+    duration: Math.round(e.duration),
+    start: Math.round(e.startTime),
+    status: 200,
+  })).slice(-300);
+})()`
+
+// Tracking-tag detector — walks <script src>, inline scripts, and a
+// short list of well-known globals to identify analytics / marketing
+// / consent / chat services on the page. Output:
+//   { items: [{category, name, id, src, signal}], counts: {...},
+//     dataLayer: {length, sample[]}, scriptCount, cookieCount,
+//     inlineCount }
+// Categories: tagManager | analytics | marketing | chat | consent | other.
+// script-src is the strongest signal so we record those first and
+// dedupe later inline/global detections by name+id.
+const _INSPECTOR_TRACKING_JS = `(function(){
+  const found = [];
+  function add(category, name, id, src, signal) {
+    found.push({ category, name, id: id || '', src: src || '', signal });
+  }
+  const scripts = Array.from(document.querySelectorAll('script[src]'));
+  const inline  = Array.from(document.querySelectorAll('script:not([src])'));
+  const inlineText = inline.map(s => s.textContent || '').join('\\n');
+
+  const patterns = [
+    { cat:'tagManager', name:'Google Tag Manager', re:/googletagmanager\\.com\\/gtm\\.js\\?id=([\\w-]+)/, idGroup:1 },
+    { cat:'tagManager', name:'Tealium iQ', re:/tags\\.tiqcdn\\.com/ },
+    { cat:'tagManager', name:'Adobe Launch / DTM', re:/assets\\.adobedtm\\.com/ },
+    { cat:'analytics', name:'Google Analytics 4', re:/googletagmanager\\.com\\/gtag\\/js\\?id=(G-[\\w-]+)/, idGroup:1 },
+    { cat:'analytics', name:'Universal Analytics (UA)', re:/google-analytics\\.com\\/analytics\\.js/ },
+    { cat:'analytics', name:'Microsoft Clarity', re:/clarity\\.ms\\/tag\\/(\\w+)/, idGroup:1 },
+    { cat:'analytics', name:'Hotjar', re:/static\\.hotjar\\.com\\/c\\/hotjar-(\\d+)/, idGroup:1 },
+    { cat:'analytics', name:'Mixpanel', re:/cdn\\.mxpnl\\.com/ },
+    { cat:'analytics', name:'Amplitude', re:/cdn\\.amplitude\\.com/ },
+    { cat:'analytics', name:'Segment', re:/cdn\\.segment\\.com\\/analytics\\.js/ },
+    { cat:'analytics', name:'Plausible', re:/plausible\\.io\\/js\\/script/ },
+    { cat:'analytics', name:'Fathom', re:/cdn\\.usefathom\\.com/ },
+    { cat:'analytics', name:'Adobe Analytics', re:/sc\\.omtrdc\\.net|2o7\\.net/ },
+    { cat:'analytics', name:'Matomo / Piwik', re:/(matomo|piwik)\\.js/ },
+    { cat:'marketing', name:'Meta Pixel (Facebook)', re:/connect\\.facebook\\.net.*fbevents\\.js/ },
+    { cat:'marketing', name:'LinkedIn Insight Tag', re:/snap\\.licdn\\.com\\/li\\.lms-analytics\\/insight\\.min\\.js/ },
+    { cat:'marketing', name:'TikTok Pixel', re:/analytics\\.tiktok\\.com/ },
+    { cat:'marketing', name:'Pinterest Tag', re:/s\\.pinimg\\.com\\/ct\\/core\\.js/ },
+    { cat:'marketing', name:'Snapchat Pixel', re:/sc-static\\.net\\/scevent/ },
+    { cat:'marketing', name:'Twitter / X Pixel', re:/static\\.ads-twitter\\.com\\/uwt\\.js/ },
+    { cat:'marketing', name:'Reddit Pixel', re:/redditstatic\\.com\\/ads\\/pixel/ },
+    { cat:'marketing', name:'Bing UET (Microsoft Ads)', re:/bat\\.bing\\.com\\/bat\\.js/ },
+    { cat:'marketing', name:'Criteo', re:/static\\.criteo\\.net/ },
+    { cat:'marketing', name:'Outbrain', re:/widgets\\.outbrain\\.com/ },
+    { cat:'marketing', name:'Taboola', re:/cdn\\.taboola\\.com/ },
+    { cat:'marketing', name:'HubSpot', re:/js\\.hs-(scripts|analytics|forms-na1|banner)\\.com|js\\.hsforms\\.net/ },
+    { cat:'marketing', name:'Klaviyo', re:/static\\.klaviyo\\.com/ },
+    { cat:'marketing', name:'Mailchimp', re:/chimpstatic\\.com/ },
+    { cat:'marketing', name:'ActiveCampaign', re:/trackcmp\\.net/ },
+    { cat:'chat', name:'Intercom', re:/widget\\.intercom\\.io/ },
+    { cat:'chat', name:'Drift', re:/js\\.driftt?\\.com/ },
+    { cat:'chat', name:'Zendesk', re:/static\\.zdassets\\.com|widget-mediator\\.zopim\\.com/ },
+    { cat:'chat', name:'Crisp', re:/client\\.crisp\\.chat/ },
+    { cat:'chat', name:'Tawk.to', re:/embed\\.tawk\\.to/ },
+    { cat:'chat', name:'Freshchat', re:/wchat\\.freshchat\\.com/ },
+    { cat:'chat', name:'Olark', re:/static\\.olark\\.com/ },
+    { cat:'chat', name:'LiveChat', re:/cdn\\.livechatinc\\.com/ },
+    { cat:'consent', name:'Cookiebot', re:/consent\\.cookiebot\\.com/ },
+    { cat:'consent', name:'OneTrust', re:/cdn\\.cookielaw\\.org|otSDKStub\\.js/ },
+    { cat:'consent', name:'CookieYes', re:/cookie-?yes\\.com/ },
+    { cat:'consent', name:'Usercentrics', re:/app\\.usercentrics\\.eu|privacy-proxy\\.usercentrics\\.eu/ },
+    { cat:'consent', name:'TrustArc', re:/consent\\.trustarc\\.com/ },
+    { cat:'consent', name:'Sourcepoint', re:/cdn\\.privacy-mgmt\\.com|sourcepoint\\.mgr\\.consensu\\.org/ },
+    { cat:'consent', name:'Iubenda', re:/cdn\\.iubenda\\.com/ },
+    { cat:'consent', name:'Schibsted SourcePoint', re:/cmp\\.schibsted\\.com/ },
+    { cat:'other', name:'Stripe', re:/js\\.stripe\\.com/ },
+    { cat:'other', name:'PayPal', re:/paypal\\.com\\/sdk/ },
+    { cat:'other', name:'Klarna', re:/cdn\\.klarna\\.com/ },
+    { cat:'other', name:'reCAPTCHA', re:/google\\.com\\/recaptcha|recaptcha\\.net/ },
+    { cat:'other', name:'hCaptcha', re:/hcaptcha\\.com/ },
+    { cat:'other', name:'Cloudflare Insights', re:/static\\.cloudflareinsights\\.com\\/beacon\\.min\\.js/ },
+    { cat:'other', name:'New Relic', re:/js-agent\\.newrelic\\.com/ },
+    { cat:'other', name:'Sentry', re:/browser\\.sentry-cdn\\.com|js\\.sentry-cdn\\.com/ },
+  ];
+
+  for (const s of scripts) {
+    const src = s.src || '';
+    for (const p of patterns) {
+      const m = src.match(p.re);
+      if (m) {
+        const id = (p.idGroup && m[p.idGroup]) ? m[p.idGroup] : '';
+        add(p.cat, p.name, id, src, 'script-src');
+        break;
+      }
+    }
+  }
+
+  const inlineMatchers = [
+    { cat:'tagManager', name:'Google Tag Manager', re:/GTM-[A-Z0-9]+/g },
+    { cat:'analytics',  name:'Google Analytics 4', re:/G-[A-Z0-9]{6,}/g },
+    { cat:'marketing',  name:'Google Ads', re:/AW-\\d{5,}/g },
+    { cat:'analytics',  name:'Universal Analytics (UA)', re:/UA-\\d+-\\d+/g },
+    { cat:'marketing',  name:'Meta Pixel (Facebook)', re:/fbq\\(\\s*['"]init['"]\\s*,\\s*['"](\\d+)['"]/g, idGroup:1 },
+    { cat:'marketing',  name:'LinkedIn Insight Tag', re:/_linkedin_partner_id\\s*=\\s*['"]?(\\d+)['"]?/g, idGroup:1 },
+    { cat:'marketing',  name:'TikTok Pixel', re:/ttq\\.load\\(\\s*['"]([A-Z0-9]+)['"]/g, idGroup:1 },
+  ];
+  for (const m of inlineMatchers) {
+    const re = new RegExp(m.re.source, m.re.flags);
+    const ids = new Set();
+    let mm;
+    while ((mm = re.exec(inlineText))) {
+      const id = m.idGroup ? mm[m.idGroup] : mm[0];
+      if (id) ids.add(id);
+    }
+    for (const id of ids) {
+      if (found.some(f => f.name === m.name && f.id === id)) continue;
+      add(m.cat, m.name, id, '', 'inline');
+    }
+  }
+
+  const globals = [
+    { cat:'tagManager', name:'Google Tag Manager', g:'google_tag_manager' },
+    { cat:'analytics',  name:'Hotjar', g:'hj' },
+    { cat:'analytics',  name:'Microsoft Clarity', g:'clarity' },
+    { cat:'analytics',  name:'Mixpanel', g:'mixpanel' },
+    { cat:'analytics',  name:'Amplitude', g:'amplitude' },
+    { cat:'analytics',  name:'Segment', g:'analytics' },
+    { cat:'marketing',  name:'Meta Pixel (Facebook)', g:'fbq' },
+    { cat:'marketing',  name:'TikTok Pixel', g:'ttq' },
+    { cat:'marketing',  name:'Pinterest Tag', g:'pintrk' },
+    { cat:'marketing',  name:'Snapchat Pixel', g:'snaptr' },
+    { cat:'marketing',  name:'Twitter / X Pixel', g:'twq' },
+    { cat:'marketing',  name:'HubSpot', g:'_hsq' },
+    { cat:'chat',       name:'Intercom', g:'Intercom' },
+    { cat:'chat',       name:'Drift', g:'drift' },
+    { cat:'chat',       name:'Zendesk', g:'zE' },
+    { cat:'chat',       name:'Crisp', g:'$crisp' },
+    { cat:'chat',       name:'Tawk.to', g:'Tawk_API' },
+  ];
+  for (const x of globals) {
+    try {
+      if (window[x.g] !== undefined && !found.some(f => f.name === x.name)) {
+        add(x.cat, x.name, '', '', 'global:' + x.g);
+      }
+    } catch (_) {}
+  }
+
+  let dataLayerLen = 0, dataLayerSample = [];
   try {
-    const data = await wv.executeJavaScript(`(function(){
-      const d = document;
-      const url = location.href;
-      const canonical = d.querySelector('link[rel="canonical"]');
-      const title = d.title || '';
-      const metaDesc = d.querySelector('meta[name="description"]')?.content || '';
-      const metaKw = d.querySelector('meta[name="keywords"]')?.content || '';
-      const robots = d.querySelector('meta[name="robots"]')?.content || '';
-      const ogTitle = d.querySelector('meta[property="og:title"]')?.content || '';
-      const ogDesc = d.querySelector('meta[property="og:description"]')?.content || '';
-      const ogImage = d.querySelector('meta[property="og:image"]')?.content || '';
-      const ogType = d.querySelector('meta[property="og:type"]')?.content || '';
-      const ogUrl = d.querySelector('meta[property="og:url"]')?.content || '';
-      const ogSiteName = d.querySelector('meta[property="og:site_name"]')?.content || '';
-      const twCard = d.querySelector('meta[name="twitter:card"]')?.content || '';
-      const twTitle = d.querySelector('meta[name="twitter:title"]')?.content || '';
-      const twDesc = d.querySelector('meta[name="twitter:description"]')?.content || '';
-      const twImage = d.querySelector('meta[name="twitter:image"]')?.content || '';
-      const viewport = d.querySelector('meta[name="viewport"]')?.content || '';
-      const charset = d.characterSet || '';
-      const lang = d.documentElement.lang || '';
-      const generator = d.querySelector('meta[name="generator"]')?.content || '';
-
-      // Headings
-      const headings = [];
-      d.querySelectorAll('h1,h2,h3,h4,h5,h6').forEach(h => {
-        headings.push({ level: parseInt(h.tagName[1]), text: h.textContent.trim().substring(0,200) });
+    if (Array.isArray(window.dataLayer)) {
+      dataLayerLen = window.dataLayer.length;
+      dataLayerSample = window.dataLayer.slice(0, 6).map(item => {
+        try {
+          if (item && typeof item === 'object') return (item.event || JSON.stringify(item).substring(0, 120));
+          return String(item).substring(0, 120);
+        } catch (_) { return '?'; }
       });
+    }
+  } catch (_) {}
 
-      // Links
-      const links = [];
-      const intLinks = new Set();
-      const extLinks = new Set();
-      d.querySelectorAll('a[href]').forEach(a => {
-        const href = a.href;
-        const text = a.textContent.trim().substring(0,100);
-        const rel = a.getAttribute('rel') || '';
-        const isExt = href && !href.startsWith(location.origin) && href.startsWith('http');
-        if (isExt) extLinks.add(href); else if (href.startsWith(location.origin)) intLinks.add(href);
-        if (links.length < 200) links.push({ href, text, rel, external: isExt, nofollow: rel.includes('nofollow') });
-      });
+  const cookies = document.cookie ? document.cookie.split(';').map(c => c.trim()).filter(Boolean) : [];
 
-      // Images
-      const images = [];
-      d.querySelectorAll('img').forEach(img => {
-        images.push({
-          src: img.src?.substring(0,300) || '',
-          alt: img.alt || '',
-          width: img.naturalWidth || img.width || 0,
-          height: img.naturalHeight || img.height || 0,
-          loading: img.loading || '',
-          hasAlt: !!img.alt,
-        });
-      });
-      const imagesNoAlt = images.filter(i => !i.hasAlt).length;
+  return {
+    items: found,
+    counts: {
+      tagManager: found.filter(f => f.category === 'tagManager').length,
+      analytics:  found.filter(f => f.category === 'analytics').length,
+      marketing:  found.filter(f => f.category === 'marketing').length,
+      chat:       found.filter(f => f.category === 'chat').length,
+      consent:    found.filter(f => f.category === 'consent').length,
+      other:      found.filter(f => f.category === 'other').length,
+    },
+    dataLayer: { length: dataLayerLen, sample: dataLayerSample },
+    cookieCount: cookies.length,
+    scriptCount: scripts.length + inline.length,
+    inlineCount: inline.length,
+  };
+})()`
 
-      // Schema.org (JSON-LD)
-      const schemas = [];
-      d.querySelectorAll('script[type="application/ld+json"]').forEach(s => {
-        try { schemas.push(JSON.parse(s.textContent)); } catch(_) { schemas.push({_error:'Parse error', raw:s.textContent.substring(0,500)}); }
-      });
+// DOM walker — returns a depth-limited tree of {tag, attrs, children}
+// for the Element tab.
+const _INSPECTOR_ELEMENTS_JS = `(function walkDOM(node, depth) {
+  if (depth > 6) return null;
+  if (node.nodeType === 3) {
+    const t = node.textContent.trim();
+    return t ? { type: 'text', text: t.substring(0, 120) } : null;
+  }
+  if (node.nodeType !== 1) return null;
+  const tag = node.tagName.toLowerCase();
+  if (tag === 'script' || tag === 'style' || tag === 'noscript') return null;
+  const attrs = {};
+  ['id','class','href','src','alt','title','role','aria-label','data-testid','name','type','rel'].forEach(a => {
+    const v = node.getAttribute(a);
+    if (v) attrs[a] = v.substring(0,100);
+  });
+  const children = [];
+  for (let i = 0; i < Math.min(node.childNodes.length, 40); i++) {
+    const c = walkDOM(node.childNodes[i], depth + 1);
+    if (c) children.push(c);
+  }
+  return { type: 'el', tag, attrs, children, childCount: node.childNodes.length };
+})(document.documentElement, 0)`
 
-      // Performance
-      const perf = performance.getEntriesByType('navigation')[0] || {};
-      const resources = performance.getEntriesByType('resource');
-      const totalSize = resources.reduce((s,r) => s + (r.transferSize || 0), 0);
-      const jsResources = resources.filter(r => r.initiatorType === 'script' || r.name.includes('.js'));
-      const cssResources = resources.filter(r => r.initiatorType === 'css' || r.name.includes('.css'));
-      const imgResources = resources.filter(r => r.initiatorType === 'img' || r.name.match(/\\.(png|jpg|jpeg|gif|webp|svg|avif)/i));
+// Returns {url, scheme, isOverlay} for the active tab. SEOZ overlay
+// tabs (seoz://home etc.) have no real page to inspect, so the
+// inspector window shows an empty-state instead of trying to run
+// analyzePage on the chrome shell.
+function _inspectorActiveTabInfo() {
+  const tab = getActive()
+  const url = tab?.url || ''
+  const scheme = url.startsWith('https://') ? 'https' :
+                 url.startsWith('http://')  ? 'http'  :
+                 url.startsWith('seoz://')  ? 'seoz'  :
+                 url.includes(':') ? url.split(':')[0] : ''
+  const isOverlay = scheme === 'seoz'
+  return { url, title: tab?.title || '', scheme, isOverlay }
+}
 
-      // Word count
-      const bodyText = d.body?.innerText || '';
-      const wordCount = bodyText.split(/\\s+/).filter(w => w.length > 0).length;
+// Returns {id, name, domain} for the currently selected client, or
+// null if no client is active. Used to drive the inspector window's
+// "+ Task" button: when the active page's hostname matches the
+// client's domain the button is enabled, otherwise it's dimmed and
+// shows a tooltip explaining why.
+function _inspectorActiveClientInfo() {
+  try {
+    const cid = synced?.activeClientId
+    if (!cid) return null
+    const c = (synced?.clients || []).find(x => x && x.id === cid)
+    if (!c) return null
+    return { id: c.id, name: c.name || '', domain: c.domain || '' }
+  } catch (_) { return null }
+}
 
-      // Hreflang
-      const hreflangs = [];
-      d.querySelectorAll('link[rel="alternate"][hreflang]').forEach(l => {
-        hreflangs.push({ lang: l.hreflang, href: l.href });
-      });
-
-      // Favicon
-      const favicon = d.querySelector('link[rel="icon"]')?.href || d.querySelector('link[rel="shortcut icon"]')?.href || '';
-
-      // Status indicators
-      const hasH1 = headings.some(h => h.level === 1);
-      const h1Count = headings.filter(h => h.level === 1).length;
-
-      return {
-        url, canonical: canonical?.href || '', title, titleLen: title.length,
-        metaDesc, metaDescLen: metaDesc.length, metaKw, robots,
-        og: { title:ogTitle, desc:ogDesc, image:ogImage, type:ogType, url:ogUrl, siteName:ogSiteName },
-        tw: { card:twCard, title:twTitle, desc:twDesc, image:twImage },
-        viewport, charset, lang, generator, favicon,
-        headings, h1Count, hasH1,
-        links, intLinkCount: intLinks.size, extLinkCount: extLinks.size, totalLinks: links.length,
-        images, imagesNoAlt, imageCount: images.length,
-        schemas,
-        hreflangs,
-        wordCount,
-        perf: {
-          domContentLoaded: Math.round(perf.domContentLoadedEventEnd - perf.startTime || 0),
-          loadComplete: Math.round(perf.loadEventEnd - perf.startTime || 0),
-          ttfb: Math.round(perf.responseStart - perf.startTime || 0),
-          domInteractive: Math.round(perf.domInteractive - perf.startTime || 0),
-          resourceCount: resources.length,
-          totalTransferSize: totalSize,
-          jsCount: jsResources.length,
-          cssCount: cssResources.length,
-          imgCount: imgResources.length,
-          jsSize: jsResources.reduce((s,r) => s + (r.transferSize||0), 0),
-          cssSize: cssResources.reduce((s,r) => s + (r.transferSize||0), 0),
-          imgSize: imgResources.reduce((s,r) => s + (r.transferSize||0), 0),
-        },
-      };
-    })()`)
-
-    inspectorData = data
-    renderInspector()
-  } catch(err) {
-    body.innerHTML = '<div style="padding:20px;color:var(--r)">Kunde inte analysera sidan: ' + esc(err.message) + '</div>'
+// Posts a new task to /tasks. Pure helper — no DOM access — so it can
+// be called from the inspector bridge OR from the existing in-panel
+// createTask() form. Returns {ok, task?, error?}.
+async function _createTaskApi(opts) {
+  opts = opts || {}
+  const apiKey = await SE.getApiKey()
+  if (!apiKey) return { ok: false, error: 'Ingen API-nyckel' }
+  const body = {
+    clientId: opts.clientId,
+    title: String(opts.title || '').trim(),
+    description: opts.description || '',
+    url: opts.url || '',
+    severity: opts.severity || 'medium',
+    skill_type: opts.skill_type || 'mixed',
+    effort_h: typeof opts.effort_h === 'number' ? opts.effort_h : 1,
+  }
+  if (!body.clientId) return { ok: false, error: 'Ingen aktiv kund' }
+  if (!body.title)    return { ok: false, error: 'Titel saknas' }
+  try {
+    const res = await SE.fetchApi({ endpoint: '/tasks', apiKey, method: 'POST', body })
+    if (res && res.task) {
+      if (!synced.tasks) synced.tasks = []
+      synced.tasks.unshift(res.task)
+      // If the tasks panel is currently visible, refresh it so the new
+      // task pops in without the user having to re-open the panel.
+      try { if (typeof renderPanelContent === 'function') renderPanelContent('tasks') } catch (_) {}
+      return { ok: true, task: res.task }
+    }
+    return { ok: false, error: res?.error || 'Kunde inte skapa task' }
+  } catch (e) {
+    return { ok: false, error: String(e?.message || e) }
   }
 }
 
-function renderInspector() {
-  const body = document.getElementById('inspectorBody')
-  const d = inspectorData
-  if (!d) { body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Ingen data — tryck ↻</div>'; return }
+// Run analyzePage on the active tab (if it's a real web page) and
+// ferry the result to the inspector window via main.
+async function _inspectorRunAnalyze() {
+  const info   = _inspectorActiveTabInfo()
+  const client = _inspectorActiveClientInfo()
+  if (info.isOverlay || !wv) {
+    // Overlay tabs (seoz://home etc.) — send a "nothing to inspect"
+    // payload so the window can show the empty state instead of
+    // sitting on "Analyserar..." forever.
+    _lastInspectorData = null
+    SE.inspectorBridge?.sendData?.({ url: info.url, scheme: info.scheme, isOverlay: true, page: null, client })
+    return
+  }
+  try {
+    const page = await wv.executeJavaScript(_INSPECTOR_ANALYZE_JS)
+    _lastInspectorData = page
+    SE.inspectorBridge?.sendData?.({ url: info.url, scheme: info.scheme, isOverlay: false, page, client })
+  } catch (err) {
+    SE.inspectorBridge?.sendData?.({ url: info.url, scheme: info.scheme, isOverlay: false, page: null, client, error: String(err?.message || err) })
+  }
+}
 
-  let html = ''
-  // Show/hide element picker button
-  document.getElementById('elemPickerBtn').style.display = inspectorTab === 'elements' ? '' : 'none'
+// Bridge wiring — chrome listens for main's "please run X" requests.
+// Lazy-attached in DOMContentLoaded handler so SE / wv are ready.
+function _wireInspectorBridge() {
+  if (!SE?.inspectorBridge) return
+  // refresh page analysis
+  SE.inspectorBridge.onRequestPageData(() => { _inspectorRunAnalyze() })
+  // window closed externally — clear our open-state mirror
+  SE.inspectorBridge.onClosed(() => { _inspectorOpen = false })
+  // toggle element picker on active tab
+  SE.inspectorBridge.onTogglePicker(({ active }) => {
+    if (!wv) return
+    if (active) {
+      wv.executeJavaScript(`
+        if (!window.__seozPicker) {
+          const hl = document.createElement('div');
+          hl.id = '__seozHighlight';
+          hl.style.cssText = 'position:fixed;pointer-events:none;z-index:999999;border:2px solid #4680ff;background:rgba(70,128,255,.1);transition:all 80ms;display:none';
+          document.body.appendChild(hl);
+          window.__seozPickerHandler = function(e) {
+            const r = e.target.getBoundingClientRect();
+            hl.style.display = 'block';
+            hl.style.left = r.left + 'px'; hl.style.top = r.top + 'px';
+            hl.style.width = r.width + 'px'; hl.style.height = r.height + 'px';
+          };
+          window.__seozPickerClick = function(e) {
+            e.preventDefault(); e.stopPropagation();
+            const el = e.target;
+            const tag = el.tagName.toLowerCase();
+            const text = el.textContent?.trim().substring(0,80) || '';
+            console.log('[SEOZ-PICK]' + JSON.stringify({tag,id:el.id||'',class:el.className||'',text,html:el.outerHTML.substring(0,300)}));
+          };
+          document.addEventListener('mousemove', window.__seozPickerHandler, true);
+          document.addEventListener('click', window.__seozPickerClick, true);
+          window.__seozPicker = true;
+        }
+      `).catch(()=>{})
+    } else {
+      wv.executeJavaScript(`
+        if (window.__seozPicker) {
+          document.removeEventListener('mousemove', window.__seozPickerHandler, true);
+          document.removeEventListener('click', window.__seozPickerClick, true);
+          const hl = document.getElementById('__seozHighlight');
+          if (hl) hl.remove();
+          window.__seozPicker = false;
+        }
+      `).catch(()=>{})
+    }
+  })
+  // download an image from the active tab
+  SE.inspectorBridge.onDownloadImage(({ src }) => {
+    if (!wv || !src) return
+    const safeUrl = String(src).replace(/\\/g, '\\\\').replace(/'/g, "\\'")
+    wv.executeJavaScript(
+      "(function(){var a=document.createElement('a');a.href='" + safeUrl + "';a.download='" + safeUrl.split('/').pop().split('?')[0] + "';document.body.appendChild(a);a.click();document.body.removeChild(a)})()"
+    ).catch(() => { try { newTab(src) } catch (_) {} })
+  })
+  // Invoke-bridge requests — main forwards inspector-window invokes
+  // here with a reqId; we run the appropriate kind, then ship the
+  // result back via sendBridgeReply. Kinds:
+  //   source    → outerHTML of active tab
+  //   network   → resource-timing entries
+  //   elements  → depth-limited DOM tree
+  //   console   → buffered console messages
+  //   tracking  → analytics / pixel / consent / chat detection blob
+  //   create-task → POST /tasks with payload, return {ok, task?, error?}
+  SE.inspectorBridge.onBridgeRequest(async ({ reqId, kind, payload }) => {
+    let data = null, error = null
+    try {
+      if (kind === 'source')        data = wv ? await wv.executeJavaScript(_INSPECTOR_SOURCE_JS)   : null
+      else if (kind === 'network')  data = wv ? await wv.executeJavaScript(_INSPECTOR_NETWORK_JS)  : []
+      else if (kind === 'elements') data = wv ? await wv.executeJavaScript(_INSPECTOR_ELEMENTS_JS) : null
+      else if (kind === 'console')  data = consoleMessages.slice(-500)
+      else if (kind === 'tracking') data = wv ? await wv.executeJavaScript(_INSPECTOR_TRACKING_JS) : null
+      else if (kind === 'create-task') {
+        // Force clientId to the chrome-side active client — never trust
+        // a clientId smuggled in from the inspector window. Domain
+        // matching is a UX hint there, not a security boundary.
+        const client = _inspectorActiveClientInfo()
+        if (!client) { data = { ok: false, error: 'Ingen aktiv kund vald' } }
+        else {
+          data = await _createTaskApi({ ...(payload || {}), clientId: client.id })
+        }
+      }
+      else error = 'unknown kind: ' + kind
+    } catch (err) {
+      error = String(err?.message || err)
+    }
+    SE.inspectorBridge.sendBridgeReply({ reqId, kind, data, error })
+  })
+}
+
+// Open / close / toggle — public API used by F12, context menu,
+// chrome shortcut, kebab menu. Just thin wrappers around the
+// inspectorBridge IPC; main owns the BrowserWindow lifecycle.
+function openInspector() {
+  if (!SE?.inspectorBridge) return
+  _inspectorOpen = true
+  SE.inspectorBridge.open()
+}
+function closeInspector() {
+  if (!SE?.inspectorBridge) return
+  _inspectorOpen = false
+  SE.inspectorBridge.close()
+}
+function toggleInspector() {
+  if (_inspectorOpen) closeInspector(); else openInspector()
+}
+
+async function runInspector() {
+  /* Stub for legacy call sites. The window auto-fetches data via
+     inspectorBridge.requestData(), so triggering this from chrome is
+     the same as opening the window. */
+  if (_inspectorOpen) _inspectorRunAnalyze()
+  else openInspector()
+}
+
+// Wire the bridge once the renderer is up. SE is already populated by
+// preload.js so we don't actually need to wait for DOMContentLoaded —
+// kicking it off synchronously is fine and avoids racing the first
+// inspector:request-page-data that main may emit if the user opens
+// the inspector via a context-menu before our DOMContentLoaded fires.
+try { _wireInspectorBridge() } catch (err) { console.error('[inspector wire]', err) }
+function renderInspector() {
+  // Stub — pre-v1.10.135 this rendered the in-DOM drawer. Now any
+  // call here just nudges the inspector window to refresh, which is
+  // what most legacy call sites actually want.
+  if (_inspectorOpen) _inspectorRunAnalyze()
+}
+
+// ══════════════════════════════════════════════════════
+//  CONSOLE BUFFER — chrome captures console messages from the
+//  active tab here. The inspector window pulls the buffer via
+//  inspectorBridge.getConsole() on first open and gets live
+//  push events via inspectorBridge.sendConsoleMessage().
+// ══════════════════════════════════════════════════════
+let consoleMessages = [] // {type, message, source, line, time}
+
+/* === Begin dead-code block (pre-v1.10.135 in-DOM inspector). =============
+   Everything between this comment and the matching End-marker is the
+   original renderer-side inspector code — left in place as a block
+   comment instead of physically deleted so we don't have to scan-edit
+   ~700 lines in one go and so the diff stays reviewable. None of it
+   runs.
+
+  function renderInspectorBody_OLD() {
+    document.getElementById('elemPickerBtn').style.display = 'none'
 
   // Tabs that don't need SEO data
   if (inspectorTab === 'console') { body.innerHTML = renderInspConsole(); return }
@@ -20369,19 +20788,14 @@ function toggleElementPicker() {
       }
     `)
   } else {
-    wv.executeJavaScript(`
-      if (window.__seozPicker) {
-        document.removeEventListener('mousemove', window.__seozPickerHandler, true);
-        document.removeEventListener('click', window.__seozPickerClick, true);
-        const hl = document.getElementById('__seozHighlight');
-        if (hl) hl.remove();
-        window.__seozPicker = false;
-      }
-    `)
+    wv.executeJavaScript(``)
   }
 }
+=== End dead-code block (pre-v1.10.135 in-DOM inspector). =================== */
 
-// NOTE: SEOZ-PICK console-message listener is in _attachWebviewListeners
+// NOTE: SEOZ-PICK console-message listener is in _attachWebviewListeners.
+// The picker itself now lives in _wireInspectorBridge above (toggled
+// from the inspector window via inspectorBridge.togglePicker).
 
 // ══════════════════════════════════════════════════════
 //  KEYBOARD SHORTCUTS (Chrome-style)
@@ -20439,7 +20853,7 @@ document.addEventListener('keydown', e => {
     else if (document.getElementById('userDd').classList.contains('open')) closeUserMenu()
     else if (_chromeMenuOpen) closeChromeMenu()
     else if (document.getElementById('historyOverlay').classList.contains('open')) closeHistory()
-    else if (document.getElementById('inspectorDrawer').classList.contains('open')) closeInspector()
+    else if (_inspectorOpen) closeInspector()
     else {
       // Final fallback: if the OS window is in F11-style fullscreen and
       // nothing else handled the press, exit that too.
@@ -20760,5 +21174,32 @@ try { SE.storeSet('paneCount', 1) } catch(e) {}
 window.__designGetWebview = function() { return wv; }
 </script>
 <script src="design-mode.js"></script>
+
+<!-- ── Floating overlays — DOM-rendered (v1.10.135) ────────────────────
+     Tab-preview tooltip + dock-icon label. Both used to be sibling
+     WebContentsViews; converted to DOM overlays so they reframe
+     correctly under DevTools Device Mode. Positioned via fixed +
+     getBoundingClientRect of the anchor element. -->
+<div class="tab-tooltip" id="tabTooltipEl" aria-hidden="true">
+  <img class="tt-preview" id="ttPreview" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
+  <div class="tt-head">
+    <img class="tt-fav" id="ttFav" src="" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
+    <div class="tt-title" id="ttTitle"></div>
+  </div>
+  <div class="tt-url" id="ttUrl"></div>
+  <div class="tt-domain" id="ttDomain"></div>
+  <div class="tt-actions">
+    <button class="tt-action" data-action="pin" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+      <span>Fäst</span>
+    </button>
+    <button class="tt-action" data-action="split" type="button">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      <span>Splitvy</span>
+    </button>
+  </div>
+</div>
+<div class="dock-label" id="dockLabelEl" aria-hidden="true"></div>
+
 </body>
 </html>

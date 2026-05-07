@@ -248,6 +248,7 @@ html, body {
       <div class="inspector-tab" data-tab="links">Länkar</div>
       <div class="inspector-tab" data-tab="images">Bilder</div>
       <div class="inspector-tab" data-tab="schema">Schema</div>
+      <div class="inspector-tab" data-tab="tracking">Spårning</div>
       <div class="inspector-tab" data-tab="perf">Prestanda</div>
       <div class="inspector-tab" data-tab="console">Konsol</div>
       <div class="inspector-tab" data-tab="network">Nätverk</div>
@@ -256,6 +257,14 @@ html, body {
       <div class="inspector-tab" data-tab="raw">Rådata</div>
     </div>
     <div class="inspector-hdr-spacer"></div>
+    <!-- + Task — visible only when the active page domain matches the
+         current SEOZ client. Clicking it creates a task for the page in
+         that client's task list (chrome owns the API call; we just send
+         the IPC). Disabled state is set in JS based on _domainMatches. -->
+    <button class="inspector-btn task-btn" id="taskBtn" title="Skapa task för sidan" style="display:none;width:auto;padding:0 8px;gap:4px;background:var(--p);color:#fff;font-weight:700;font-size:10px">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="5" x2="12" y2="19"/><line x1="5" y1="12" x2="19" y2="12"/></svg>
+      <span>Task</span>
+    </button>
     <button class="inspector-btn" id="elemPickerBtn" title="Välj element" style="font-size:14px;display:none">⊹</button>
     <button class="inspector-btn" id="refreshBtn" title="Uppdatera analys">↻</button>
     <button class="inspector-btn" id="copyBtn" title="Kopiera JSON" aria-label="Kopiera JSON">
@@ -294,6 +303,7 @@ html, body {
 // State
 let inspectorData = null;       // page-analysis blob from chrome
 let activeTab     = null;       // {url, title, scheme}
+let activeClient  = null;       // {id, name, domain} — null if no client picked in chrome
 let inspectorTab  = 'overview'; // current UI tab
 
 // Lazy data caches — only fetched when their tab becomes active.
@@ -301,8 +311,14 @@ let consoleMessages = [];
 let networkEntries  = null;
 let elemTree        = null;
 let pageSource      = null;
+let trackingData    = null;     // tag/pixel detection result
 
-let pickerActive = false;
+let pickerActive    = false;
+let createTaskBusy  = false;    // disables the + Task button while POST in-flight
+
+// Last issue list rendered in Översikt — used to map per-issue + Task
+// click events back to the issue text/severity for the task payload.
+let _lastOverviewIssues = [];
 
 // ── Tiny utilities ──
 function esc(s) {
@@ -337,6 +353,101 @@ const _BTN = {
   trash:_L('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'),
 };
 
+// ── Domain-matching: enables the + Task button when the active page's
+//    hostname matches the active client's domain. Strips www. and any
+//    scheme/path so users can store "example.com" or
+//    "https://www.example.com/path" indifferently. Returns true for an
+//    exact host match or a subdomain (e.g. blog.example.com matches a
+//    client domain of example.com).
+function _normalizeDomain(d) {
+  if (!d) return '';
+  return String(d).toLowerCase()
+    .replace(/^https?:\/\//, '')
+    .replace(/\/.*$/, '')
+    .replace(/^www\./, '')
+    .trim();
+}
+function _domainMatches() {
+  if (!activeClient || !activeClient.domain) return false;
+  const url = (inspectorData && inspectorData.url) || (activeTab && activeTab.url) || '';
+  if (!url) return false;
+  let host = '';
+  try { host = new URL(url).hostname.toLowerCase().replace(/^www\./, ''); } catch (_) { return false }
+  const cdom = _normalizeDomain(activeClient.domain);
+  if (!host || !cdom) return false;
+  return host === cdom || host.endsWith('.' + cdom);
+}
+
+// Update the + Task header button visibility, enabled state, and
+// tooltip based on activeClient + domain match. Called whenever
+// activeClient or inspectorData changes.
+function _refreshTaskBtn() {
+  const btn = document.getElementById('taskBtn');
+  if (!btn) return;
+  if (!activeClient) {
+    btn.style.display = 'none';
+    return;
+  }
+  btn.style.display = '';
+  const matches = _domainMatches();
+  btn.disabled = !matches || createTaskBusy;
+  btn.style.opacity = matches ? (createTaskBusy ? '0.6' : '1') : '0.35';
+  btn.style.cursor = matches ? 'pointer' : 'not-allowed';
+  btn.title = !matches
+    ? `Sidan tillhör inte ${activeClient.name || 'kunden'} (${activeClient.domain || '—'})`
+    : `Skapa task i ${activeClient.name || 'kunden'} för den här sidan`;
+}
+
+// Maps an issue string from renderInspOverview to a {severity, skill_type}
+// pair so per-issue + Task buttons can pre-fill smart defaults instead
+// of dumping everything as severity=medium / skill=mixed.
+function _issueToTaskHints(issue) {
+  const s = String(issue || '').toLowerCase();
+  // Critical SEO blockers → high severity
+  if (s.includes('titel saknas') || s.includes('h1') || s.includes('canonical') || s.includes('robots'))
+    return { severity: 'high', skill_type: 'copy' };
+  if (s.includes('meta description'))
+    return { severity: 'high', skill_type: 'copy' };
+  if (s.includes('alt-text') || s.includes('alt text'))
+    return { severity: 'medium', skill_type: 'copy' };
+  if (s.includes('schema') || s.includes('open graph'))
+    return { severity: 'medium', skill_type: 'dev' };
+  if (s.includes('ttfb') || s.includes('viewport') || s.includes('lang-attribut'))
+    return { severity: 'high', skill_type: 'dev' };
+  if (s.includes('strukturerad data'))
+    return { severity: 'medium', skill_type: 'dev' };
+  if (s.includes('textinnehåll') || s.includes('innehåll'))
+    return { severity: 'low', skill_type: 'copy' };
+  return { severity: 'medium', skill_type: 'mixed' };
+}
+
+// Send a task to chrome via main. payload: {title, description, url,
+// severity, skill_type, effort_h}. clientId is set chrome-side so we
+// don't have to round-trip it.
+async function _createTaskFromInspector(payload) {
+  if (createTaskBusy) return;
+  if (!activeClient) { toast('Ingen kund vald', 'var(--w)'); return }
+  if (!_domainMatches()) {
+    toast('Sidan tillhör inte ' + (activeClient.name || 'kunden'), 'var(--w)');
+    return;
+  }
+  createTaskBusy = true;
+  _refreshTaskBtn();
+  try {
+    const res = await seoz.inspector.createTask(payload);
+    if (res && res.ok) {
+      toast('Task skapad i ' + (activeClient.name || 'kunden'), 'var(--g)');
+    } else {
+      toast(res?.error || 'Kunde inte skapa task', 'var(--r)');
+    }
+  } catch (err) {
+    toast('Kunde inte skapa task: ' + (err?.message || err), 'var(--r)');
+  } finally {
+    createTaskBusy = false;
+    _refreshTaskBtn();
+  }
+}
+
 // ── Tab switching ──
 function switchTab(tab) {
   inspectorTab = tab;
@@ -356,7 +467,7 @@ document.getElementById('refreshBtn').addEventListener('click', () => {
   document.getElementById('inspectorBody').innerHTML =
     '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar sida…</div>';
   // Reset lazy caches on manual refresh.
-  networkEntries = null; elemTree = null; pageSource = null;
+  networkEntries = null; elemTree = null; pageSource = null; trackingData = null;
   seoz.inspector.requestData();
 });
 document.getElementById('copyBtn').addEventListener('click', () => {
@@ -374,12 +485,37 @@ document.getElementById('elemPickerBtn').addEventListener('click', () => {
   seoz.inspector.togglePicker(pickerActive);
 });
 
+// + Task header button — creates a generic task for the current page
+// when clicked. Disabled state is enforced visually + here as a guard.
+document.getElementById('taskBtn').addEventListener('click', () => {
+  if (!_domainMatches() || createTaskBusy) return;
+  const url = (inspectorData && inspectorData.url) || (activeTab && activeTab.url) || '';
+  let host = '';
+  try { host = new URL(url).hostname; } catch (_) {}
+  const pageTitle = (inspectorData && inspectorData.title) || (activeTab && activeTab.title) || host || url;
+  _createTaskFromInspector({
+    title: 'SEO-task: ' + pageTitle,
+    description: 'Skapad från SEOZ Inspector — ' + url,
+    url,
+    severity: 'medium',
+    skill_type: 'mixed',
+    effort_h: 1,
+  });
+});
+
 // ── Live feed from main ──
 seoz.inspector.onData(payload => {
   payload = payload || {};
   inspectorData = payload.page || null;
-  // Update URL strip from the data payload.
+  // Active client gets pushed alongside the page-analysis blob — chrome
+  // packs synced.activeClientId + name + domain so we don't have to
+  // request it separately. null when no client is selected.
+  activeClient = payload.client || null;
+  // Persist the URL on inspectorData for the domain-match check, even
+  // when page is null (overlay tabs).
+  if (payload.url && inspectorData) inspectorData.url = inspectorData.url || payload.url;
   if (payload.url) _setActiveUrl(payload.url, payload.scheme, payload.isOverlay);
+  _refreshTaskBtn();
   render();
 });
 seoz.inspector.onActiveTab(payload => {
@@ -390,7 +526,8 @@ seoz.inspector.onActiveTab(payload => {
   // Tab change → drop lazy caches; data will arrive via inspector:data
   // when chrome runs analyzePage on the new active tab.
   inspectorData = null;
-  networkEntries = null; elemTree = null; pageSource = null;
+  networkEntries = null; elemTree = null; pageSource = null; trackingData = null;
+  _refreshTaskBtn();
   // Don't auto-clear console — main fires inspector:console-clear on
   // the page's `did-navigate` event so the lifetime matches the page.
   document.getElementById('inspectorBody').innerHTML =

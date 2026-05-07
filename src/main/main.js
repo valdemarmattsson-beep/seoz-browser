@@ -1315,62 +1315,32 @@ ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
   }
 })
 
-// ── Tab tooltip — sibling WebContentsView (Strawberry-style) ────────
-//
-// v1.10.107-1.10.115 used a separate transparent BrowserWindow with
-// alwaysOnTop:'pop-up-menu' + setIgnoreMouseEvents(true, {forward:true})
-// + focusable:false. Every one of those properties caused issues:
-//   - alwaysOnTop: covered ctx menus, ghosted over other apps on alt-tab
-//   - setIgnoreMouseEvents flip-flop: stuck in capture mode → URL bar
-//     and sidebar got eaten silently
-//   - sendSync to coordinate hide/show with ctx menus: deadlocked the
-//     renderer because BrowserWindow.hide() blocks on Win32 message pump
-//   - blur/minimize listeners to clean up: extra IPC churn, race condns
-//
-// v1.10.116 switches to Strawberry's actual approach (extracted from
-// their app.asar, src/main/components/tab-hover-popover/). Instead of
-// a separate BrowserWindow, the tooltip is a WebContentsView attached
-// as a SIBLING of the page view under the main BrowserWindow's
-// contentView. Mouse events naturally route to whichever sibling is
-// at the cursor position. No alwaysOnTop. No focus quirks. No sync
-// IPC. No setIgnoreMouseEvents juggling. Clicks on action buttons
-// land on the tooltip view's renderer because that's where the cursor
-// actually is.
-//
-// Lifecycle:
-//   - Lazy-created on first 'tooltip:show', reused thereafter
-//   - Attached to win.contentView via addChildView (re-add on every
-//     show to bump z-order so tooltip stays above any newly-attached
-//     tab views)
-//   - Hidden via setVisible(false) — fast, no message pump flush
-//   - Cleaned up when main window closes
-let _tooltipView = null
+// ── Tab tooltip — DOM overlay (v1.10.135) ───────────────────────────
+// Was a sibling WebContentsView (v1.10.116-1.10.134) and before that
+// a separate BrowserWindow (v1.10.107-1.10.115). Now a plain DOM
+// overlay (#tabTooltipEl) in the chrome renderer. Reason: sibling
+// views' bounds live in BrowserWindow pixel-space, not the renderer's
+// CSS viewport, so they detach under DevTools Device Mode (visible
+// in screenshots from the field). With addChildView(view, 0)
+// (v1.10.134) tabs sit at z=0, so DOM elements composite above page
+// content even when extending into the page area.
 
 // ── Floating-view z-order maintenance ──
-// All popup / tooltip / dropdown WebContentsViews are siblings of
-// the tab WebContentsViews under win.contentView. Order in the
-// children array determines stacking — last one added wins.
-//
-// When a tab is switched (TabManager.setBounds re-adds the tab),
-// the new tab ends up on top, pushing any visible floating views
-// underneath. This function re-adds them on top in a deterministic
-// order so they stay visible across tab swaps.
+// Shield + Site Info popups remain sibling WebContentsViews because
+// they need to render their own complex CSS over the page area. When
+// a tab is switched (TabManager.setBounds re-adds the tab), the new
+// tab ends up on top, pushing any visible floating views underneath.
+// This function re-adds them on top so they stay visible.
 //
 // Only re-adds VISIBLE views — hidden ones don't need to fight for
-// z-order and re-adding them anyway can cause subtle painting bugs
-// where a hidden-but-attached view's old bounds briefly flash.
+// z-order and re-adding them anyway can cause subtle painting bugs.
 function _bringFloatingViewsToTop() {
   if (!win || win.isDestroyed()) return
   const cv = win.contentView
   if (!cv) return
-  // Order matters: later additions sit on top. The tooltip is the
-  // most ephemeral so it goes last (always topmost when visible).
   const candidates = [
-    _urlSuggestView,
     _shieldView,
     _siteInfoView,
-    _chromeLabelView,
-    _tooltipView,
   ]
   for (const v of candidates) {
     if (!v || !v.webContents || v.webContents.isDestroyed()) continue
@@ -1380,137 +1350,6 @@ function _bringFloatingViewsToTop() {
     try { cv.addChildView(v) } catch (_) {}
   }
 }
-
-function _ensureTooltipView() {
-  if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) return _tooltipView
-  if (!win || win.isDestroyed()) return null
-
-  _tooltipView = new WebContentsView({
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/tooltip-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  })
-
-  // Transparent background so the tooltip's body's CSS-styled card
-  // can have rounded corners + shadow with a clean cutout. The card
-  // itself paints its own bg; the rest of the view is transparent.
-  try { _tooltipView.setBackgroundColor('#00000000') } catch (_) {}
-  _tooltipView.setVisible(false)
-  _tooltipView.webContents.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
-
-  if (win) {
-    win.once('closed', () => {
-      try { if (_tooltipView?.webContents && !_tooltipView.webContents.isDestroyed()) _tooltipView.webContents.close() } catch (_) {}
-      _tooltipView = null
-    })
-  }
-
-  return _tooltipView
-}
-
-ipcMain.on('tooltip:show', (_e, payload = {}) => {
-  try {
-    const tt = _ensureTooltipView()
-    if (!tt) return
-    if (!win || win.isDestroyed()) return
-
-    const { anchorX = 0, anchorY = 0, content = {} } = payload
-    // anchorX/Y are window-content-relative. WebContentsView setBounds
-    // also uses window-content coordinates (relative to BrowserWindow's
-    // content area), so no screen-coord conversion needed — much
-    // simpler than the BrowserWindow case.
-    const cb = win.getContentBounds()
-    const w = 320
-    const h = (_tooltipView.getBounds().height) || 200  // preserve last height
-    let x = Math.round(anchorX)
-    let y = Math.round(anchorY)
-    // Clamp inside the content area
-    x = Math.max(4, Math.min(cb.width - w - 4, x))
-    y = Math.max(4, Math.min(cb.height - h - 4, y))
-    tt.setBounds({ x, y, width: w, height: h })
-
-    // Push content into the tooltip's renderer.
-    if (tt.webContents && !tt.webContents.isDestroyed()) {
-      tt.webContents.send('tooltip:update', content)
-    }
-
-    // Re-add the view on every show so it sits at the top of the
-    // contentView z-order, above any tab WebContentsViews that may
-    // have been added while the tooltip was idle. addChildView is
-    // idempotent for already-attached children — it just bumps the
-    // z-order.
-    try { win.contentView.addChildView(tt) } catch (_) {}
-    tt.setVisible(true)
-  } catch (err) {
-    console.error('[tooltip:show] failed:', err)
-  }
-})
-
-ipcMain.on('tooltip:hide', () => {
-  try {
-    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
-      _tooltipView.setVisible(false)
-    }
-  } catch (_) {}
-})
-
-// Resize the tooltip view to fit the card the renderer just laid out.
-// Without this the view is fixed at 200px and the action buttons get
-// clipped when a preview image (140px tall) is present. Bounds are
-// clamped to a sane range so a buggy renderer can't ask for a 10000px
-// tall view.
-ipcMain.on('tooltip:resize', (_e, payload = {}) => {
-  try {
-    if (!_tooltipView || _tooltipView.webContents.isDestroyed()) return
-    const want = Math.max(80, Math.min(420, Math.round(payload.height) || 200))
-    const b = _tooltipView.getBounds()
-    if (b.height === want) return
-    // Re-clamp y so a taller view doesn't escape the bottom edge.
-    if (!win || win.isDestroyed()) return
-    const cb = win.getContentBounds()
-    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
-    _tooltipView.setBounds({ x: b.x, y, width: b.width, height: want })
-  } catch (_) {}
-})
-
-// Tooltip renderer says the cursor entered or left the card. With the
-// WebContentsView architecture mouse events are reliable (cursor
-// naturally hits the topmost view at each pixel), so the renderer's
-// own body mouseenter/leave is the source of truth. We forward to
-// the main window's renderer so it can cancel/reschedule its hide
-// timer accordingly.
-ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
-  try {
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('tooltip:cursor-on-card', !!on)
-    }
-  } catch (_) {}
-})
-
-// User clicked Fäst / Splitvy. Forward to the main window's renderer
-// where the existing pin/split logic lives, then hide the tooltip.
-// No setIgnoreMouseEvents to reset (we don't use it anymore).
-ipcMain.on('tooltip:action', (_e, payload = {}) => {
-  try {
-    if (win && !win.isDestroyed()) {
-      win.webContents.send('tooltip:action', payload)
-    }
-    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
-      _tooltipView.setVisible(false)
-    }
-  } catch (_) {}
-})
-
-// NB: removed in v1.10.116:
-//   - tooltip:set-interactive (no setIgnoreMouseEvents in WCV mode)
-//   - tooltip:hide-sync (sendSync was deadlocking; never coming back)
-//   - win.on('blur'/'minimize'/'hide') hide handlers — the tooltip
-//     view is a child of the main window's contentView, so it's
-//     automatically not visible when the parent window is occluded.
-//     No ghost over other apps. No state to clean up.
 
 // ════════════════════════════════════════════════════════════════════
 //  SEOZ Shield popup — sibling WebContentsView
@@ -2027,8 +1866,15 @@ ipcMain.on('inspector:element-picked', (_e, payload = {}) => {
 // wv.executeJavaScript and sends 'inspector:bridge-reply' back. Main
 // matches reqId → pending → resolves the original invoke promise.
 
-function _inspectorBridge(kind) {
-  return () => new Promise((resolve, reject) => {
+function _inspectorBridge(kind, opts) {
+  // opts: { timeout?: number, withPayload?: boolean }
+  // - timeout defaults to 8s; bumped to 15s for create-task since the
+  //   /tasks API call can take a few seconds round-trip
+  // - withPayload=true makes the handler accept a payload arg from
+  //   the inspector window's invoke call and forward it to chrome
+  const timeout = (opts && opts.timeout) || 8000
+  const withPayload = !!(opts && opts.withPayload)
+  return (_e, payload) => new Promise((resolve, reject) => {
     if (!win || win.isDestroyed()) { reject(new Error('chrome window not available')); return }
     const reqId = ++_inspectorReqSeq
     const timer = setTimeout(() => {
@@ -2036,10 +1882,12 @@ function _inspectorBridge(kind) {
         _inspectorPending.delete(reqId)
         reject(new Error('inspector bridge timeout for ' + kind))
       }
-    }, 8000)
+    }, timeout)
     _inspectorPending.set(reqId, { resolve, reject, timer })
     try {
-      win.webContents.send('inspector:bridge-request', { reqId, kind })
+      const msg = { reqId, kind }
+      if (withPayload) msg.payload = payload || {}
+      win.webContents.send('inspector:bridge-request', msg)
     } catch (err) {
       _inspectorPending.delete(reqId)
       clearTimeout(timer)
@@ -2052,6 +1900,8 @@ ipcMain.handle('inspector:get-source',   _inspectorBridge('source'))
 ipcMain.handle('inspector:get-network',  _inspectorBridge('network'))
 ipcMain.handle('inspector:get-elements', _inspectorBridge('elements'))
 ipcMain.handle('inspector:get-console',  _inspectorBridge('console'))
+ipcMain.handle('inspector:get-tracking', _inspectorBridge('tracking'))
+ipcMain.handle('inspector:create-task',  _inspectorBridge('create-task', { timeout: 15000, withPayload: true }))
 
 // chrome → main: bridge reply.
 ipcMain.on('inspector:bridge-reply', (_e, payload = {}) => {
@@ -2373,104 +2223,10 @@ ipcMain.on('bm-folder:close', () => {
 })
 
 // ════════════════════════════════════════════════════════════════════
-//  Generic chrome-label tooltip — sibling WebContentsView
-//
-//  Hover labels on chrome elements (right-sidebar dock icons etc.)
-//  used to render as in-DOM `.dtt` divs but those got clipped by the
-//  page WebContentsView z-order. Same fix as Shield/tab-tooltip:
-//  separate transparent WebContentsView attached to contentView.
-//
-//  Single shared view — repositioned and re-textified per hover.
-//  Width/height resize via 'chrome-label:resize' so the view always
-//  hugs the text exactly (no oversized hit area).
-//
-//  Channels:
-//    chrome-renderer → main:
-//      chrome-label:show {anchorX, anchorY, text, side?}
-//      chrome-label:hide
-//    main → label-renderer:
-//      chrome-label:update (text)
-//    label-renderer → main:
-//      chrome-label:resize {width, height}
-// ════════════════════════════════════════════════════════════════════
-let _chromeLabelView = null
-let _chromeLabelLastAnchor = null  // { anchorX, anchorY, side } — re-applied on resize
-
-function _ensureChromeLabelView() {
-  if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) return _chromeLabelView
-  if (!win || win.isDestroyed()) return null
-
-  _chromeLabelView = new WebContentsView({
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/chrome-label-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  })
-  try { _chromeLabelView.setBackgroundColor('#00000000') } catch (_) {}
-  _chromeLabelView.setVisible(false)
-  _chromeLabelView.webContents.loadFile(path.join(__dirname, '../renderer/chrome-label.html'))
-
-  if (win) {
-    win.once('closed', () => {
-      try { if (_chromeLabelView?.webContents && !_chromeLabelView.webContents.isDestroyed()) _chromeLabelView.webContents.close() } catch (_) {}
-      _chromeLabelView = null
-    })
-  }
-  return _chromeLabelView
-}
-
-function _positionChromeLabel(width, height) {
-  if (!_chromeLabelView || !_chromeLabelLastAnchor) return
-  if (!win || win.isDestroyed()) return
-  const cb = win.getContentBounds()
-  const { anchorX = 0, anchorY = 0, side = 'left' } = _chromeLabelLastAnchor
-  // side='left' = label sits to the LEFT of the anchor (anchorX is the
-  //               anchor's left edge; label's right edge ends just before).
-  // side='right' = label sits to the RIGHT (anchorX is anchor's right edge).
-  let x = side === 'right' ? Math.round(anchorX) : Math.round(anchorX - width)
-  let y = Math.round(anchorY - height / 2)
-  x = Math.max(0, Math.min(cb.width - width, x))
-  y = Math.max(0, Math.min(cb.height - height, y))
-  _chromeLabelView.setBounds({ x, y, width, height })
-}
-
-ipcMain.on('chrome-label:show', (_e, payload = {}) => {
-  try {
-    const v = _ensureChromeLabelView()
-    if (!v) return
-    if (!win || win.isDestroyed()) return
-    const { anchorX = 0, anchorY = 0, text = '', side = 'left' } = payload
-    _chromeLabelLastAnchor = { anchorX, anchorY, side }
-    // Push text — renderer will measure and call back via resize.
-    if (v.webContents && !v.webContents.isDestroyed()) {
-      v.webContents.send('chrome-label:update', text)
-    }
-    // Provisional bounds — resize callback will tighten them. Use a
-    // generous initial size so the renderer can measure without clipping.
-    const b = v.getBounds()
-    _chromeLabelView.setBounds({
-      x: b.x || 0, y: b.y || 0,
-      width: Math.max(b.width || 0, 200),
-      height: Math.max(b.height || 0, 32),
-    })
-    _positionChromeLabel(Math.max(b.width || 0, 200), Math.max(b.height || 0, 32))
-    try { win.contentView.addChildView(v) } catch (_) {}
-    v.setVisible(true)
-  } catch (err) {
-    console.error('[chrome-label:show] failed:', err)
-  }
-})
-
-ipcMain.on('chrome-label:hide', () => {
-  try {
-    if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) {
-      _chromeLabelView.setVisible(false)
-    }
-  } catch (_) {}
-})
-
+//  Chrome-label (dock-icon hover label) was a sibling WebContentsView
+//  in v1.10.116-1.10.134. Replaced in v1.10.135 with a DOM overlay
+//  (#dockLabelEl in index.html) for Device Mode compatibility. See
+//  the renderer's _wireDockTooltips() for the new implementation.
 // ════════════════════════════════════════════════════════════════════
 //  Site Info popup — sibling WebContentsView
 //
@@ -2657,130 +2413,10 @@ ipcMain.on('site-info:action', async (_e, action) => {
   }
 })
 
-ipcMain.on('chrome-label:resize', (_e, payload = {}) => {
-  try {
-    if (!_chromeLabelView || _chromeLabelView.webContents.isDestroyed()) return
-    const w = Math.max(20, Math.min(400, Math.round(payload.width)  || 100))
-    const h = Math.max(16, Math.min(60,  Math.round(payload.height) || 28))
-    _positionChromeLabel(w, h)
-  } catch (_) {}
-})
-
-// ════════════════════════════════════════════════════════════════════
-//  URL suggest dropdown — sibling WebContentsView
-//
-//  Same pattern as the other floating chrome views. Renderer (chrome)
-//  computes matches against history and pushes the rendered list via
-//  'urlSuggest:show' with the URL bar's bounding rect. The popup view
-//  positions itself relative to that rect, renders the items, and
-//  forwards click / hover events back through main → chrome.
-//
-//  Keyboard navigation stays in chrome (URL input has focus); chrome
-//  pushes new selIdx via 'urlSuggest:update-sel' as the user presses
-//  ArrowUp/Down. Enter submits via the existing input keydown handler,
-//  which calls doNav() and 'urlSuggest:hide'.
-// ════════════════════════════════════════════════════════════════════
-let _urlSuggestView = null
-let _urlSuggestLastBounds = null  // { x, y, width } — re-applied on resize
-
-function _ensureUrlSuggestView() {
-  if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) return _urlSuggestView
-  if (!win || win.isDestroyed()) return null
-
-  _urlSuggestView = new WebContentsView({
-    webPreferences: {
-      preload: path.join(__dirname, '../preload/url-suggest-preload.js'),
-      contextIsolation: true,
-      nodeIntegration: false,
-      sandbox: false,
-    },
-  })
-  try { _urlSuggestView.setBackgroundColor('#00000000') } catch (_) {}
-  _urlSuggestView.setVisible(false)
-  _urlSuggestView.webContents.loadFile(path.join(__dirname, '../renderer/url-suggest.html'))
-
-  if (win) {
-    win.once('closed', () => {
-      try { if (_urlSuggestView?.webContents && !_urlSuggestView.webContents.isDestroyed()) _urlSuggestView.webContents.close() } catch (_) {}
-      _urlSuggestView = null
-    })
-  }
-  return _urlSuggestView
-}
-
-ipcMain.on('urlSuggest:show', (_e, payload = {}) => {
-  try {
-    const v = _ensureUrlSuggestView()
-    if (!v) return
-    if (!win || win.isDestroyed()) return
-
-    const {
-      anchorX = 0, anchorY = 0, width = 320,
-      items = [], selIdx = -1, query = '',
-    } = payload
-
-    _urlSuggestLastBounds = { x: Math.round(anchorX), y: Math.round(anchorY), width: Math.round(width) }
-    // Push items first so the renderer can measure and request final
-    // height. We seed with a generous initial height; resize callback
-    // will tighten.
-    if (v.webContents && !v.webContents.isDestroyed()) {
-      v.webContents.send('urlSuggest:set-items', { items, selIdx, query })
-    }
-    const cb = win.getContentBounds()
-    const w = Math.max(120, Math.min(cb.width - 8, _urlSuggestLastBounds.width))
-    const x = Math.max(4, Math.min(cb.width - w - 4, _urlSuggestLastBounds.x))
-    const y = Math.max(4, Math.min(cb.height - 80, _urlSuggestLastBounds.y))
-    v.setBounds({ x, y, width: w, height: 80 })  // provisional
-    try { win.contentView.addChildView(v) } catch (_) {}
-    v.setVisible(true)
-  } catch (err) {
-    console.error('[urlSuggest:show] failed:', err)
-  }
-})
-
-ipcMain.on('urlSuggest:hide', () => {
-  try {
-    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
-      _urlSuggestView.setVisible(false)
-    }
-  } catch (_) {}
-})
-
-ipcMain.on('urlSuggest:update-sel', (_e, idx) => {
-  try {
-    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
-      _urlSuggestView.webContents.send('urlSuggest:set-sel', idx)
-    }
-  } catch (_) {}
-})
-
-ipcMain.on('urlSuggest:resize', (_e, payload = {}) => {
-  try {
-    if (!_urlSuggestView || _urlSuggestView.webContents.isDestroyed()) return
-    if (!_urlSuggestLastBounds || !win || win.isDestroyed()) return
-    const want = Math.max(40, Math.min(380, Math.round(payload.height) || 80))
-    const cb = win.getContentBounds()
-    const b = _urlSuggestLastBounds
-    const w = Math.max(120, Math.min(cb.width - 8, b.width))
-    const x = Math.max(4, Math.min(cb.width - w - 4, b.x))
-    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
-    _urlSuggestView.setBounds({ x, y, width: w, height: want })
-  } catch (_) {}
-})
-
-// Popup events flow back through main → chrome renderer where the
-// existing doNav / selection state lives.
-ipcMain.on('urlSuggest:pick', (_e, url) => {
-  try {
-    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:pick', url)
-  } catch (_) {}
-})
-
-ipcMain.on('urlSuggest:hover', (_e, idx) => {
-  try {
-    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:hover', idx)
-  } catch (_) {}
-})
+// URL-suggest dropdown was a sibling WebContentsView in v1.10.133-
+// 1.10.134. Replaced in v1.10.135 with a DOM overlay (#urlSuggestPanel
+// inside .url-wrap in index.html) for Device Mode compatibility. See
+// the renderer's URL-AUTOCOMPLETE IIFE for the new implementation.
 
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location

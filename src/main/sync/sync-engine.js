@@ -92,7 +92,10 @@ class SyncEngine {
     // response can't pile up overlapping pulls.
     this._autoTimer    = null
     this._autoBusy     = false
-    this._autoIntervalMs = 60 * 1000
+    // 5 min default — earlier 60s polled too aggressively for our
+    // workload. getVersions is cheap (~200 B) but the chatter
+    // crowded the supabase log when nothing was actually changing.
+    this._autoIntervalMs = 5 * 60 * 1000
     this._autoEnabled  = true   // user-configurable later via setAutoSync
   }
 

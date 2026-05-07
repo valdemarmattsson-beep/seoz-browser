@@ -1,0 +1,1019 @@
+<!DOCTYPE html>
+<html lang="sv" data-theme="light">
+<head>
+<meta charset="UTF-8">
+<meta http-equiv="Content-Security-Policy" content="default-src 'self' 'unsafe-inline'; img-src 'self' data: https:; script-src 'self' 'unsafe-inline'">
+<title>SEOZ Inspector</title>
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+<style>
+/*
+  SEOZ Inspector — standalone BrowserWindow (DevTools-style).
+
+  This window is a renderer-only mirror of the active tab's
+  page-analysis. The chrome BrowserWindow owns the WebContentsView,
+  runs the analyzePage JS, and pipes data here over IPC. We keep
+  layout / token CSS minimal and self-contained — no shared
+  stylesheet, so this window can be reskinned independently if we
+  ever decide to.
+*/
+
+:root {
+  /* Ink (text hierarchy) — dark mode default */
+  --ink-0: rgba(255,255,255,.98);
+  --ink-1: rgba(255,255,255,.88);
+  --ink-2: rgba(255,255,255,.62);
+  --ink-3: rgba(255,255,255,.42);
+
+  /* Surface */
+  --bg: #0f1115;
+  --surface: #1a1d24;
+  --surface-2: #20242c;
+
+  /* Border / divider */
+  --border: rgba(255,255,255,.06);
+  --border-strong: rgba(255,255,255,.1);
+
+  /* Semantic */
+  --accent: #5b8dff;
+  --live: #30d158;
+  --warn: #ff9f0a;
+  --ds-danger: #ff453a;
+
+  /* Legacy aliases — match index.html so renderInsp* CSS classes
+     can be copy-pasted unchanged. */
+  --p:    var(--accent);
+  --p600: #6e9dff;
+  --g:    var(--live);
+  --w:    var(--warn);
+  --r:    var(--ds-danger);
+  --card:  var(--surface);
+  --panel: var(--surface-2);
+  --head:  var(--ink-0);
+  --txt:   var(--ink-1);
+  --muted: var(--ink-2);
+}
+[data-theme="light"] {
+  --ink-0: #0a0a0a;
+  --ink-1: #1a1a1a;
+  --ink-2: #585854;
+  --ink-3: #8a8a85;
+
+  --bg: #f0f2f5;
+  --surface: #ffffff;
+  --surface-2: #f7f8fa;
+
+  --border: rgba(0,0,0,.07);
+  --border-strong: rgba(0,0,0,.12);
+
+  --accent: #3b6fe0;
+  --live: #0f9d44;
+  --warn: #b45309;
+  --ds-danger: #dc2626;
+
+  --p600: #2a5fcf;
+}
+
+* { box-sizing: border-box }
+html, body {
+  margin:0; padding:0; height:100%;
+  background: var(--card);
+  color: var(--txt);
+  font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+  font-size: 11px;
+  overflow: hidden;
+  user-select: text; -webkit-user-select: text;
+}
+
+/* ── Inspector chrome (header + tab bar) ── */
+.insp-shell { display:flex; flex-direction:column; height:100vh }
+.inspector-hdr {
+  height:36px; flex-shrink:0;
+  display:flex; align-items:center; padding:0 12px; gap:8px;
+  border-bottom:1px solid var(--border); background:var(--panel);
+  -webkit-app-region: drag;       /* whole header acts as window-drag */
+  user-select:none; -webkit-user-select:none;
+}
+.inspector-hdr-title{
+  font-size:11px; font-weight:700; color:var(--p);
+  display:flex; align-items:center; gap:5px;
+}
+.inspector-tabs{ display:flex; align-items:center; gap:0; margin-left:8px; -webkit-app-region: no-drag }
+.inspector-tab{
+  padding:4px 12px; font-size:10px; font-weight:600;
+  color:var(--muted); cursor:pointer;
+  border-bottom:2px solid transparent; transition:all .12s;
+}
+.inspector-tab:hover{ color:var(--head) }
+.inspector-tab.active{ color:var(--p); border-bottom-color:var(--p) }
+.inspector-hdr-spacer{ flex:1 }
+.inspector-btn{
+  width:24px; height:24px; border-radius:5px; border:none;
+  background:none; color:var(--muted); cursor:pointer;
+  display:flex; align-items:center; justify-content:center;
+  font-size:12px; transition:background .12s;
+  -webkit-app-region: no-drag;
+}
+.inspector-btn:hover{ background: rgba(127,127,127,.18) }
+.inspector-btn.active{ background:var(--p); color:#fff }
+
+.insp-url-strip{
+  flex-shrink:0; height:22px; padding:0 12px;
+  display:flex; align-items:center; gap:6px;
+  border-bottom:1px solid var(--border);
+  background:var(--card); font-size:10px;
+  color:var(--muted); overflow:hidden;
+}
+.insp-url-strip .iu-host{ color:var(--head); font-weight:600 }
+.insp-url-strip .iu-path{ color:var(--muted); white-space:nowrap; overflow:hidden; text-overflow:ellipsis }
+
+.inspector-body{
+  flex:1; overflow-y:auto; padding:10px 14px;
+  font-size:11px; line-height:1.7;
+}
+
+/* ── Inspector content primitives ── */
+.insp-section{ margin-bottom:12px }
+.insp-section-title{
+  font-size:9px; font-weight:800; text-transform:uppercase;
+  letter-spacing:.07em; color:var(--p); margin-bottom:4px;
+}
+.insp-row{
+  display:flex; align-items:flex-start; gap:8px;
+  padding:3px 0; border-bottom:1px solid var(--border);
+}
+.insp-label{ width:120px; flex-shrink:0; font-size:10px; font-weight:600; color:var(--muted) }
+.insp-value{ flex:1; font-size:11px; color:var(--head); word-break:break-word }
+.insp-value.ok{ color:var(--g) } .insp-value.warn{ color:var(--w) } .insp-value.err{ color:var(--r) }
+
+.insp-tag{ display:inline-block; padding:1px 6px; border-radius:3px; font-size:9px; font-weight:700; margin:0 2px 2px 0 }
+.insp-tag.green{  background:rgba(44,168,127,.12); color:var(--g) }
+.insp-tag.yellow{ background:rgba(229,138,0,.12); color:var(--w) }
+.insp-tag.red{    background:rgba(220,38,38,.12); color:var(--r) }
+.insp-tag.blue{   background:rgba(70,128,255,.12); color:var(--p) }
+
+.insp-code{
+  font-family:'Consolas','Monaco',monospace; font-size:10px;
+  background:var(--panel); border:1px solid var(--border); border-radius:4px;
+  padding:6px 8px; margin:4px 0; white-space:pre-wrap; word-break:break-all;
+  max-height:120px; overflow-y:auto;
+}
+.insp-heading-tree{ margin:4px 0 }
+.insp-heading-tree div{ padding:1px 0 }
+.insp-h-indent{ display:inline-block; width:16px }
+.insp-link-item{ padding:2px 0; display:flex; gap:6px; align-items:baseline }
+.insp-link-item a{ color:var(--p); text-decoration:none; font-size:10px; word-break:break-all }
+.insp-link-item a:hover{ text-decoration:underline }
+.insp-link-status{ font-size:9px; font-weight:700; flex-shrink:0 }
+.insp-meter{ height:6px; border-radius:3px; background:var(--border); overflow:hidden; margin:2px 0 }
+.insp-meter-fill{ height:100%; border-radius:3px; transition:width .3s }
+
+/* KPI cards (re-implemented locally — chrome renderer's .kpi class is
+   styled in the same shape). */
+.kpi{ background:var(--panel); border:1px solid var(--border); border-radius:6px; padding:6px 8px }
+.kpi-l{ font-size:9px; font-weight:700; color:var(--muted); text-transform:uppercase; letter-spacing:.05em }
+.kpi-v{ font-size:14px; font-weight:800; color:var(--head); margin-top:2px }
+
+/* Action button (matches chrome renderer .act-btn). */
+.act-btn{
+  height:26px; padding:0 10px; border:none; border-radius:6px;
+  background:var(--p); color:#fff; cursor:pointer;
+  font-size:10px; font-weight:700; display:flex; align-items:center; gap:4px;
+  font-family:inherit; transition:background .15s;
+}
+.act-btn:hover{ background:var(--p600) }
+
+/* Console */
+.console-entry{ padding:3px 8px; font-family:'Consolas','Monaco',monospace; font-size:10px; border-bottom:1px solid var(--border); display:flex; gap:6px; align-items:flex-start }
+.console-entry.error{ background:rgba(220,38,38,.06); color:var(--r) }
+.console-entry.warn{  background:rgba(229,138,0,.06); color:var(--w) }
+.console-entry.info{  color:var(--txt) }
+.console-entry .con-type{ width:16px; flex-shrink:0; text-align:center; font-size:9px }
+.console-entry .con-msg{ flex:1; word-break:break-word; white-space:pre-wrap }
+.console-entry .con-src{ flex-shrink:0; font-size:9px; color:var(--muted); max-width:140px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap }
+
+/* Network */
+.net-table{ width:100%; border-collapse:collapse; font-size:10px }
+.net-table th{ position:sticky; top:0; background:var(--panel); text-align:left; padding:4px 6px; font-weight:700; color:var(--muted); font-size:9px; text-transform:uppercase; letter-spacing:.04em; border-bottom:1px solid var(--border) }
+.net-table td{ padding:3px 6px; border-bottom:1px solid var(--border); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; max-width:200px }
+.net-table tr:hover td{ background:rgba(127,127,127,.06) }
+.net-bar{ height:4px; border-radius:2px; background:var(--border); min-width:30px; position:relative }
+.net-bar-fill{ height:100%; border-radius:2px; position:absolute; left:0; top:0 }
+.net-status{ font-weight:700 }
+.net-status.s2{ color:var(--g) } .net-status.s3{ color:var(--p) }
+.net-status.s4{ color:var(--w) } .net-status.s5{ color:var(--r) }
+
+/* Elements tree */
+.elem-tree{ font-family:'Consolas','Monaco',monospace; font-size:10px; line-height:1.6 }
+.elem-node{ padding:1px 0; cursor:pointer; white-space:nowrap }
+.elem-node:hover{ background:rgba(70,128,255,.08) }
+.elem-tag{ color:#e06c75 } .elem-attr{ color:#d19a66 } .elem-str{ color:#98c379 }
+.elem-text{ color:var(--muted); font-style:italic }
+.elem-toggle{ display:inline-block; width:12px; color:var(--muted); cursor:pointer; text-align:center; font-size:9px }
+
+/* Toast — bottom-right notification. */
+#toast{
+  position:fixed; bottom:14px; right:14px;
+  background:var(--card); border:1px solid var(--border); border-radius:8px;
+  padding:8px 12px; font-size:11px; font-weight:600; color:var(--head);
+  box-shadow:0 4px 12px rgba(0,0,0,.25);
+  display:flex; align-items:center; gap:7px; z-index:1000;
+  transform:translateY(40px); opacity:0; transition:all .25s ease;
+  pointer-events:none;
+}
+#toast.on{ transform:translateY(0); opacity:1 }
+#toast .td{ width:7px; height:7px; border-radius:50%; flex-shrink:0; background:var(--p) }
+
+/* Empty state for overlay tabs / pre-data state. */
+.insp-empty{
+  display:flex; flex-direction:column; align-items:center; justify-content:center;
+  height:100%; color:var(--muted); padding:40px 20px; text-align:center;
+}
+.insp-empty .ie-mark{ width:38px; height:38px; opacity:.4; margin-bottom:8px }
+.insp-empty .ie-msg{ font-size:12px; font-weight:600 }
+.insp-empty .ie-hint{ font-size:10px; margin-top:4px; max-width:340px }
+</style>
+</head>
+<body>
+<div class="insp-shell">
+  <!-- HEADER (drag-to-move via -webkit-app-region:drag on .inspector-hdr) -->
+  <div class="inspector-hdr" id="inspectorHdr">
+    <div class="inspector-hdr-title">
+      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="vertical-align:-3px;margin-right:6px"><path d="M3 7V5a2 2 0 0 1 2-2h2"/><path d="M17 3h2a2 2 0 0 1 2 2v2"/><path d="M21 17v2a2 2 0 0 1-2 2h-2"/><path d="M7 21H5a2 2 0 0 1-2-2v-2"/><rect x="7" y="7" width="10" height="10" rx="1"/></svg>
+      SEOZ Inspector
+    </div>
+    <div class="inspector-tabs" id="inspectorTabs">
+      <div class="inspector-tab active" data-tab="overview">Översikt</div>
+      <div class="inspector-tab" data-tab="meta">Meta</div>
+      <div class="inspector-tab" data-tab="headings">Rubriker</div>
+      <div class="inspector-tab" data-tab="links">Länkar</div>
+      <div class="inspector-tab" data-tab="images">Bilder</div>
+      <div class="inspector-tab" data-tab="schema">Schema</div>
+      <div class="inspector-tab" data-tab="perf">Prestanda</div>
+      <div class="inspector-tab" data-tab="console">Konsol</div>
+      <div class="inspector-tab" data-tab="network">Nätverk</div>
+      <div class="inspector-tab" data-tab="elements">Element</div>
+      <div class="inspector-tab" data-tab="source">HTML</div>
+      <div class="inspector-tab" data-tab="raw">Rådata</div>
+    </div>
+    <div class="inspector-hdr-spacer"></div>
+    <button class="inspector-btn" id="elemPickerBtn" title="Välj element" style="font-size:14px;display:none">⊹</button>
+    <button class="inspector-btn" id="refreshBtn" title="Uppdatera analys">↻</button>
+    <button class="inspector-btn" id="copyBtn" title="Kopiera JSON" aria-label="Kopiera JSON">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/></svg>
+    </button>
+    <button class="inspector-btn" id="closeBtn" title="Stäng">
+      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" aria-label="Stäng"><path d="M18 6 6 18M6 6l12 12"/></svg>
+    </button>
+  </div>
+
+  <!-- ACTIVE-TAB URL strip — slim status line under the header so the
+       user always knows which tab they're inspecting. -->
+  <div class="insp-url-strip" id="inspectorUrlStrip">
+    <span class="iu-host" id="iuHost">—</span>
+    <span class="iu-path" id="iuPath"></span>
+  </div>
+
+  <div class="inspector-body" id="inspectorBody">
+    <div class="insp-empty">
+      <svg class="ie-mark" viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round"><circle cx="100" cy="100" r="10" fill="currentColor" stroke="none"/><path d="M100 40 A 60 60 0 0 1 160 100"/><path d="M100 160 A 60 60 0 0 1 40 100"/></svg>
+      <div class="ie-msg">Väntar på sida…</div>
+      <div class="ie-hint">Inspector visar SEO-analys av den aktiva fliken. Tryck ↻ för att uppdatera.</div>
+    </div>
+  </div>
+</div>
+
+<div id="toast"><div class="td" id="toastDot"></div><span id="toastMsg"></span></div>
+
+<script>
+'use strict';
+
+// ════════════════════════════════════════════════════════
+//  Inspector Window — entry point
+// ════════════════════════════════════════════════════════
+
+// State
+let inspectorData = null;       // page-analysis blob from chrome
+let activeTab     = null;       // {url, title, scheme}
+let inspectorTab  = 'overview'; // current UI tab
+
+// Lazy data caches — only fetched when their tab becomes active.
+let consoleMessages = [];
+let networkEntries  = null;
+let elemTree        = null;
+let pageSource      = null;
+
+let pickerActive = false;
+
+// ── Tiny utilities ──
+function esc(s) {
+  return String(s == null ? '' : s)
+    .replace(/&/g,'&amp;').replace(/</g,'&lt;')
+    .replace(/>/g,'&gt;').replace(/"/g,'&quot;');
+}
+function toast(msg, color) {
+  const el = document.getElementById('toast');
+  document.getElementById('toastMsg').textContent = msg;
+  if (color) document.getElementById('toastDot').style.background = color;
+  el.classList.add('on');
+  clearTimeout(toast._t);
+  toast._t = setTimeout(() => el.classList.remove('on'), 2400);
+}
+function fmtBytes(b) {
+  if (b > 1048576) return (b/1048576).toFixed(1) + ' MB';
+  if (b > 1024)    return (b/1024).toFixed(1)    + ' KB';
+  return b + ' B';
+}
+function inspBadge(ok, okText, failText) {
+  return ok
+    ? `<span class="insp-tag green">${okText || 'OK'}</span>`
+    : `<span class="insp-tag red">${failText || 'Saknas'}</span>`;
+}
+function inspWarnBadge(text) { return `<span class="insp-tag yellow">${text}</span>` }
+function _L(path) {
+  return `<svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round" style="margin-right:6px;vertical-align:-2px">${path}</svg>`;
+}
+const _BTN = {
+  copy: _L('<rect x="9" y="9" width="13" height="13" rx="2"/><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"/>'),
+  trash:_L('<polyline points="3 6 5 6 21 6"/><path d="M19 6l-1 14a2 2 0 0 1-2 2H8a2 2 0 0 1-2-2L5 6"/>'),
+};
+
+// ── Tab switching ──
+function switchTab(tab) {
+  inspectorTab = tab;
+  document.querySelectorAll('.inspector-tab').forEach(el => {
+    el.classList.toggle('active', el.dataset.tab === tab);
+  });
+  // Element picker btn is visible only on Element tab.
+  document.getElementById('elemPickerBtn').style.display = tab === 'elements' ? '' : 'none';
+  render();
+}
+document.querySelectorAll('.inspector-tab').forEach(el => {
+  el.addEventListener('click', () => switchTab(el.dataset.tab));
+});
+
+// ── Header buttons ──
+document.getElementById('refreshBtn').addEventListener('click', () => {
+  document.getElementById('inspectorBody').innerHTML =
+    '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar sida…</div>';
+  // Reset lazy caches on manual refresh.
+  networkEntries = null; elemTree = null; pageSource = null;
+  seoz.inspector.requestData();
+});
+document.getElementById('copyBtn').addEventListener('click', () => {
+  if (!inspectorData) { toast('Ingen data att kopiera', 'var(--w)'); return }
+  navigator.clipboard.writeText(JSON.stringify(inspectorData, null, 2))
+    .then(() => toast('Inspector-data kopierad!', 'var(--g)'))
+    .catch(() => toast('Kunde inte kopiera', 'var(--r)'));
+});
+document.getElementById('closeBtn').addEventListener('click', () => {
+  seoz.inspector.close();
+});
+document.getElementById('elemPickerBtn').addEventListener('click', () => {
+  pickerActive = !pickerActive;
+  document.getElementById('elemPickerBtn').classList.toggle('active', pickerActive);
+  seoz.inspector.togglePicker(pickerActive);
+});
+
+// ── Live feed from main ──
+seoz.inspector.onData(payload => {
+  payload = payload || {};
+  inspectorData = payload.page || null;
+  // Update URL strip from the data payload.
+  if (payload.url) _setActiveUrl(payload.url, payload.scheme, payload.isOverlay);
+  render();
+});
+seoz.inspector.onActiveTab(payload => {
+  activeTab = payload || null;
+  if (activeTab && activeTab.url) {
+    _setActiveUrl(activeTab.url, activeTab.scheme, false);
+  }
+  // Tab change → drop lazy caches; data will arrive via inspector:data
+  // when chrome runs analyzePage on the new active tab.
+  inspectorData = null;
+  networkEntries = null; elemTree = null; pageSource = null;
+  // Don't auto-clear console — main fires inspector:console-clear on
+  // the page's `did-navigate` event so the lifetime matches the page.
+  document.getElementById('inspectorBody').innerHTML =
+    '<div style="text-align:center;padding:20px;color:var(--muted)">Analyserar sida…</div>';
+});
+seoz.inspector.onConsoleMessage(msg => {
+  if (!msg) return;
+  consoleMessages.push(msg);
+  // Cap at 500 messages to keep memory bounded across long sessions.
+  if (consoleMessages.length > 500) consoleMessages.splice(0, consoleMessages.length - 500);
+  if (inspectorTab === 'console') render();
+});
+seoz.inspector.onConsoleClear(() => {
+  consoleMessages = [];
+  if (inspectorTab === 'console') render();
+});
+seoz.inspector.onElementPicked(info => {
+  if (!info) return;
+  // User clicked an element in picker mode — flip the picker off and
+  // surface a tag-info card at the top of the Element tab.
+  pickerActive = false;
+  document.getElementById('elemPickerBtn').classList.remove('active');
+  switchTab('elements');
+  const body = document.getElementById('inspectorBody');
+  const card = document.createElement('div');
+  card.className = 'insp-section';
+  card.innerHTML = `
+    <div class="insp-section-title">Vald element</div>
+    <div class="insp-row"><div class="insp-label">Tag</div><div class="insp-value">&lt;${esc(info.tag || '?')}&gt;</div></div>
+    ${info.id    ? `<div class="insp-row"><div class="insp-label">id</div><div class="insp-value">${esc(info.id)}</div></div>` : ''}
+    ${info.class ? `<div class="insp-row"><div class="insp-label">class</div><div class="insp-value">${esc(info.class)}</div></div>` : ''}
+    ${info.text  ? `<div class="insp-row"><div class="insp-label">text</div><div class="insp-value">${esc(info.text)}</div></div>` : ''}
+    ${info.html  ? `<div class="insp-code">${esc(info.html)}</div>` : ''}
+  `;
+  body.insertBefore(card, body.firstChild);
+});
+
+function _setActiveUrl(url, scheme, isOverlay) {
+  const host = document.getElementById('iuHost');
+  const path = document.getElementById('iuPath');
+  try {
+    if (isOverlay || (scheme && scheme !== 'http' && scheme !== 'https')) {
+      host.textContent = url || '—';
+      path.textContent = '';
+    } else {
+      const u = new URL(url);
+      host.textContent = u.host;
+      path.textContent = u.pathname + u.search + u.hash;
+    }
+  } catch (_) {
+    host.textContent = url || '—';
+    path.textContent = '';
+  }
+}
+
+// ════════════════════════════════════════════════════════
+//  Render dispatcher
+// ════════════════════════════════════════════════════════
+function render() {
+  const body = document.getElementById('inspectorBody');
+  const tab  = inspectorTab;
+
+  // Tabs that don't need page-analysis data.
+  if (tab === 'console')  { body.innerHTML = renderInspConsole();  return }
+  if (tab === 'network')  { return renderInspNetworkAsync(body) }
+  if (tab === 'elements') { return renderInspElementsAsync(body) }
+  if (tab === 'source')   { return renderInspSourceAsync(body) }
+
+  const d = inspectorData;
+  if (!d) {
+    // Distinguish overlay tabs from no-data-yet.
+    const url = (activeTab && activeTab.url) || '';
+    if (url.startsWith('seoz://')) {
+      body.innerHTML = `
+        <div class="insp-empty">
+          <svg class="ie-mark" viewBox="0 0 200 200" fill="none" stroke="currentColor" stroke-width="14" stroke-linecap="round"><circle cx="100" cy="100" r="10" fill="currentColor" stroke="none"/><path d="M100 40 A 60 60 0 0 1 160 100"/><path d="M100 160 A 60 60 0 0 1 40 100"/></svg>
+          <div class="ie-msg">Inget att inspektera</div>
+          <div class="ie-hint">Den aktiva fliken är en SEOZ-sida (${esc(url)}). Växla till en webbplats för att analysera.</div>
+        </div>`;
+    } else {
+      body.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Ingen data — tryck ↻</div>';
+    }
+    return;
+  }
+
+  let html = '';
+  if      (tab === 'overview') html = renderInspOverview(d);
+  else if (tab === 'meta')     html = renderInspMeta(d);
+  else if (tab === 'headings') html = renderInspHeadings(d);
+  else if (tab === 'links')    html = renderInspLinks(d);
+  else if (tab === 'images')   html = renderInspImages(d);
+  else if (tab === 'schema')   html = renderInspSchema(d);
+  else if (tab === 'perf')     html = renderInspPerf(d);
+  else if (tab === 'raw')      html = renderInspRaw(d);
+  body.innerHTML = html;
+}
+
+// ════════════════════════════════════════════════════════
+//  Render functions — ported verbatim from the chrome
+//  renderer's renderInsp* with adaptations:
+//    - esc/_L/_BTN/toast are local
+//    - downloadInspImage routes through main IPC
+// ════════════════════════════════════════════════════════
+
+function renderInspOverview(d) {
+  let score = 100;
+  const issues = [];
+  if (!d.title) { score -= 15; issues.push('Titel saknas') }
+  else if (d.titleLen < 30) { score -= 5; issues.push('Titel för kort (' + d.titleLen + ' tecken)') }
+  else if (d.titleLen > 60) { score -= 5; issues.push('Titel för lång (' + d.titleLen + ' tecken)') }
+  if (!d.metaDesc) { score -= 15; issues.push('Meta description saknas') }
+  else if (d.metaDescLen < 70) { score -= 5; issues.push('Meta description för kort') }
+  else if (d.metaDescLen > 160) { score -= 5; issues.push('Meta description för lång (' + d.metaDescLen + ' tecken)') }
+  if (!d.hasH1) { score -= 10; issues.push('Ingen H1 hittad') }
+  if (d.h1Count > 1) { score -= 5; issues.push('Flera H1 (' + d.h1Count + ' st)') }
+  if (d.imagesNoAlt > 0) { score -= Math.min(10, d.imagesNoAlt * 2); issues.push(d.imagesNoAlt + ' bilder utan alt-text') }
+  if (!d.canonical) { score -= 5; issues.push('Canonical-tagg saknas') }
+  if (!d.og.title)  { score -= 3; issues.push('Open Graph title saknas') }
+  if (!d.og.image)  { score -= 3; issues.push('Open Graph image saknas') }
+  if (!d.lang)      { score -= 5; issues.push('lang-attribut saknas på <html>') }
+  if (!d.viewport)  { score -= 5; issues.push('Viewport meta saknas') }
+  if (d.schemas.length === 0) { score -= 5; issues.push('Ingen strukturerad data (Schema.org)') }
+  if (d.wordCount < 300) { score -= 5; issues.push('Lite textinnehåll (' + d.wordCount + ' ord)') }
+  if (d.perf.ttfb > 600) { score -= 5; issues.push('Hög TTFB (' + d.perf.ttfb + 'ms)') }
+  score = Math.max(0, score);
+
+  const col = score >= 80 ? 'var(--g)' : score >= 50 ? 'var(--w)' : 'var(--r)';
+
+  let html = `<div style="display:flex;gap:16px;align-items:center;margin-bottom:14px">
+    <div style="position:relative;width:60px;height:60px;flex-shrink:0">
+      <svg width="60" height="60"><circle cx="30" cy="30" r="26" fill="none" stroke="var(--border)" stroke-width="4"/>
+      <circle cx="30" cy="30" r="26" fill="none" stroke="${col}" stroke-width="4" stroke-dasharray="${score*1.63} 163" stroke-linecap="round" style="transform:rotate(-90deg);transform-origin:center"/></svg>
+      <div style="position:absolute;inset:0;display:flex;align-items:center;justify-content:center;font-size:18px;font-weight:800;color:${col}">${score}</div>
+    </div>
+    <div>
+      <div style="font-size:14px;font-weight:800;color:var(--head)">SEO-poäng: <span style="color:${col}">${score}/100</span></div>
+      <div style="font-size:10px;color:var(--muted);margin-top:2px">${esc(d.url)}</div>
+    </div>
+  </div>`;
+
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px">
+    <div class="kpi"><div class="kpi-l">Ord</div><div class="kpi-v">${d.wordCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Länkar</div><div class="kpi-v">${d.intLinkCount}/${d.extLinkCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Bilder</div><div class="kpi-v">${d.imageCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Schema</div><div class="kpi-v">${d.schemas.length}</div></div>
+  </div>`;
+
+  html += '<div class="insp-section"><div class="insp-section-title">Snabbkontroll</div>';
+  html += `<div class="insp-row"><div class="insp-label">Title</div><div class="insp-value">${inspBadge(d.title)} ${d.titleLen ? d.titleLen + ' tecken' : ''}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Meta desc</div><div class="insp-value">${inspBadge(d.metaDesc)} ${d.metaDescLen ? d.metaDescLen + ' tecken' : ''}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">H1</div><div class="insp-value">${inspBadge(d.hasH1)} ${d.h1Count > 1 ? inspWarnBadge(d.h1Count + ' st') : ''}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Canonical</div><div class="insp-value">${inspBadge(d.canonical)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Open Graph</div><div class="insp-value">${inspBadge(d.og.title, 'Title')} ${inspBadge(d.og.image, 'Image')}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Schema.org</div><div class="insp-value">${inspBadge(d.schemas.length > 0, d.schemas.length + ' st')}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Bilder alt-text</div><div class="insp-value">${d.imagesNoAlt === 0 ? inspBadge(true, 'Alla har alt') : '<span class="insp-tag red">' + d.imagesNoAlt + ' saknar alt</span>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Språk</div><div class="insp-value">${inspBadge(d.lang)} ${d.lang || ''}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Viewport</div><div class="insp-value">${inspBadge(d.viewport)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">TTFB</div><div class="insp-value">${d.perf.ttfb <= 300 ? inspBadge(true, d.perf.ttfb+'ms') : d.perf.ttfb <= 600 ? inspWarnBadge(d.perf.ttfb+'ms') : '<span class="insp-tag red">'+d.perf.ttfb+'ms</span>'}</div></div>`;
+  html += '</div>';
+
+  if (issues.length) {
+    html += '<div class="insp-section"><div class="insp-section-title">Problem att åtgärda</div>';
+    issues.forEach(i => { html += `<div style="padding:2px 0;color:var(--r);font-size:11px">⚠ ${esc(i)}</div>` });
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderInspMeta(d) {
+  let html = '<div class="insp-section"><div class="insp-section-title">Grundläggande</div>';
+  html += `<div class="insp-row"><div class="insp-label">Title</div><div class="insp-value">${esc(d.title) || '<em style="color:var(--r)">Saknas</em>'} <span class="insp-tag blue">${d.titleLen} tecken</span></div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Meta description</div><div class="insp-value">${esc(d.metaDesc) || '<em style="color:var(--r)">Saknas</em>'} <span class="insp-tag blue">${d.metaDescLen} tecken</span></div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Meta keywords</div><div class="insp-value">${esc(d.metaKw) || '<em style="color:var(--muted)">Ej satt</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Robots</div><div class="insp-value">${esc(d.robots) || '<em style="color:var(--muted)">Ej satt (standard: index,follow)</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Canonical</div><div class="insp-value">${esc(d.canonical) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Språk</div><div class="insp-value">${esc(d.lang) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Charset</div><div class="insp-value">${esc(d.charset)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Viewport</div><div class="insp-value">${esc(d.viewport) || '<em style="color:var(--r)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Generator</div><div class="insp-value">${esc(d.generator) || '—'}</div></div>`;
+  html += '</div>';
+
+  html += '<div class="insp-section"><div class="insp-section-title">Open Graph</div>';
+  html += `<div class="insp-row"><div class="insp-label">og:title</div><div class="insp-value">${esc(d.og.title) || '<em style="color:var(--w)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">og:description</div><div class="insp-value">${esc(d.og.desc) || '<em style="color:var(--w)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">og:image</div><div class="insp-value">${d.og.image ? '<img src="'+esc(d.og.image)+'" style="max-width:120px;max-height:60px;border-radius:4px;vertical-align:middle"> ' + esc(d.og.image) : '<em style="color:var(--w)">Saknas</em>'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">og:type</div><div class="insp-value">${esc(d.og.type) || '—'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">og:url</div><div class="insp-value">${esc(d.og.url) || '—'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">og:site_name</div><div class="insp-value">${esc(d.og.siteName) || '—'}</div></div>`;
+  html += '</div>';
+
+  html += '<div class="insp-section"><div class="insp-section-title">Twitter Card</div>';
+  html += `<div class="insp-row"><div class="insp-label">twitter:card</div><div class="insp-value">${esc(d.tw.card) || '—'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">twitter:title</div><div class="insp-value">${esc(d.tw.title) || '—'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">twitter:description</div><div class="insp-value">${esc(d.tw.desc) || '—'}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">twitter:image</div><div class="insp-value">${esc(d.tw.image) || '—'}</div></div>`;
+  html += '</div>';
+
+  if (d.hreflangs && d.hreflangs.length) {
+    html += '<div class="insp-section"><div class="insp-section-title">Hreflang</div>';
+    d.hreflangs.forEach(h => {
+      html += `<div class="insp-row"><div class="insp-label">${esc(h.lang)}</div><div class="insp-value" style="font-size:10px">${esc(h.href)}</div></div>`;
+    });
+    html += '</div>';
+  }
+  return html;
+}
+
+function renderInspHeadings(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Rubrikstruktur (${d.headings.length} rubriker)</div>`;
+  if (!d.headings.length) {
+    return html + '<div style="color:var(--muted);padding:8px 0">Inga rubriker hittades på sidan</div></div>';
+  }
+  html += '<div class="insp-heading-tree">';
+  d.headings.forEach(h => {
+    const indent = (h.level - 1);
+    const col = h.level === 1 ? 'var(--p)' : h.level === 2 ? 'var(--g)' : h.level === 3 ? 'var(--w)' : 'var(--muted)';
+    html += `<div>${'<span class="insp-h-indent"></span>'.repeat(indent)}<span class="insp-tag blue">H${h.level}</span> <span style="color:${col}">${esc(h.text)}</span></div>`;
+  });
+  html += '</div></div>';
+
+  const counts = {};
+  d.headings.forEach(h => { counts['H'+h.level] = (counts['H'+h.level]||0)+1 });
+  html += '<div class="insp-section"><div class="insp-section-title">Fördelning</div>';
+  for (let i = 1; i <= 6; i++) {
+    const c = counts['H'+i] || 0;
+    if (c > 0) {
+      const pct = Math.round(c / d.headings.length * 100);
+      html += `<div class="insp-row"><div class="insp-label">H${i}</div><div class="insp-value">${c} st <div class="insp-meter"><div class="insp-meter-fill" style="width:${pct}%;background:var(--p)"></div></div></div></div>`;
+    }
+  }
+  html += '</div>';
+  return html;
+}
+
+function renderInspLinks(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Länköversikt</div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">Totalt</div><div class="kpi-v">${d.totalLinks}</div></div>
+    <div class="kpi"><div class="kpi-l">Interna</div><div class="kpi-v" style="color:var(--g)">${d.intLinkCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Externa</div><div class="kpi-v" style="color:var(--p)">${d.extLinkCount}</div></div>
+  </div></div>`;
+
+  const nofollow = d.links.filter(l => l.nofollow);
+  if (nofollow.length) {
+    html += `<div class="insp-section"><div class="insp-section-title">Nofollow-länkar (${nofollow.length})</div>`;
+    nofollow.slice(0, 30).forEach(l => {
+      html += `<div class="insp-link-item"><span class="insp-link-status insp-tag yellow">nofollow</span><a href="#">${esc(l.text || l.href)}</a></div>`;
+    });
+    html += '</div>';
+  }
+
+  html += `<div class="insp-section"><div class="insp-section-title">Externa länkar (${d.extLinkCount})</div>`;
+  const ext = d.links.filter(l => l.external);
+  if (!ext.length) html += '<div style="color:var(--muted)">Inga externa länkar</div>';
+  ext.slice(0, 50).forEach(l => {
+    html += `<div class="insp-link-item"><span class="insp-link-status insp-tag blue">ext</span><a href="#">${esc(l.text || '(ingen text)')}</a> <span style="font-size:9px;color:var(--muted)">${esc(l.href.substring(0,60))}</span></div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderInspImages(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Bildöversikt (${d.imageCount} bilder)</div>`;
+  html += `<div style="display:grid;grid-template-columns:1fr 1fr;gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">Totalt</div><div class="kpi-v">${d.imageCount}</div></div>
+    <div class="kpi"><div class="kpi-l">Saknar alt</div><div class="kpi-v" style="color:${d.imagesNoAlt?'var(--r)':'var(--g)'}">${d.imagesNoAlt}</div></div>
+  </div></div>`;
+
+  if (d.imagesNoAlt > 0) {
+    html += '<div class="insp-section"><div class="insp-section-title">Bilder utan alt-text</div>';
+    d.images.filter(i => !i.hasAlt).slice(0, 30).forEach(i => {
+      html += `<div class="insp-link-item"><span class="insp-tag red">saknar alt</span><span style="font-size:10px;color:var(--muted);word-break:break-all">${esc(i.src.substring(0,80))}</span></div>`;
+    });
+    html += '</div>';
+  }
+
+  html += '<div class="insp-section"><div class="insp-section-title">Alla bilder</div>';
+  d.images.slice(0, 50).forEach(i => {
+    const altTag = i.hasAlt
+      ? '<span class="insp-tag green">alt</span>'
+      : '<span class="insp-tag red">saknar alt</span>';
+    const src = esc(i.src);
+    html += `<div style="display:flex;gap:8px;padding:8px 0;border-bottom:1px solid var(--border);align-items:flex-start">
+      <div style="flex-shrink:0;width:80px;height:60px;border-radius:4px;overflow:hidden;background:var(--panel);display:flex;align-items:center;justify-content:center;border:1px solid var(--border)">
+        <img src="${src}" style="max-width:78px;max-height:58px;object-fit:contain" onerror="this.style.display='none';this.parentNode.insertAdjacentHTML('beforeend','<span style=&quot;font-size:9px;color:var(--muted)&quot;>Trasig</span>')">
+      </div>
+      <div style="flex:1;min-width:0;font-size:10px">
+        <div style="font-weight:600;color:var(--head);margin-bottom:2px;word-break:break-all">${esc(i.src.split('/').pop().split('?')[0] || i.src.substring(0, 40))}</div>
+        <div style="color:var(--muted);margin-bottom:3px">${i.width}x${i.height}${i.loading ? ' · loading=' + i.loading : ''}</div>
+        <div style="margin-bottom:4px">${altTag} <span style="color:var(--txt)">${esc(i.alt) || ''}</span></div>
+        <div style="display:flex;gap:4px">
+          <button class="act-btn" data-img-open="${src}" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex">Öppna</button>
+          <button class="act-btn" data-img-dl="${src}" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex;background:var(--g)">Ladda ner</button>
+          <button class="act-btn" data-img-copy="${src}" style="height:22px;padding:0 8px;font-size:9px;width:auto;display:inline-flex;background:var(--border);color:var(--txt)">Kopiera URL</button>
+        </div>
+      </div>
+    </div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+// Image-button delegation — keeps the per-row HTML free of inline JS
+// strings (which break under CSP if we tighten it later).
+document.getElementById('inspectorBody').addEventListener('click', e => {
+  const t = e.target.closest('[data-img-open],[data-img-dl],[data-img-copy]');
+  if (!t) return;
+  if (t.dataset.imgOpen) {
+    // Routing through main lets it open the URL in a new tab in the
+    // chrome BrowserWindow rather than this BrowserWindow which has
+    // no tab UI.
+    window.open(t.dataset.imgOpen, '_blank');
+  } else if (t.dataset.imgDl) {
+    seoz.inspector.downloadImage(t.dataset.imgDl);
+    toast('Laddar ner bild…', 'var(--g)');
+  } else if (t.dataset.imgCopy) {
+    navigator.clipboard.writeText(t.dataset.imgCopy);
+    toast('URL kopierad', 'var(--g)');
+  }
+});
+
+function renderInspSchema(d) {
+  let html = `<div class="insp-section"><div class="insp-section-title">Strukturerad data — JSON-LD (${d.schemas.length})</div>`;
+  if (!d.schemas.length) {
+    return html + '<div style="color:var(--w);padding:8px 0">Ingen strukturerad data (JSON-LD) hittades. Överväg att lägga till Schema.org-märkning.</div></div>';
+  }
+  d.schemas.forEach((s, i) => {
+    const type = s['@type'] || s._error || 'Okänd';
+    html += `<div style="margin-bottom:10px"><div style="font-size:11px;font-weight:700;color:var(--head);margin-bottom:3px"><span class="insp-tag blue">Schema ${i+1}</span> ${esc(Array.isArray(type) ? type.join(', ') : type)}</div>`;
+    html += `<div class="insp-code">${esc(JSON.stringify(s, null, 2))}</div></div>`;
+  });
+  html += '</div>';
+  return html;
+}
+
+function renderInspPerf(d) {
+  const p = d.perf;
+  let html = '<div class="insp-section"><div class="insp-section-title">Sidladdning</div>';
+  html += `<div style="display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:10px">
+    <div class="kpi"><div class="kpi-l">TTFB</div><div class="kpi-v" style="color:${p.ttfb<=300?'var(--g)':p.ttfb<=600?'var(--w)':'var(--r)'}">${p.ttfb}ms</div></div>
+    <div class="kpi"><div class="kpi-l">DOM Ready</div><div class="kpi-v">${p.domContentLoaded}ms</div></div>
+    <div class="kpi"><div class="kpi-l">Interaktiv</div><div class="kpi-v">${p.domInteractive}ms</div></div>
+    <div class="kpi"><div class="kpi-l">Laddad</div><div class="kpi-v">${p.loadComplete}ms</div></div>
+  </div></div>`;
+
+  html += '<div class="insp-section"><div class="insp-section-title">Resurser</div>';
+  html += `<div class="insp-row"><div class="insp-label">Totala resurser</div><div class="insp-value">${p.resourceCount} filer — ${fmtBytes(p.totalTransferSize)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">JavaScript</div><div class="insp-value">${p.jsCount} filer — ${fmtBytes(p.jsSize)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">CSS</div><div class="insp-value">${p.cssCount} filer — ${fmtBytes(p.cssSize)}</div></div>`;
+  html += `<div class="insp-row"><div class="insp-label">Bilder</div><div class="insp-value">${p.imgCount} filer — ${fmtBytes(p.imgSize)}</div></div>`;
+  html += '</div>';
+
+  const total = p.totalTransferSize || 1;
+  html += '<div class="insp-section"><div class="insp-section-title">Storleksfördelning</div>';
+  html += `<div style="display:flex;height:14px;border-radius:4px;overflow:hidden;gap:1px">
+    <div style="flex:${p.jsSize};background:#f59e0b" title="JS: ${fmtBytes(p.jsSize)}"></div>
+    <div style="flex:${p.cssSize};background:#4680ff" title="CSS: ${fmtBytes(p.cssSize)}"></div>
+    <div style="flex:${p.imgSize};background:#2ca87f" title="Bilder: ${fmtBytes(p.imgSize)}"></div>
+    <div style="flex:${total-p.jsSize-p.cssSize-p.imgSize};background:var(--border)" title="Övrigt"></div>
+  </div>
+  <div style="display:flex;gap:12px;margin-top:4px;font-size:9px;color:var(--muted)">
+    <span><span style="color:#f59e0b">■</span> JS</span>
+    <span><span style="color:#4680ff">■</span> CSS</span>
+    <span><span style="color:#2ca87f">■</span> Bilder</span>
+    <span><span style="color:var(--border)">■</span> Övrigt</span>
+  </div></div>`;
+  return html;
+}
+
+function renderInspRaw(d) {
+  return `<div class="insp-section"><div class="insp-section-title">Rådata (JSON) — för crawlern</div>
+  <div style="margin-bottom:6px"><button class="act-btn" id="rawCopyBtn" style="width:auto;padding:0 12px;display:inline-flex">${_BTN.copy}Kopiera all data</button></div>
+  <div class="insp-code" style="max-height:none">${esc(JSON.stringify(d, null, 2))}</div></div>`;
+}
+
+// Console tab — uses live message buffer (consoleMessages).
+function renderInspConsole() {
+  if (!consoleMessages.length) {
+    return '<div style="padding:20px;text-align:center;color:var(--muted)">Konsolen är tom — JS-loggar och fel visas här i realtid</div>';
+  }
+  let html = '<div style="display:flex;gap:6px;margin-bottom:8px;align-items:center">';
+  const errors = consoleMessages.filter(m => m.type === 'error').length;
+  const warns  = consoleMessages.filter(m => m.type === 'warn').length;
+  html += `<span class="insp-tag ${errors ? 'red' : 'green'}">${errors} fel</span>`;
+  html += `<span class="insp-tag ${warns ? 'yellow' : 'green'}">${warns} varningar</span>`;
+  html += `<span class="insp-tag blue">${consoleMessages.length} totalt</span>`;
+  html += `<span style="flex:1"></span>`;
+  html += `<button class="inspector-btn" id="conClearBtn" title="Rensa" style="font-size:10px">${_BTN.trash}</button>`;
+  html += '</div>';
+  const msgs = [...consoleMessages].reverse();
+  msgs.forEach(m => {
+    const t = new Date(m.time).toLocaleTimeString('sv-SE', { hour:'2-digit', minute:'2-digit', second:'2-digit' });
+    const icon = m.type === 'error' ? '✕' : m.type === 'warn' ? '⚠' : 'ℹ';
+    const src = m.source ? m.source.split('/').pop() + (m.line ? ':' + m.line : '') : '';
+    html += `<div class="console-entry ${m.type}"><span class="con-type">${icon}</span><span class="con-msg">${esc(m.message)}</span><span class="con-src" title="${esc(m.source)}">${esc(src)}</span><span class="con-src">${t}</span></div>`;
+  });
+  return html;
+}
+
+// Source tab — fetches outerHTML via main → chrome.
+async function renderInspSourceAsync(container) {
+  if (pageSource == null) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Hämtar HTML-källkod…</div>';
+    try {
+      pageSource = await seoz.inspector.getSource();
+    } catch (e) {
+      container.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte hämta källkod: ' + esc(e.message) + '</div>';
+      return;
+    }
+  }
+
+  if (pageSource == null) {
+    container.innerHTML = '<div style="padding:16px;color:var(--muted)">Ingen källkod tillgänglig.</div>';
+    return;
+  }
+
+  const highlighted = htmlSyntaxHighlight(pageSource);
+  const lines = highlighted.split('\n');
+  let numbered = '<table style="border-collapse:collapse;width:100%">';
+  for (let i = 0; i < lines.length; i++) {
+    numbered += `<tr><td style="color:var(--muted);text-align:right;padding:0 10px 0 0;user-select:none;font-size:10px;width:40px;vertical-align:top;border-right:1px solid var(--border)">${i+1}</td><td style="padding:0 0 0 8px;white-space:pre-wrap;word-break:break-all">${lines[i]}</td></tr>`;
+  }
+  numbered += '</table>';
+
+  container.innerHTML = `
+    <div style="display:flex;gap:6px;margin-bottom:8px">
+      <button class="act-btn" id="srcCopyBtn" style="width:auto;padding:0 12px;display:inline-flex">${_BTN.copy}Kopiera källkod</button>
+      <input id="sourceSearch" placeholder="Sök i källkoden..." style="flex:1;height:28px;font-size:10px;padding:0 8px;background:var(--panel);border:1px solid var(--border);border-radius:6px;color:var(--head);font-family:inherit">
+    </div>
+    <div id="sourceContainer" style="font-family:Consolas,Monaco,monospace;font-size:10px;line-height:1.6;overflow:auto;max-height:calc(100% - 40px);background:var(--panel);border:1px solid var(--border);border-radius:6px;padding:8px 0">${numbered}</div>
+  `;
+}
+
+function htmlSyntaxHighlight(html) {
+  return html
+    .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+    .replace(/&lt;(\/?)([\w-]+)/g, '&lt;$1<span style="color:#e06c75">$2</span>')
+    .replace(/\s([\w-]+)=(&quot;|")/g, ' <span style="color:#d19a66">$1</span>=<span style="color:#98c379">&quot;')
+    .replace(/(&quot;|")([\s&>])/g, '&quot;</span>$2')
+    .replace(/&lt;!--[\s\S]*?--&gt;/g, m => '<span style="color:#5c6370;font-style:italic">' + m + '</span>');
+}
+
+// Network tab — fetches resource-timing via main → chrome.
+async function renderInspNetworkAsync(container) {
+  if (networkEntries == null) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Hämtar nätverksdata…</div>';
+    try {
+      networkEntries = (await seoz.inspector.getNetwork()) || [];
+    } catch (e) {
+      container.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte hämta nätverksdata: ' + esc(e.message) + '</div>';
+      return;
+    }
+  }
+
+  if (!networkEntries.length) {
+    container.innerHTML = `<div style="padding:12px;text-align:center;color:var(--muted)">
+      <button class="act-btn" id="netReloadBtn" style="width:auto;display:inline-flex;padding:0 16px">Ladda om nätverksdata</button>
+      <div style="margin-top:6px;font-size:10px">Inga resurser hittades — har sidan laddats färdigt?</div>
+    </div>`;
+    return;
+  }
+
+  const maxDur = Math.max(...networkEntries.map(e => e.start + e.duration), 1);
+  const total  = networkEntries.reduce((s, e) => s + e.size, 0);
+
+  let html = `<div style="display:flex;gap:8px;margin-bottom:8px;align-items:center">
+    <span class="insp-tag blue">${networkEntries.length} resurser</span>
+    <span class="insp-tag blue">${fmtBytes(total)}</span>
+    <span style="flex:1"></span>
+    <button class="inspector-btn" id="netReloadBtn" title="Uppdatera" style="font-size:10px">↻</button>
+  </div>`;
+
+  html += '<table class="net-table"><thead><tr><th style="width:40%">Resurs</th><th>Typ</th><th>Storlek</th><th>Tid</th><th style="width:25%">Tidslinje</th></tr></thead><tbody>';
+  networkEntries.forEach(e => {
+    const fname = e.name.split('/').pop().split('?')[0] || e.name;
+    const typeColors = { script:'#f59e0b', css:'#4680ff', img:'#2ca87f', fetch:'#7c3aed', xmlhttprequest:'#7c3aed', link:'#06b6d4' };
+    const col = typeColors[e.type] || 'var(--muted)';
+    const barLeft  = (e.start / maxDur * 100).toFixed(1);
+    const barWidth = Math.max(1, (e.duration / maxDur * 100)).toFixed(1);
+    html += `<tr title="${esc(e.name)}">
+      <td style="color:var(--head)">${esc(fname.substring(0,50))}</td>
+      <td><span style="color:${col};font-weight:600">${esc(e.type)}</span></td>
+      <td>${e.size ? fmtBytes(e.size) : '—'}</td>
+      <td>${e.duration}ms</td>
+      <td><div class="net-bar"><div class="net-bar-fill" style="left:${barLeft}%;width:${barWidth}%;background:${col}"></div></div></td>
+    </tr>`;
+  });
+  html += '</tbody></table>';
+  container.innerHTML = html;
+}
+
+// Elements tab — fetches DOM tree via main → chrome.
+async function renderInspElementsAsync(container) {
+  if (elemTree == null) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Hämtar DOM-träd…</div>';
+    try {
+      elemTree = await seoz.inspector.getElements();
+    } catch (e) {
+      container.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte hämta DOM: ' + esc(e.message) + '</div>';
+      return;
+    }
+  }
+
+  if (!elemTree) {
+    container.innerHTML = `<div style="padding:12px;text-align:center;color:var(--muted)">
+      <button class="act-btn" id="elemReloadBtn" style="width:auto;display:inline-flex;padding:0 16px">Ladda om DOM-träd</button>
+    </div>`;
+    return;
+  }
+
+  let html = '<div class="elem-tree">';
+  html += renderElemNode(elemTree, 0);
+  html += '</div>';
+  container.innerHTML = html;
+}
+
+function renderElemNode(node, depth) {
+  if (!node) return '';
+  if (node.type === 'text') {
+    return `<div class="elem-node" style="padding-left:${depth*16}px"><span class="elem-text">"${esc(node.text)}"</span></div>`;
+  }
+  const attrs = Object.entries(node.attrs || {}).map(([k,v]) => ` <span class="elem-attr">${esc(k)}</span>=<span class="elem-str">"${esc(String(v).substring(0,60))}"</span>`).join('');
+  const hasChildren = node.children && node.children.length > 0;
+  const id = 'el_' + Math.random().toString(36).substr(2,6);
+
+  let html = `<div class="elem-node" data-toggle="${id}" style="padding-left:${depth*16}px">`;
+  if (hasChildren) html += `<span class="elem-toggle" id="${id}_tog">▸</span>`;
+  else             html += `<span class="elem-toggle"></span>`;
+  html += `&lt;<span class="elem-tag">${esc(node.tag)}</span>${attrs}&gt;`;
+  if (!hasChildren) html += `&lt;/<span class="elem-tag">${esc(node.tag)}</span>&gt;`;
+  html += '</div>';
+
+  if (hasChildren) {
+    html += `<div id="${id}" style="display:none">`;
+    node.children.forEach(c => { html += renderElemNode(c, depth + 1) });
+    html += `<div class="elem-node" style="padding-left:${depth*16}px">&lt;/<span class="elem-tag">${esc(node.tag)}</span>&gt;</div>`;
+    html += '</div>';
+  }
+  return html;
+}
+
+// ── Body-level click delegation (covers tabs that re-render their HTML
+//    after async fetches; we attach listeners by selector instead of
+//    individual buttons). ──
+document.getElementById('inspectorBody').addEventListener('click', e => {
+  // Elements tree expand/collapse
+  const tog = e.target.closest('[data-toggle]');
+  if (tog) {
+    const id = tog.dataset.toggle;
+    const sub = document.getElementById(id);
+    const arrow = document.getElementById(id + '_tog');
+    if (sub) {
+      const open = sub.style.display !== 'none';
+      sub.style.display = open ? 'none' : 'block';
+      if (arrow) arrow.textContent = open ? '▸' : '▾';
+    }
+    return;
+  }
+  // Source-tab copy
+  if (e.target.closest('#srcCopyBtn')) {
+    if (pageSource) {
+      navigator.clipboard.writeText(pageSource).then(() => toast('Källkod kopierad!', 'var(--g)'));
+    }
+  }
+  // Raw-tab copy
+  if (e.target.closest('#rawCopyBtn')) {
+    if (inspectorData) {
+      navigator.clipboard.writeText(JSON.stringify(inspectorData, null, 2))
+        .then(() => toast('Inspector-data kopierad!', 'var(--g)'));
+    }
+  }
+  // Console clear
+  if (e.target.closest('#conClearBtn')) {
+    consoleMessages = [];
+    render();
+  }
+  // Network reload
+  if (e.target.closest('#netReloadBtn')) {
+    networkEntries = null;
+    render();
+  }
+  // Elements reload
+  if (e.target.closest('#elemReloadBtn')) {
+    elemTree = null;
+    render();
+  }
+});
+
+// Source-tab search input (delegated via input event since the input
+// is recreated on each render).
+document.getElementById('inspectorBody').addEventListener('input', e => {
+  if (e.target.id !== 'sourceSearch') return;
+  const query = e.target.value;
+  const container = document.getElementById('sourceContainer');
+  if (!container) return;
+  const cells = container.querySelectorAll('td:nth-child(2)');
+  if (!query) {
+    cells.forEach(td => { td.style.background = '' });
+    return;
+  }
+  let found = false;
+  cells.forEach(td => {
+    const text = td.textContent;
+    if (text.toLowerCase().includes(query.toLowerCase())) {
+      if (!found) { td.scrollIntoView({ block:'center' }); found = true }
+      td.style.background = 'rgba(70,128,255,.1)';
+    } else {
+      td.style.background = '';
+    }
+  });
+});
+
+// Keyboard: Esc closes the window. F5 / Ctrl+R refreshes.
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') { seoz.inspector.close(); return }
+  if (e.key === 'F5' || ((e.ctrlKey || e.metaKey) && e.key.toLowerCase() === 'r')) {
+    e.preventDefault();
+    document.getElementById('refreshBtn').click();
+  }
+});
+
+// On load — request initial data.
+seoz.inspector.requestData();
+</script>
+</body>
+</html>

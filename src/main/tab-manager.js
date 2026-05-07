@@ -397,28 +397,6 @@ const _MAIN_WORLD_PATCHES = `
 // tag indirection, it overrode native Sec-CH-UA / userAgentData values
 // with hand-built strings that introduced inconsistencies Google's
 // bot-detector flags. Cleaner to rely on the preload alone.
-// v1.10.132: applyChromeShim is now a no-op. The CDP debugger attach
-// (wc.debugger.attach + Page.addScriptToEvaluateOnNewDocument) was a
-// detection vector — Google's bot-detector flags webContents that
-// have an active CDP session because real Chrome doesn't have CDP
-// attached unless DevTools is open.
-//
-// Confirmed via fingerprint comparison vs Strawberry browser
-// (which works on Google sign-in): our navigator/window-side state
-// is byte-equivalent except for normal Chromium-version-specific
-// GREASE differences. The only remaining tell that explains why
-// Google rejects us but accepts Strawberry is the CDP attach.
-//
-// Stealth (WebAuthn block, etc.) lives entirely in webview-preload.js
-// via webFrame.executeJavaScript, which is what Strawberry does too.
-//
-// Function kept as a no-op so callers (TabManager.createTab and
-// main.js's did-create-window hook) don't need to be touched. Returns
-// a resolved Promise so any awaiters proceed immediately.
-function applyChromeShim(/* wc, diag */) {
-  return Promise.resolve()
-}
-
 // Events we forward main → renderer. Each fires on the `tab:event`
 // channel as { tabId, event, args }. The renderer's TabHandle
 // re-dispatches them to addEventListener() listeners using the
@@ -563,22 +541,6 @@ class TabManager {
     // Now we ALSO listen for navigation events and re-inject via
     // executeJavaScript, AND attempt CDP as a best-effort.
 
-    // Apply the Chrome shim to this tab. v1.10.131 extracted into a
-    // standalone function (applyChromeShim) so OAuth popup
-    // BrowserWindows can get the same treatment — Google sign-in opens
-    // a window.open() popup which previously ran with UA spoof but
-    // WITHOUT the navigator.userAgentData / window.chrome / WebAuthn
-    // shim, leaking its embedded-browser identity to Google's bot
-    // detector and triggering "Webbläsaren kanske inte är säker".
-    // Wait for CDP Page.addScriptToEvaluateOnNewDocument to be
-    // registered with Chromium before doing anything that could
-    // trigger a navigation. v1.10.132: previously fire-and-forget,
-    // which left a race window where the user's first URL-bar nav
-    // (or createTab's initial opts.url) could fire before the
-    // pre-script was active — Google's bot-detector reads navigator.*
-    // on the very first inline script so timing matters.
-    const _shimReady = applyChromeShim(wc, _diag)
-
     // Forward known events to the renderer.
     this._wireEventForwarding(tabId, wc, entry)
 
@@ -586,15 +548,11 @@ class TabManager {
     // web-contents-created hook in main.js (OAuth popup routing,
     // SEOZ-styled popup wrapper, etc.). Don't install our own
     // setWindowOpenHandler here or we'd shadow that logic.
-
-    // Now that all wiring is in place, wait for the shim. Cap at
-    // 2s in case CDP misbehaves so we don't deadlock tab creation.
-    try {
-      await Promise.race([
-        _shimReady,
-        new Promise((res) => setTimeout(() => { _diag('shim wait timed out @2s'); res() }, 2000)),
-      ])
-    } catch (_) {}
+    //
+    // NB: stealth used to be wired here via applyChromeShim() —
+    // removed in v1.10.134 because the function was a no-op since
+    // v1.10.132 (CDP attach was the bot-detection signal we wanted
+    // to drop). Stealth now lives entirely in webview-preload.js.
 
     // Initial load.
     if (opts.url) {
@@ -646,15 +604,18 @@ class TabManager {
     if (!entry || entry.destroyed) return
     const { view } = entry
 
-    // Attach as a child view of the host window's contentView the
-    // first time we get bounds. Re-attaching is harmless if already
-    // attached — we use `addChildView` always to keep z-order.
+    // Attach as a child view of the host window's contentView. The
+    // crucial trick: index=0 means "bottom of the z-stack", so the
+    // tab WebContentsView always sits BELOW any floating views
+    // (tooltip / Shield popup / site-info / url-suggest / chrome-
+    // label) the host has already attached. Without index=0 the new
+    // tab goes to the end of the children array = top, briefly
+    // covering popups during fast tab swaps.
     try {
       const host = this.hostWindow?.contentView
       if (host) {
-        // remove first if already present so we can re-add on top
         try { host.removeChildView(view) } catch (_) {}
-        host.addChildView(view)
+        host.addChildView(view, 0)
       }
     } catch (_) {}
 
@@ -669,12 +630,26 @@ class TabManager {
     }
 
     try { view.setVisible(!!visible) } catch (_) {}
+
+    // Tab z-order was just bumped to the top of contentView — that
+    // pushes any floating sibling views (tab tooltip, Shield popup,
+    // site-info, url-suggest, chrome-label) UNDER the new tab. Let
+    // the host re-bump them so they stay visible across tab swaps.
+    if (typeof this.onTopBumped === 'function') {
+      try { this.onTopBumped() } catch (_) {}
+    }
   }
 
   setVisible(tabId, visible) {
     const entry = this._tabs.get(tabId)
     if (!entry || entry.destroyed) return
     try { entry.view.setVisible(!!visible) } catch (_) {}
+    // setVisible(true) doesn't bump z-order on its own (the view
+    // stays at whatever child position it had), but the host might
+    // still want a chance to fix things up.
+    if (visible && typeof this.onTopBumped === 'function') {
+      try { this.onTopBumped() } catch (_) {}
+    }
   }
 
   // Convenience accessors used by main.js for things like permission
@@ -921,4 +896,4 @@ class TabManager {
   }
 }
 
-module.exports = { TabManager, applyChromeShim }
+module.exports = { TabManager }

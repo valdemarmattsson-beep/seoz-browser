@@ -668,6 +668,30 @@ body.wv-fullscreen .main{flex:1;height:100vh}
   transition:color var(--dur-fast) var(--ease-out);
 }
 .settings-nav-item.active svg{color:var(--head)}
+/* "Om SEOZ"-ikonen — Orbit-marken roterar långsamt och cyklar genom
+   semantic-paletten (accent → live → warn → danger → tillbaka). 8s
+   loop = subtilt nog att inte distrahera men signalerar "live brand".
+   Animationen vinner över både ink-3 och .active-färgen eftersom
+   keyframes har högre specificitet för animerade properties. */
+@keyframes settings-orbit-pulse{
+  0%  { transform: rotate(0deg);   color: var(--p) }
+  25% { transform: rotate(90deg);  color: var(--g) }
+  50% { transform: rotate(180deg); color: var(--w) }
+  75% { transform: rotate(270deg); color: var(--r) }
+  100%{ transform: rotate(360deg); color: var(--p) }
+}
+.settings-nav-item .orbit-anim{
+  /* Bumpad från default 14×14 till 18×18 — orbit-marken har mer "luft"
+     i sin geometri (två arcs + prick) än de fyllda silhuett-ikonerna
+     i samma rad, så den behöver lite mer pixlar för att visuellt väga
+     lika tungt. */
+  width:18px;height:18px;
+  animation: settings-orbit-pulse 8s linear infinite;
+  transform-origin: 50% 50%;
+}
+@media (prefers-reduced-motion: reduce) {
+  .settings-nav-item .orbit-anim { animation: none; }
+}
 
 .settings-main{
   flex:1;overflow-y:auto;
@@ -1646,6 +1670,16 @@ body.chrome-clip-active .tab-handle{
   transition:top .12s ease-out;
 }
 body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
+/* Inspector lives in DOM as a fixed-position floating panel — JS
+   keeps --page-bottom-clip in sync with inspector.top (= viewport
+   height − inspector.top) so each .tab-handle's bottom edge always
+   lands right above the inspector. Page WebContentsView shrinks
+   accordingly, regardless of where the user drags the inspector. */
+body.inspector-open .tab-handle{
+  bottom:var(--page-bottom-clip, 320px) !important;
+  transition:bottom .12s ease-out;
+}
+body:not(.inspector-open) .tab-handle{ transition:bottom .1s ease-in }
 .tab-tip-card{
   background:var(--card);border:1px solid var(--border);border-radius:10px;
   box-shadow:0 8px 24px rgba(0,0,0,.4);
@@ -2176,14 +2210,32 @@ body.no-seoz .seoz-panel { display:none !important }
    become visible themselves. */
 .di .dtt { display: none }
 
-/* ── SEOZ PANEL (slide-out from right, between webview and dock) ── */
+/* ── SEOZ PANEL (slide-out from right, between webview and dock) ──
+   Width snaps open/close (one frame = one ResizeObserver tick = one
+   native setBounds, no jitter). Opacity fades 150ms for a smoother
+   feel — opacity doesn't trigger layout so the page WebContentsView
+   never sees the fade. Two-phase close: .closing is held for 150ms
+   while opacity fades 1→0, then the class is removed and width snaps
+   to 0. That way the panel doesn't disappear mid-fade. */
 .seoz-panel{
   width:0;overflow:hidden;
   background:var(--card);border-left:1px solid var(--border);
   display:flex;flex-direction:column;
-  transition:width .2s ease;flex-shrink:0;
+  flex-shrink:0;
+  opacity:0;
 }
-.seoz-panel.open{width:var(--panel-w)}
+.seoz-panel.open{
+  width:var(--panel-w);
+  opacity:1;
+  transition:opacity .1s ease;
+}
+/* Hold width during fade-out so opacity transition is visible. After
+   150ms (closePanel removes .closing via setTimeout) width snaps to 0. */
+.seoz-panel.closing{
+  width:var(--panel-w);
+  opacity:0;
+  transition:opacity .1s ease;
+}
 .panel-hdr{height:44px;border-bottom:1px solid var(--border);display:flex;align-items:center;padding:0 14px;gap:8px;flex-shrink:0;background:var(--panel)}
 .ph-mark{width:26px;height:26px;border-radius:7px;display:flex;align-items:center;justify-content:center;flex-shrink:0;color:var(--ink-2,#888)}
 .ph-mark svg{width:15px;height:15px}
@@ -3527,25 +3579,57 @@ body.no-seoz .seoz-panel { display:none !important }
 .history-item-time{font-size:10px;color:var(--muted);flex-shrink:0}
 .history-empty{padding:30px;text-align:center;font-size:12px;color:var(--muted)}
 
-/* ── SEOZ INSPECTOR (bottom drawer) ── */
+/* ── SEOZ INSPECTOR (floating panel) ──
+   Originally a position:absolute bottom-docked drawer. Now a
+   draggable + resizable position:fixed floating panel — header is
+   the move-handle, bottom-right corner is the resize-handle. Default
+   state on first open mimics the old bottom drawer (full-width, 320px
+   tall, anchored to viewport bottom) so existing muscle memory works.
+   Page WebContentsView shrinks via `body.inspector-open` rule + the
+   --page-bottom-clip CSS var that JS keeps in sync with inspector.top. */
 .inspector-drawer{
-  position:absolute;bottom:0;left:0;right:0;z-index:100;
+  position:fixed;left:0;right:0;bottom:0;z-index:100;
   height:0;overflow:hidden;
   background:var(--card);
+  border:1px solid var(--border);
   display:flex;flex-direction:column;
-  transition:height .2s ease;
+  transition:height .2s ease, top .2s ease, left .2s ease, width .2s ease;
   user-select:text;-webkit-user-select:text;cursor:auto;
+  box-shadow:0 -4px 24px rgba(0,0,0,.35);
 }
-/* Top border only when the drawer is actually open — otherwise the
-   2px stripe lingers as a stray blue line at the bottom of the window. */
 .inspector-drawer.open{height:320px;border-top:2px solid var(--p)}
-.inspector-drawer.resizing{transition:none!important}
+/* Floating mode kicks in once the user drags or resizes the inspector
+   away from its full-width bottom-dock default. JS toggles this class
+   to disable the right:0 / left:0 stretching so inline left/top/width
+   take effect. */
+.inspector-drawer.floating{
+  left:auto;right:auto;bottom:auto;
+  border-radius:8px;
+  border:1px solid var(--border);
+  border-top:1px solid var(--p);
+  box-shadow:0 8px 32px rgba(0,0,0,.45);
+}
+.inspector-drawer.resizing,
+.inspector-drawer.dragging{transition:none!important}
 .inspector-hdr{
   height:36px;flex-shrink:0;
   display:flex;align-items:center;padding:0 12px;gap:8px;
   border-bottom:1px solid var(--border);background:var(--panel);
-  cursor:ns-resize;
+  /* Header is the drag-to-move handle. Vertical-resize from header has
+     been replaced by the bottom-right corner handle below. */
+  cursor:move;
+  user-select:none;-webkit-user-select:none;
 }
+/* Bottom-right resize handle — visible only when floating, since
+   bottom-docked the panel takes full width and resizes from the top
+   edge via header drag (legacy behaviour). */
+.inspector-resize{
+  position:absolute;right:0;bottom:0;
+  width:14px;height:14px;cursor:nwse-resize;
+  z-index:2;
+  background:linear-gradient(135deg, transparent 50%, var(--ink-3) 50%, var(--ink-3) 65%, transparent 65%, transparent 80%, var(--ink-3) 80%);
+}
+.inspector-drawer:not(.floating) .inspector-resize{display:none}
 .inspector-hdr-title{font-size:11px;font-weight:700;color:var(--p);display:flex;align-items:center;gap:5px}
 .inspector-tabs{display:flex;align-items:center;gap:0;margin-left:8px}
 .inspector-tab{
@@ -4225,6 +4309,9 @@ body.no-seoz .seoz-panel { display:none !important }
         <div class="inspector-body" id="inspectorBody">
           <div style="text-align:center;padding:30px;color:var(--muted)">Tryck ↻ eller F12 för att analysera sidan</div>
         </div>
+        <!-- Bottom-right resize grip — visible only when .floating class
+             is set (i.e. user dragged inspector off the bottom dock). -->
+        <div class="inspector-resize" id="inspectorResize" title="Dra för att ändra storlek"></div>
       </div>
     </div>
 
@@ -5021,24 +5108,30 @@ const _OVERLAY_OPEN_SELECTOR = [
   '#legalModal.open',
   '#saveTabsModal.open',
   // Side panels / drawers
-  '#seozPanel.open',
-  '#inspectorDrawer.open',
+  // '#seozPanel.open' — flex sibling, shrinks page via layout already.
+  // '#inspectorDrawer.open' — floating panel with body.inspector-open
+  //  setting --page-bottom-clip; doesn't need hide.
   '#historyOverlay.open',
   '#ppForm.open',
-  // Toasts are small + transient, hide is acceptable since they auto-dismiss
-  '.toast.show',
-  // NB: dropdown-style menus (bookmark drop, chrome menu, ctx menu,
-  // URL suggest, etc.) used to live here but hiding the page entirely
-  // for a small dropdown was bad UX — page went fully black on every
-  // right-click / typed URL. Moved to _CLIP_OPEN_SELECTOR below in
-  // v1.10.105 — that mechanism shrinks the WebContentsView from the
-  // top just enough to expose the dropdown, leaving the page visible.
-  // .find-bar.show / .url-fav.show / .tab-tip-* deliberately NOT
-  // included — they're always-visible chrome (favicon, find-bar that
-  // overlays the top band) or false-positive triggers (tab-tip-fav
-  // gets .show on every favicon load even when the parent tooltip
-  // is hidden).
+  // (.toast.show removed v1.10.134 — toast() uses .toast.on, this
+  //  selector never matched anything.)
+  // Dropdowns (bookmark drop, chrome menu, ctx menu, URL suggest)
+  // live in _CLIP_OPEN_SELECTOR — clip-from-top instead of hide-all
+  // so the page stays visible underneath. See v1.10.105.
 ].join(', ')
+
+// Fast-path id set used by the MutationObserver below to early-exit
+// on mutations that can't possibly affect overlay state. Keep in sync
+// with _OVERLAY_OPEN_SELECTOR + _CLIP_OPEN_SELECTOR id parts.
+const _OVERLAY_IDS = new Set([
+  'bmModal','promptModal','confirmModal','mailComposeBg','ssEditor',
+  'pwModal','pwAuthModal','legalModal','saveTabsModal',
+  'historyOverlay','ppForm',
+  'ctxMenu','userDd',
+])
+// Class-based selectors from both lists. Pre-compiled regex so the
+// hot path is a single test() call per mutation record.
+const _OVERLAY_CLASS_RE = /(?:^|\s)(?:mail-acct-menu|mail-folder-menu|mail-compose-tpl-menu|mail-schedule-popup|home-mail-results)(?:\s|$)/
 
 // Overlays that should clip-from-top instead of hide-entirely. The
 // _refreshOverlayState computation reads each visible element's
@@ -5046,6 +5139,7 @@ const _OVERLAY_OPEN_SELECTOR = [
 // the tallest visible overlay sits in exposed chrome bg. v1.10.105.
 const _CLIP_OPEN_SELECTOR = [
   '#ctxMenu.open',
+  '#userDd.open',
   '.mail-acct-menu.show',
   '.mail-folder-menu.show',
   '.mail-compose-tpl-menu.show',
@@ -5102,16 +5196,35 @@ function _refreshOverlayState() {
   }
 }
 
-// MutationObserver fires whenever any class attribute changes in the
-// chrome DOM. v1.10.129: throttle via requestAnimationFrame because
-// _refreshOverlayState can mutate body classes that re-trigger this
-// observer. Without throttling we hit a true infinite microtask loop
-// (84k+ calls in ~16ms confirmed in user log) — each iteration mutates
-// → queues the next microtask → never drains.
+// MutationObserver fires on every class change in the chrome DOM —
+// thousands per session as tabs render, mail re-paints, settings flip,
+// etc. v1.10.129 added a rAF throttle so the body-class toggle inside
+// _refreshOverlayState couldn't feed back into a microtask storm
+// (84k calls / 16ms before the throttle).
+//
+// v1.10.134: pre-filter records before scheduling the rAF. The vast
+// majority of class mutations target tab strip / mail list / settings
+// nav — never affect overlay state. Early-exit on those by checking
+// target.id against _OVERLAY_IDS and target.className against the
+// pre-compiled _OVERLAY_CLASS_RE. Net effect: rAF schedules drop from
+// "every class change anywhere" to "only mutations on overlay roots."
 ;(function _watchOverlays() {
   try {
     let _refreshScheduled = false
-    const _onMut = () => {
+    const _onMut = (records) => {
+      // Fast-path: skip rAF entirely if no record touches an overlay.
+      let relevant = false
+      for (let i = 0; i < records.length; i++) {
+        const t = records[i].target
+        if (!t) continue
+        if (t.id && _OVERLAY_IDS.has(t.id)) { relevant = true; break }
+        // SVG nodes have an SVGAnimatedString className; normal HTML is a string.
+        const cls = (typeof t.className === 'string')
+          ? t.className
+          : (t.className && t.className.baseVal) || ''
+        if (cls && _OVERLAY_CLASS_RE.test(cls)) { relevant = true; break }
+      }
+      if (!relevant) return
       if (_refreshScheduled) return
       _refreshScheduled = true
       requestAnimationFrame(() => {
@@ -10269,7 +10382,12 @@ function togglePanel(name) {
 
 function openPanel(name) {
   currentPanel = name
-  document.getElementById('seozPanel').classList.add('open')
+  const panel = document.getElementById('seozPanel')
+  // Cancel any pending close-fade so re-opening mid-fade doesn't strip
+  // the panel down to width:0 right after we asked for it back.
+  clearTimeout(closePanel._t)
+  panel.classList.remove('closing')
+  panel.classList.add('open')
   // Highlight active dock icon
   document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
   const diEl = document.getElementById('di-' + name)
@@ -10283,7 +10401,15 @@ function openPanel(name) {
 
 function closePanel() {
   currentPanel = null
-  document.getElementById('seozPanel').classList.remove('open')
+  const panel = document.getElementById('seozPanel')
+  // Two-phase: trigger fade-out via .closing (held width:280, opacity
+  // 1→0), then after the 150ms transition remove .closing so width
+  // snaps to 0. Without the hold the panel would collapse instantly
+  // and the opacity fade would be invisible.
+  panel.classList.add('closing')
+  panel.classList.remove('open')
+  clearTimeout(closePanel._t)
+  closePanel._t = setTimeout(() => panel.classList.remove('closing'), 100)
   document.querySelectorAll('.di').forEach(d => d.classList.remove('active'))
   if (typeof updateSyncUI === 'function') updateSyncUI()
 }
@@ -11063,6 +11189,10 @@ const SETTINGS_NAV_ICONS = {
   rostchatt:    '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 1a3 3 0 0 0-3 3v8a3 3 0 0 0 6 0V4a3 3 0 0 0-3-3z"/><path d="M19 10v2a7 7 0 0 1-14 0v-2"/><line x1="12" y1="19" x2="12" y2="23"/><line x1="8" y1="23" x2="16" y2="23"/></svg>',
   sokmotor:     '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>',
   sprak:        '<svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="m5 8 6 6"/><path d="m4 14 6-6 2-3"/><path d="M2 5h12"/><path d="M7 2h1"/><path d="m22 22-5-10-5 10"/><path d="M14 18h6"/></svg>',
+  // Orbit-S med .orbit-anim-klass — CSS-animationen "settings-orbit-pulse"
+  // roterar och cyklar färger genom semantic-paletten. Används bara på
+  // "Om SEOZ"-entryn för att signalera "live brand" i navet.
+  orbit:        '<svg class="orbit-anim" viewBox="0 0 200 200" fill="none"><circle cx="100" cy="100" r="8" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="20" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="20" stroke-linecap="round"/></svg>',
 }
 
 // Section list — rendered into the left nav. Order matters.
@@ -11101,7 +11231,7 @@ function _settingsSectionList() {
     // v1.10.133: Juridiskt + System slogs ihop till "Om SEOZ" med ett
     // intro-stycke högst upp om vad webbläsaren är. Gamla deep-links
     // (seoz://settings/juridiskt, /system) routas via openSettings().
-    { id: 'om',          label: _t('settings.nav.om','Om SEOZ'),                  icon: SETTINGS_NAV_ICONS.system },
+    { id: 'om',          label: _t('settings.nav.om','SEOZ'),                     icon: SETTINGS_NAV_ICONS.orbit },
   ]
 }
 
@@ -11129,6 +11259,8 @@ function renderSettingsScreen() {
   if (window._settingsSection === 'permissions') renderSitePermissions()
   if (window._settingsSection === 'diagnostik')  refreshCrashStatus()
   if (window._settingsSection === 'om')         _settingsPostOmSeoz()
+  // Profiler-sub-taben behöver async-hämta importerbara webbläsare.
+  if (window._settingsSection === 'konto' && window._kontoTab === 'profiler') _settingsPostProfiler()
   if (window._settingsSection === 'default')    _settingsPostDefault()
   if (window._settingsSection === 'losenord')   _settingsPostLosenord()
   if (window._settingsSection === 'nyheter')    _settingsPostNyheter()
@@ -11279,6 +11411,9 @@ function _renderSettingsKonto() {
 }
 
 function _renderSettingsProfiler() {
+  // Browser-import sources are populated async via _settingsPostProfiler
+  // — initial render shows a placeholder card. Sources get rendered in
+  // place once detect() resolves.
   return `
     <div class="settings-section-h1">Profiler</div>
     <div class="settings-section-sub">Olika profiler har separata bokmärken, lösenord och inloggningar. Bra för att hålla isär arbete och privat.</div>
@@ -11293,7 +11428,73 @@ function _renderSettingsProfiler() {
         <div class="settings-row-action"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polyline points="9 18 15 12 9 6"/></svg></div>
       </div>
     </div>
+
+    <div class="settings-card-h" style="padding:18px 0 8px">IMPORTERA FRÅN ANNAN WEBBLÄSARE</div>
+    <div id="importSourcesCard" class="settings-card">
+      <div class="settings-row" style="padding:14px 18px;color:var(--ink-3);font-size:11.5px">Söker efter installerade webbläsare…</div>
+    </div>
   `
+}
+
+// Populate the import-sources card. Runs on every render of the Profiler
+// sub-tab (idempotent — detect() is fast and reflects current install state).
+async function _settingsPostProfiler() {
+  const card = document.getElementById('importSourcesCard')
+  if (!card) return
+  let res
+  try { res = await window.seoz.importer.detect() } catch (err) { res = { ok: false, error: err?.message } }
+  if (!res || !res.ok) {
+    card.innerHTML = `<div class="settings-row" style="padding:14px 18px;color:#dc2626;font-size:11.5px">Kunde inte söka: ${esc(res?.error || 'okänt fel')}</div>`
+    return
+  }
+  const sources = res.sources || []
+  // Filter to only sources that have something to import.
+  const usable = sources.filter(s => s.hasBookmarks || s.hasHistory)
+  if (!usable.length) {
+    card.innerHTML = `
+      <div class="settings-row" style="padding:14px 18px;color:var(--ink-3);font-size:11.5px;line-height:1.5">
+        Hittade inga andra Chromium-baserade webbläsare med data att importera.
+        <br>SEOZ söker bland Chrome, Edge, Brave, Opera, Vivaldi och Arc.
+      </div>
+    `
+    return
+  }
+  card.innerHTML = usable.map((s, i) => `
+    <div class="settings-row" style="padding:12px 18px;${i > 0 ? 'border-top:1px solid var(--border)' : ''}">
+      <div class="settings-row-icon blue">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+      </div>
+      <div class="settings-row-content">
+        <div class="settings-row-title">${esc(s.browserName)} — ${esc(s.profileDisplayName)}</div>
+        <div class="settings-row-sub">${[
+          s.hasBookmarks ? 'Bokmärken' : null,
+          s.hasHistory   ? 'Historik (90 dagar)' : null,
+        ].filter(Boolean).join(' · ')}</div>
+      </div>
+      <div class="settings-row-action" style="gap:6px;display:flex">
+        ${s.hasBookmarks ? `<button class="settings-btn" onclick='_importRunBookmarks(${JSON.stringify(s.bookmarksPath)})'>Bokmärken</button>` : ''}
+        ${s.hasHistory   ? `<button class="settings-btn" onclick='_importRunHistory(${JSON.stringify(s.historyPath)})'>Historik</button>` : ''}
+      </div>
+    </div>
+  `).join('')
+}
+
+async function _importRunBookmarks(bookmarksPath) {
+  toast('Importerar bokmärken…', '#4680ff')
+  const r = await window.seoz.importer.runBookmarks(bookmarksPath)
+  if (!r.ok) { toast('Import-fel: ' + r.error, '#dc2626'); return }
+  toast(`Importerat ${r.stats.added} bokmärken (${r.stats.skippedDup} dubletter hoppades över)`, '#2ca87f')
+  // Reload local in-memory bookmarks. The IPC handler also fires
+  // sync:bookmarks-applied which our existing listener picks up.
+  if (typeof loadBookmarks === 'function') loadBookmarks()
+}
+
+async function _importRunHistory(historyPath) {
+  toast('Importerar historik…', '#4680ff')
+  const r = await window.seoz.importer.runHistory(historyPath, { maxAgeDays: 90, maxRows: 5000 })
+  if (!r.ok) { toast('Import-fel: ' + r.error, '#dc2626'); return }
+  toast(`Importerat ${r.stats.added} sidor (totalt ${r.stats.total} i historiken)`, '#2ca87f')
+  if (typeof loadHistory === 'function') loadHistory()
 }
 
 // ── E2E sync section ──
@@ -12680,18 +12881,15 @@ function _renderSettingsDiagnostik() {
 // måste vara tillgängligt).
 function _renderSettingsOmSeoz() {
   return `
-    <div class="settings-section-h1">Om SEOZ</div>
+    <div class="settings-section-h1">SEOZ</div>
     <div class="settings-section-sub">SEOZ är en webbläsare byggd för SEO-arbete och vardaglig surfning, med integritet som utgångspunkt.</div>
 
     <div class="settings-card" style="padding:18px;line-height:1.6;font-size:12.5px;color:var(--ink-1)">
       <p style="margin:0 0 10px">
         SEOZ är en Chromium-baserad webbläsare som vi har byggt för att kombinera de bästa delarna av en modern browser med verktyg vi själva saknat: <strong>klientinsikter</strong> direkt i flikraden, <strong>SEO-analys</strong> live på sidan du tittar på, en <strong>AI-assistent</strong> som ser samma sak som du, och <strong>sync</strong> som faktiskt är end-to-end-krypterad.
       </p>
-      <p style="margin:0 0 10px">
-        Tanken: en webbläsare ska tjäna dig, inte mata din data till någon. Bokmärken, lösenord, mejl-konton, inställningar — allt synkas mellan dina enheter via en <strong>24-ords sync-kod</strong> du själv äger. Servern (vår Supabase-instans) ser bara opaque krypterad data och kan inte dekryptera. Tappar du koden är datan borta — det är poängen.
-      </p>
       <p style="margin:0">
-        Bygget pågår i öppen källkod på <a href="https://github.com/valdemarmattsson-beep/seoz-browser" onclick="event.preventDefault();doNav('https://github.com/valdemarmattsson-beep/seoz-browser');closeSettings()" style="color:var(--p);cursor:pointer">github.com/valdemarmattsson-beep/seoz-browser</a>. Vi använder den själva varje dag — om något känns fel eller saknas, säg till.
+        Tanken: en webbläsare ska tjäna dig, inte mata din data till någon. Bokmärken, lösenord, mejl-konton, inställningar — allt synkas mellan dina enheter via en <strong>24-ords sync-kod</strong> du själv äger. Servern (vår Supabase-instans) ser bara opaque krypterad data och kan inte dekryptera. Tappar du koden är datan borta — det är poängen.
       </p>
     </div>
 
@@ -17061,212 +17259,37 @@ async function clearCrashLogs() {
 //
 //  When updating: bump LEGAL_VERSION + the date string.
 // ══════════════════════════════════════════════════════════════════
-const LEGAL_VERSION  = '2026-05-05.c'
-const LEGAL_UPDATED  = '5 maj 2026'
-
-const LEGAL_DOCS = {
-  privacy: {
-    title: 'Integritetspolicy',
-    body: `
-<h1>Integritetspolicy för SEOZ</h1>
-<div class="legal-meta">Senast uppdaterad: ${LEGAL_UPDATED}</div>
-
-<p>SEOZ är en webbläsare byggd med integritet i fokus. Den här policyn beskriver vilken data som lagras, var, och vem som har åtkomst.</p>
-
-<h2>I korthet</h2>
-<ul>
-  <li><strong>All din data lagras lokalt på din enhet</strong> om inte annat uttryckligen anges.</li>
-  <li><strong>Vi har ingen central server</strong> som samlar in din browsing-historik, dina lösenord, eller dina mail.</li>
-  <li><strong>Vi spårar dig inte.</strong> Inga analytics, inga reklam-pixlar, ingen telemetri som standard.</li>
-  <li><strong>Kraschrapporter är opt-in.</strong> Avstängda som default. Du aktiverar dem själv i Inställningar → Diagnostik om du vill hjälpa oss åtgärda buggar.</li>
-</ul>
-
-<h2>Data som lagras lokalt på din enhet</h2>
-<p>Följande lagras i en användarmapp på din dator (Windows: <code>%APPDATA%\\seoz-browser</code>, macOS: <code>~/Library/Application Support/seoz-browser</code>, Linux: <code>~/.config/seoz-browser</code>):</p>
-<table>
-  <thead><tr><th>Data</th><th>Lagring</th></tr></thead>
-  <tbody>
-    <tr><td>Bokmärken, fliksessioner, historik</td><td>Klartext</td></tr>
-    <tr><td>Sparade lösenord</td><td>Krypterad med ditt operativsystems nyckelförvaring (Windows DPAPI / macOS Keychain / Linux libsecret), skyddad av master-PIN</td></tr>
-    <tr><td>Mail-kontouppgifter (IMAP/SMTP)</td><td>Krypterad samma sätt som lösenord</td></tr>
-    <tr><td>Mail-innehåll</td><td>Hämtas från din IMAP-server vid behov, cachat lokalt</td></tr>
-    <tr><td>API-nycklar (Anthropic, OpenAI, ElevenLabs)</td><td>Krypterad samma sätt som lösenord</td></tr>
-    <tr><td>Inställningar och webbplatsbehörigheter</td><td>Klartext</td></tr>
-  </tbody>
-</table>
-<p>Ingen av denna data lämnar din enhet utan att du själv begär det.</p>
-
-<h2>Data som skickas till externa tjänster</h2>
-<p>SEOZ kontaktar externa tjänster <em>endast</em> när du själv använder en funktion som kräver det:</p>
-
-<h3>SEOZ-plattformen (seoz.io)</h3>
-<p>Om du <strong>kopplar ditt SEOZ-konto</strong> synkar browsern klientdata, sökord och tasks till seoz.io var 30:e sekund. Synkningen är krypterad via HTTPS och autentiserad med din personliga API-nyckel. Du kan koppla från när som helst i Inställningar → Konto → Koppla från, vilket nollställer all synkad data lokalt.</p>
-<p>Om du <em>inte</em> kopplar konto används ingen del av SEOZ-plattformen.</p>
-
-<h3>AI-tjänster</h3>
-<ul>
-  <li><strong>Anthropic Claude</strong> används om du har en Claude-API-nyckel inmatad och använder Claude-chatten eller smart inbox. Texten skickas direkt från din browser till <code>api.anthropic.com</code> med din egen nyckel.</li>
-  <li><strong>OpenAI</strong> (GPT-4 + Whisper) används för röstchatt och vissa AI-funktioner om du matat in din OpenAI-nyckel.</li>
-  <li><strong>ElevenLabs</strong> används för text-till-tal om du matat in din ElevenLabs-nyckel.</li>
-</ul>
-<p>Vi vidarebefordrar aldrig dina AI-prompts till någon annan part — det är direktanrop från din browser. Anthropic, OpenAI och ElevenLabs har sina egna integritetspolicyer som gäller för deras hantering av denna data.</p>
-
-<h3>Mail-servrar</h3>
-<p>När du läser eller skickar mail kontaktar browsern direkt din IMAP/SMTP-server med uppgifterna du angett (Gmail, Zoho, eller annan provider). Inget mail-innehåll passerar SEOZ-servrar.</p>
-
-<h3>Auto-uppdatering</h3>
-<p>Browsern frågar <code>github.com/valdemarmattsson-beep/seoz-browser/releases</code> om det finns nya versioner. Endast version och OS-info skickas — ingen användardata.</p>
-<p><strong>På macOS</strong> är auto-installation inaktiverad i denna early-access-version eftersom binären inte är kodsignerad. Browsern säger till när en ny version finns men du behöver ladda ner den nya <code>.dmg</code>-filen manuellt. Vid signering (planerad) blir flödet automatiskt även på Mac.</p>
-
-<h3>Kraschrapporter (opt-in)</h3>
-<p>Browsern loggar alla krascher lokalt på din enhet (i mappen <code>crash-reports</code> under användardatamappen). Detta sker alltid, men loggen lämnar aldrig din dator om du inte själv slår på "Skicka kraschrapporter" i Inställningar → Diagnostik.</p>
-<p>När du aktiverar uppladdning skickas följande till SEOZ när browsern kraschar:</p>
-<ul>
-  <li>SEOZ-version, Electron-version, Chromium-version</li>
-  <li>Operativsystem och arkitektur</li>
-  <li>Felmeddelande och stack-trace</li>
-  <li>En slumpmässigt genererad anonym <strong>installations-ID</strong> (16 hex-tecken) — gör att vi kan se om samma installation kraschar flera gånger, men vi kan inte koppla det till dig personligen</li>
-  <li>Tidsstämpel</li>
-</ul>
-<p>Det skickas <strong>inte</strong>: URL:er du besökt, sidtitlar, cookies, formulärdata, lösenord, mail-innehåll, IP-adress (mer än vad HTTP-lagret naturligt avslöjar för servern), eller någon annan personidentifierande information.</p>
-<p>Du kan när som helst stänga av uppladdning, granska de lokala loggarna eller rensa dem helt i Inställningar → Diagnostik.</p>
-
-<h3>Webbsidor du besöker</h3>
-<p>När du surfar pratar browsern med de webbplatser du själv navigerar till — precis som vilken annan browser. Cookies, formulärdata och webbplatslagring hanteras av Chromium på samma sätt som i Chrome.</p>
-
-<h2>Cookies och webbplatsdata</h2>
-<p>SEOZ lagrar cookies, localStorage och sessionStorage från webbplatser du besöker, i samma användarmapp som beskrivs ovan. Du kan radera detta via webbplatsens egna inställningar eller genom att radera SEOZ-mappen.</p>
-<p>Den inbyggda annonsblockeraren (<strong>SEOZ Shield</strong>) stoppar kända reklamspårare innan de kontaktas. Cookie-banner-hanteraren (om aktiverad) klickar automatiskt accept/reject på sajter med kända CMP-system.</p>
-
-<h2>Säkerhet</h2>
-<ul>
-  <li>Lösenord och credentials krypteras med din enhets nyckelförvaring (Windows DPAPI / macOS Keychain).</li>
-  <li>Master-PIN hashar med PBKDF2-SHA256, 600 000 iterationer, per-PIN-salt.</li>
-  <li>Felinmatning av master-PIN låser tillfälligt verifieringen (30s efter 5 fel, 5 min efter 10 fel).</li>
-  <li>All extern kommunikation går över HTTPS/TLS.</li>
-  <li>Kameran, mikrofonen och skärminspelning kräver per-sajt-godkännande från dig.</li>
-</ul>
-
-<h2>Dina rättigheter (GDPR/EU)</h2>
-<p>Eftersom all data lagras lokalt har du fysisk kontroll över den. Specifikt:</p>
-<ul>
-  <li><strong>Åtkomst</strong>: alla data finns i SEOZ-mappen på din enhet.</li>
-  <li><strong>Radering</strong>: avinstallera browsern eller radera mappen.</li>
-  <li><strong>Portabilitet</strong>: bokmärken, lösenord, mail-konfiguration kan exporteras (planerad funktion).</li>
-  <li><strong>Rättning</strong>: ändra direkt i appen.</li>
-  <li><strong>Klagomål</strong>: kontakta oss på adressen nedan eller kontakta din nationella datatillsynsmyndighet (i Sverige: Integritetsskyddsmyndigheten, IMY).</li>
-</ul>
-
-<h2>Ändringar</h2>
-<p>Vi kan komma att uppdatera denna policy. Senaste versionen finns alltid i SEOZ → Inställningar → Juridiskt.</p>
-
-<h2>Kontakt</h2>
-<p>Frågor om integritet eller data-rättigheter:<br><a href="mailto:hello@seoz.io" onclick="event.preventDefault();SE.openExternal('mailto:hello@seoz.io')">hello@seoz.io</a></p>
-<p>Personuppgiftsansvarig: SEOZ.</p>
-`,
-  },
-
-  terms: {
-    title: 'Användarvillkor',
-    body: `
-<h1>Användarvillkor för SEOZ</h1>
-<div class="legal-meta">Senast uppdaterad: ${LEGAL_UPDATED}</div>
-
-<p>Genom att installera, ladda ner eller använda SEOZ ("Browsern") accepterar du följande villkor.</p>
-
-<h2>1. Licens</h2>
-<p>Browsern tillhandahålls <strong>gratis</strong> av SEOZ. Du får:</p>
-<ul>
-  <li>Installera och använda Browsern på dina egna enheter</li>
-  <li>Använda Browsern för personliga eller kommersiella ändamål</li>
-  <li>Läsa, granska och föreslå förbättringar i den publika källkoden</li>
-</ul>
-<p>Du får inte:</p>
-<ul>
-  <li>Vidaredistribuera Browsern under annan branding</li>
-  <li>Återskapa SEOZ-varumärket</li>
-  <li>Ladda ner och bygga om binären med skadlig kod och distribuera vidare</li>
-</ul>
-<p>Browsern är byggd på Electron + Chromium med MIT/BSD-licens. Underliggande open source-komponenter behåller sina respektive licenser.</p>
-
-<h2>2. Tjänsten "som den är"</h2>
-<p>Browsern levereras <strong>som den är</strong> ("AS-IS") utan garantier av något slag, uttryckliga eller underförstådda. Vi garanterar inte:</p>
-<ul>
-  <li>Att Browsern är felfri eller buggfri</li>
-  <li>Att den fungerar med alla webbplatser</li>
-  <li>Att den är tillgänglig 100 % av tiden</li>
-  <li>Att lagrad data inte kan gå förlorad</li>
-</ul>
-
-<h2>3. Ansvarsbegränsning</h2>
-<p>I största utsträckning lag tillåter:</p>
-<ul>
-  <li>SEOZ ansvarar <strong>inte</strong> för någon förlust av data, inkomst, vinst, eller affärsmöjligheter som uppstår vid användning av Browsern.</li>
-  <li>SEOZ:s totala ansvar gentemot dig får aldrig överstiga <strong>1 000 SEK</strong>, eller det belopp du betalat för Browsern (vilket är 0 SEK om du inte betalat).</li>
-  <li>Detta inkluderar — men är inte begränsat till — bortfall av lösenord, e-postdata, bokmärken, eller annan information lagrad i Browsern.</li>
-</ul>
-<p><strong>Du är själv ansvarig för backuper av viktig data.</strong></p>
-
-<h2>4. AI-funktioner</h2>
-<p>Browsern erbjuder integration med externa AI-tjänster (Claude, OpenAI, ElevenLabs) om du tillhandahåller dina egna API-nycklar. Du är medveten om att:</p>
-<ul>
-  <li>AI-genererade svar kan vara felaktiga, vilseledande eller stötande.</li>
-  <li>SEOZ granskar inte och garanterar inte AI-resultat.</li>
-  <li>Du är ansvarig för hur du använder AI-genererat innehåll.</li>
-  <li>Tredjepartsleverantörer (Anthropic, OpenAI, ElevenLabs) tillämpar sina egna villkor.</li>
-</ul>
-
-<h2>5. Tredjepartstjänster</h2>
-<p>Browsern interagerar med externa tjänster du själv väljer (mail-leverantörer, AI-tjänster, webbplatser). SEOZ ansvarar inte för:</p>
-<ul>
-  <li>Tillgänglighet eller funktionalitet hos dessa tjänster</li>
-  <li>Avgifter eller villkor från dessa tjänster</li>
-  <li>Säkerheten i deras infrastruktur</li>
-</ul>
-
-<h2>6. Acceptabel användning</h2>
-<p>Du får inte använda Browsern för att:</p>
-<ul>
-  <li>Bryta mot lagen i din jurisdiktion</li>
-  <li>Trakassera, skada eller bedra andra</li>
-  <li>Distribuera skadlig kod</li>
-  <li>Bryta mot tredje parts immateriella rättigheter</li>
-  <li>Återskapa SEOZ:s varumärke eller representationer</li>
-</ul>
-
-<h2>7. Uppdateringar</h2>
-<p>Browsern uppdaterar sig själv automatiskt via auto-updater. Genom att använda Browsern accepterar du att uppdateringar installeras. Vi förbehåller oss rätten att:</p>
-<ul>
-  <li>Ändra eller ta bort funktionalitet i framtida versioner</li>
-  <li>Avbryta utvecklingen eller supporten av Browsern</li>
-  <li>Migrera lagringsformat (vilket kan kräva manuell datamigrering)</li>
-</ul>
-
-<h2>8. Avslutning</h2>
-<p>Du kan när som helst sluta använda Browsern genom att avinstallera den. SEOZ kan avsluta din åtkomst till plattformsanslutna funktioner (sync, klientdata) om du bryter mot dessa villkor; den lokala installationen påverkas inte.</p>
-
-<h2>9. Tillämplig lag</h2>
-<p>Dessa villkor regleras av svensk lag. Tvister avgörs i första hand av Stockholms tingsrätt.</p>
-
-<h2>10. Ändringar i villkoren</h2>
-<p>Vi kan komma att uppdatera dessa villkor. Vi meddelar väsentliga ändringar via en banner i Browsern eller per e-post om du är ansluten till SEOZ-plattformen. Genom fortsatt användning efter en ändring accepterar du de nya villkoren.</p>
-
-<h2>11. Kontakt</h2>
-<p>Frågor om dessa villkor:<br><a href="mailto:hello@seoz.io" onclick="event.preventDefault();SE.openExternal('mailto:hello@seoz.io')">hello@seoz.io</a></p>
-`,
-  },
+// LEGAL_DOCS moved to src/renderer/legal-docs.js to keep ~200
+// lines of seldom-read prose out of every cold-start parse.
+// Lazy-loaded by showLegalDoc() on first open.
+let _legalDocsLoadPromise = null
+function _ensureLegalDocs() {
+  if (window.LEGAL_DOCS) return Promise.resolve()
+  if (_legalDocsLoadPromise) return _legalDocsLoadPromise
+  _legalDocsLoadPromise = new Promise((resolve, reject) => {
+    const s = document.createElement("script")
+    s.src = "./legal-docs.js"
+    s.onload = () => resolve()
+    s.onerror = () => { _legalDocsLoadPromise = null; reject(new Error("legal-docs.js failed to load")) }
+    document.head.appendChild(s)
+  })
+  return _legalDocsLoadPromise
 }
 
-function showLegalDoc(kind) {
-  const doc = LEGAL_DOCS[kind]
+async function showLegalDoc(kind) {
+  try { await _ensureLegalDocs() } catch (err) {
+    toast("Kunde inte ladda juridiskt dokument: " + err.message, "#dc2626")
+    return
+  }
+  const doc = window.LEGAL_DOCS && window.LEGAL_DOCS[kind]
   if (!doc) return
-  document.getElementById('legalTitle').textContent  = doc.title
-  document.getElementById('legalBody').innerHTML     = doc.body.trim()
-  document.getElementById('legalUpdated').textContent = 'Version: ' + LEGAL_VERSION
+  document.getElementById("legalTitle").textContent  = doc.title
+  document.getElementById("legalBody").innerHTML     = doc.body.trim()
+  document.getElementById("legalUpdated").textContent = "Version: " + (window.LEGAL_VERSION || "")
   // Reset scroll so reopening doesn't keep position from a different doc
-  const body = document.getElementById('legalBody')
+  const body = document.getElementById("legalBody")
   if (body) body.scrollTop = 0
-  document.getElementById('legalModal').classList.add('open')
+  document.getElementById("legalModal").classList.add("open")
 }
 function closeLegalModal() {
   document.getElementById('legalModal').classList.remove('open')
@@ -19494,14 +19517,27 @@ let inspectorData = null
 let inspectorTab = 'overview'
 
 function openInspector() {
-  document.getElementById('inspectorDrawer').classList.add('open')
+  const drawer = document.getElementById('inspectorDrawer')
+  drawer.classList.add('open')
+  // body.inspector-open + --page-bottom-clip together shrink each
+  // .tab-handle from the bottom by enough to leave the inspector's
+  // area exposed (chrome bg). Without this the drawer overlays the
+  // page and everything went black (the generic clip-from-top
+  // mechanism doesn't fit a bottom-anchored panel).
+  document.body.classList.add('inspector-open')
+  // Set initial clip — drawer hasn't been measured yet at this exact
+  // microtask, so wait one frame before reading its bounds.
+  requestAnimationFrame(() => { try { drawer._syncPageClip && drawer._syncPageClip() } catch (_) {} })
   runInspector()
 }
 function closeInspector() {
   const drawer = document.getElementById('inspectorDrawer')
-  drawer.classList.remove('open')
-  // Clear inline height left by drag-to-resize, so CSS height:0 takes effect
-  drawer.style.height = ''
+  drawer.classList.remove('open', 'floating')
+  // Clear all inline styles left by drag/resize so the next open
+  // returns to the default full-width bottom-dock layout.
+  drawer.style.cssText = ''
+  document.body.classList.remove('inspector-open')
+  document.documentElement.style.removeProperty('--page-bottom-clip')
 }
 function toggleInspector() {
   const d = document.getElementById('inspectorDrawer')
@@ -20037,32 +20073,100 @@ function copyInspectorData() {
   })
 }
 
-// ── Inspector drag-to-resize ──
+// ── Inspector drag-to-move + corner-resize ──
+//
+// Header-drag now MOVES the panel (not vertical-resize) — first drag
+// promotes the panel to .floating mode (loses its left:0/right:0
+// bottom-dock stretch) so inline left/top/width can take effect. A
+// separate bottom-right corner handle (.inspector-resize) handles
+// resize while floating. Page WebContentsView shrinks via
+// --page-bottom-clip which JS keeps in sync with inspector.top so
+// the page bottom edge always lands just above the inspector.
 ;(function() {
   const hdr = document.getElementById('inspectorHdr')
   const drawer = document.getElementById('inspectorDrawer')
-  let dragging = false, startY = 0, startH = 0
+  const grip = document.getElementById('inspectorResize')
+  let mode = null     // 'move' | 'resize'
+  let startX = 0, startY = 0
+  let startLeft = 0, startTop = 0, startW = 0, startH = 0
+
+  // Promote the panel to floating mode + lock its dimensions to inline
+  // styles so subsequent drag/resize operations have a stable baseline.
+  function _ensureFloating() {
+    if (drawer.classList.contains('floating')) return
+    const r = drawer.getBoundingClientRect()
+    drawer.style.left   = r.left   + 'px'
+    drawer.style.top    = r.top    + 'px'
+    drawer.style.width  = r.width  + 'px'
+    drawer.style.height = r.height + 'px'
+    drawer.classList.add('floating')
+  }
+
+  // Push the inspector's current top to a CSS var so the
+  // body.inspector-open rule shrinks the page WebContentsView so its
+  // bottom sits just above the inspector top.
+  function _syncPageClip() {
+    const r = drawer.getBoundingClientRect()
+    const fromBottom = Math.max(0, window.innerHeight - r.top)
+    document.documentElement.style.setProperty('--page-bottom-clip', fromBottom + 'px')
+  }
+  // Make _syncPageClip available to openInspector for the initial set.
+  drawer._syncPageClip = _syncPageClip
 
   hdr.addEventListener('mousedown', e => {
     if (e.target.closest('.inspector-btn') || e.target.closest('.inspector-tab') || e.target.closest('.elem-picker-btn')) return
-    dragging = true
-    startY = e.clientY
-    startH = drawer.offsetHeight
-    drawer.classList.add('resizing')
-    document.body.style.cursor = 'ns-resize'
+    _ensureFloating()
+    mode = 'move'
+    startX = e.clientX; startY = e.clientY
+    startLeft = drawer.offsetLeft
+    startTop  = drawer.offsetTop
+    drawer.classList.add('dragging')
+    document.body.style.cursor = 'move'
     e.preventDefault()
   })
+  grip.addEventListener('mousedown', e => {
+    _ensureFloating()
+    mode = 'resize'
+    startX = e.clientX; startY = e.clientY
+    startW = drawer.offsetWidth
+    startH = drawer.offsetHeight
+    drawer.classList.add('resizing')
+    document.body.style.cursor = 'nwse-resize'
+    e.preventDefault()
+    e.stopPropagation()
+  })
   document.addEventListener('mousemove', e => {
-    if (!dragging) return
-    const delta = startY - e.clientY
-    const newH = Math.max(120, Math.min(window.innerHeight * 0.85, startH + delta))
-    drawer.style.height = newH + 'px'
+    if (!mode) return
+    if (mode === 'move') {
+      const dx = e.clientX - startX
+      const dy = e.clientY - startY
+      // Keep inspector inside the viewport — leave at least 80px of
+      // header below the chrome so the user can always grab it back.
+      const w = drawer.offsetWidth, h = drawer.offsetHeight
+      const newLeft = Math.max(0, Math.min(window.innerWidth - 100, startLeft + dx))
+      const newTop  = Math.max(80, Math.min(window.innerHeight - 60, startTop + dy))
+      drawer.style.left = newLeft + 'px'
+      drawer.style.top  = newTop  + 'px'
+      _syncPageClip()
+    } else if (mode === 'resize') {
+      const dx = e.clientX - startX
+      const dy = e.clientY - startY
+      const newW = Math.max(360, Math.min(window.innerWidth  - drawer.offsetLeft - 20, startW + dx))
+      const newH = Math.max(160, Math.min(window.innerHeight - drawer.offsetTop  - 20, startH + dy))
+      drawer.style.width  = newW + 'px'
+      drawer.style.height = newH + 'px'
+      _syncPageClip()
+    }
   })
   document.addEventListener('mouseup', () => {
-    if (!dragging) return
-    dragging = false
-    drawer.classList.remove('resizing')
+    if (!mode) return
+    mode = null
+    drawer.classList.remove('dragging', 'resizing')
     document.body.style.cursor = ''
+  })
+  // Window resize → re-clip in case inspector slipped off-screen.
+  window.addEventListener('resize', () => {
+    if (drawer.classList.contains('open')) _syncPageClip()
   })
 })()
 

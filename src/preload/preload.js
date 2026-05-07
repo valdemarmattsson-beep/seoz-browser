@@ -65,6 +65,16 @@ contextBridge.exposeInMainWorld('seoz', {
   // active tab lands on /v3/signin/rejected.
   clearGoogleAuthData: () => ipcRenderer.invoke('seoz-clear-google-auth-data'),
 
+  // Browser data import (Chrome / Edge / Brave / Opera / Vivaldi / Arc).
+  // Phase-1 = bookmarks + history. detect() returns the list of
+  // installed-and-readable profile sources; runBookmarks/runHistory
+  // import + merge into the active SEOZ profile.
+  importer: {
+    detect:        ()                          => ipcRenderer.invoke('import:detect'),
+    runBookmarks:  (bookmarksPath)             => ipcRenderer.invoke('import:run-bookmarks', { bookmarksPath }),
+    runHistory:    (historyPath, opts)         => ipcRenderer.invoke('import:run-history',   { historyPath, ...(opts || {}) }),
+  },
+
   // E2E-encrypted sync (BIP-39 mnemonic-derived keys, see sync-engine.js).
   sync: {
     getStatus: ()       => ipcRenderer.invoke('sync:get-status'),

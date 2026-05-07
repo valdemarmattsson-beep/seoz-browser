@@ -4,107 +4,6 @@ const { app, BrowserWindow, WebContentsView, ipcMain, nativeTheme, shell, Notifi
 const path = require('path')
 const fs = require('fs')
 
-// ── v1.10.123 DIAGNOSTICS ──────────────────────────────────────────
-// User reports SEOZ hangs on first click — Windows logs AppHangB1 →
-// main process is blocking the message pump for >5s. Need to find
-// which IPC handler (or other main-side code) is doing it.
-//
-// Two instruments:
-//   1. Heartbeat: setInterval logs "MAIN-ALIVE" every second. When
-//      main hangs, the log stops. The last timestamp tells us when.
-//   2. IPC trace: wraps ipcMain.on / ipcMain.handle so every channel
-//      that takes >100ms (or throws) gets logged. Reveals the slow
-//      handler by name.
-//
-// Both write to startup.log so they're already in the path the user
-// is sending us. To remove later, just delete this block.
-;(function _diag123() {
-  let _logPath = null
-  const _resolveLog = () => {
-    if (!_logPath) {
-      try { _logPath = path.join(app.getPath('userData'), 'startup.log') } catch (_) {}
-    }
-    return _logPath
-  }
-  const _diagLog = (line) => {
-    try {
-      const p = _resolveLog(); if (!p) return
-      fs.appendFileSync(p, new Date().toISOString() + ' ' + line + '\n')
-    } catch (_) {}
-  }
-
-  // Heartbeat — when main hangs, this stops emitting.
-  app.whenReady().then(() => {
-    setInterval(() => _diagLog('MAIN-ALIVE'), 1000)
-  })
-
-  // IPC trace wrapper. Replaces ipcMain.on / .handle / .handleOnce so
-  // every subsequent registration goes through a timed proxy. Must
-  // run BEFORE any registrations elsewhere in the file — that's why
-  // this block is at the top of main.js.
-  const _origOn = ipcMain.on.bind(ipcMain)
-  const _origHandle = ipcMain.handle.bind(ipcMain)
-  const _origHandleOnce = ipcMain.handleOnce.bind(ipcMain)
-
-  const _trace = (channel, dt, err) => {
-    if (err) _diagLog('IPC-ERR channel=' + channel + ' dt=' + dt + 'ms err=' + (err.message || err))
-    else if (dt > 100) _diagLog('IPC-SLOW channel=' + channel + ' dt=' + dt + 'ms')
-  }
-
-  ipcMain.on = (channel, handler) => _origOn(channel, function (event, ...args) {
-    const t0 = Date.now()
-    try {
-      const r = handler(event, ...args)
-      _trace(channel, Date.now() - t0)
-      return r
-    } catch (err) {
-      _trace(channel, Date.now() - t0, err)
-      throw err
-    }
-  })
-
-  ipcMain.handle = (channel, handler) => _origHandle(channel, async function (event, ...args) {
-    const t0 = Date.now()
-    try {
-      const r = await handler(event, ...args)
-      _trace(channel, Date.now() - t0)
-      return r
-    } catch (err) {
-      _trace(channel, Date.now() - t0, err)
-      throw err
-    }
-  })
-
-  ipcMain.handleOnce = (channel, handler) => _origHandleOnce(channel, async function (event, ...args) {
-    const t0 = Date.now()
-    try {
-      const r = await handler(event, ...args)
-      _trace(channel, Date.now() - t0)
-      return r
-    } catch (err) {
-      _trace(channel, Date.now() - t0, err)
-      throw err
-    }
-  })
-
-  _diagLog('DIAG-123 instrumented (heartbeat + IPC trace)')
-
-  // v1.10.124: pipe renderer-side console.warn('[DIAG] ...') back into
-  // startup.log. The main heartbeat from 1.10.123 confirmed main is
-  // alive — so the freeze is in the renderer's event loop. Add a
-  // matching heartbeat + click-trace there (see init.js / index.html
-  // diagnostic block) and forward via console-message → file.
-  app.on('browser-window-created', (_e, w) => {
-    try {
-      w.webContents.on('console-message', (_e2, _level, message) => {
-        if (typeof message === 'string' && message.startsWith('[DIAG]')) {
-          _diagLog('RENDERER ' + message.slice(7))
-        }
-      })
-    } catch (_) {}
-  })
-})()
-
 const https = require('https')
 const os = require('os')
 const { exec, spawn } = require('child_process')
@@ -143,7 +42,7 @@ try {
 const PM = require('./profile-manager')
 const crypto = require('crypto')
 const faviconCache = require('./favicon-cache')
-const { TabManager, applyChromeShim } = require('./tab-manager')
+const { TabManager } = require('./tab-manager')
 
 // Holds the TabManager instance for the main window. Created in
 // createWindow() once `win` exists, then read by feature code that
@@ -888,16 +787,46 @@ let blockerCategoriesState = (() => {
   return _allCategoriesEnabled()
 })()
 
+// v1.10.134: bounded memoization of hostname → category lookups. Same
+// third-party hostnames repeat constantly during browsing (every
+// analytics ping, every script chunk, every Speedometer iteration's
+// subresource fetches), and the parent-walk on a miss does
+// hostname.split('.') + N×slice/join + N×Map.get — cheap individually,
+// but in the webRequest hot path this is called for every blockable
+// request. Cache hits and misses (using `null` for "no category") in a
+// Map. When we hit the cap, drop half the cache (cheap O(n) walk vs.
+// LRU bookkeeping that would itself add overhead on every hit). 4096 is
+// well above the unique-hostname count of any realistic browsing
+// session — even a SPA-heavy page like Twitter/X tops out around 200
+// distinct hosts.
+const _categoryCache = new Map()
+const _CATEGORY_CACHE_MAX = 4096
 function _categoryFor(hostname) {
   if (!hostname) return null
-  if (_domainCategory.has(hostname)) return _domainCategory.get(hostname)
-  // Walk up the dot-segments so ads.example.com matches example.com.
-  const parts = hostname.split('.')
-  for (let i = 1; i < parts.length - 1; i++) {
-    const d = parts.slice(i).join('.')
-    if (_domainCategory.has(d)) return _domainCategory.get(d)
+  if (_categoryCache.has(hostname)) return _categoryCache.get(hostname)
+  let cat = null
+  if (_domainCategory.has(hostname)) {
+    cat = _domainCategory.get(hostname)
+  } else {
+    // Walk up the dot-segments so ads.example.com matches example.com.
+    const parts = hostname.split('.')
+    for (let i = 1; i < parts.length - 1; i++) {
+      const d = parts.slice(i).join('.')
+      if (_domainCategory.has(d)) { cat = _domainCategory.get(d); break }
+    }
   }
-  return null
+  if (_categoryCache.size >= _CATEGORY_CACHE_MAX) {
+    // Cheap eviction: drop the oldest half. Map preserves insertion
+    // order, so the first keys are the oldest entries.
+    const drop = _CATEGORY_CACHE_MAX >> 1
+    let i = 0
+    for (const k of _categoryCache.keys()) {
+      _categoryCache.delete(k)
+      if (++i >= drop) break
+    }
+  }
+  _categoryCache.set(hostname, cat)
+  return cat
 }
 
 function isDomainBlocked(hostname) {
@@ -908,15 +837,12 @@ function isDomainBlocked(hostname) {
   return true
 }
 
-// Real Chromium version we're shipping (e.g. "138.0.0.0"). Pulled from
-// process.versions so UA + Sec-CH-UA stay consistent with what
-// navigator.userAgentData.getHighEntropyValues() reports — that
-// consistency is what Google's accounts.google.com bot-detection
-// actually checks. v1.10.53 hardcoded "140" while Electron 41 ships
-// Chromium 138, which is the version mismatch that triggered the
-// "Webbläsaren kanske inte är säker" rejection.
-const CHROMIUM_VERSION = process.versions.chrome || '138.0.0.0'
-const CHROMIUM_MAJOR   = String(CHROMIUM_VERSION.split('.')[0] || '138')
+// (Removed in v1.10.134: CHROMIUM_VERSION + CHROMIUM_MAJOR + the CH_UA
+// / CH_UA_FULL_LIST constants below. They were used to hand-build
+// Sec-CH-UA headers for our own webRequest rewrite, which was itself
+// removed in v1.10.132 when we switched to Strawberry-minimal stealth.
+// Tab-manager.js still has its own copies for the WebAuthn shim's
+// userAgentData-spoof — those are the ones that matter and still in use.)
 
 function setupContentBlocker() {
   // Intercept requests in the webview's partition
@@ -936,19 +862,6 @@ function setupContentBlocker() {
   if (cleanedUA && cleanedUA !== nativeUA) {
     ses.setUserAgent(cleanedUA)
   }
-
-  // Normalize all UA + Client-Hint headers. We override only headers
-  // that Chromium would send anyway (no header injection from scratch),
-  // because Chromium decides which high-entropy hints to send based on
-  // server-side Accept-CH negotiation. We merely strip any "Electron"
-  // brand from the values when present.
-  //
-  // Pre-built brand strings — keep one definitive copy so all hints
-  // tell the same story. Real Chrome 138 sends GREASE values like
-  // "Not.A/Brand" or ";Not A Brand" — we use "Not.A/Brand" to match
-  // navigator.userAgentData (the JS shim lives in tab-manager.js).
-  const CH_UA           = `"Chromium";v="${CHROMIUM_MAJOR}", "Google Chrome";v="${CHROMIUM_MAJOR}", "Not.A/Brand";v="24"`
-  const CH_UA_FULL_LIST = `"Chromium";v="${CHROMIUM_VERSION}", "Google Chrome";v="${CHROMIUM_VERSION}", "Not.A/Brand";v="24.0.0.0"`
 
   // Resource-type filter — only rewrite headers on requests where sites
   // actually do bot/fingerprint detection (initial document load,
@@ -1021,10 +934,19 @@ function setupContentBlocker() {
     'login.live.com',
     'appleid.apple.com',
   ]
-  ses.webRequest.onHeadersReceived((details, callback) => {
-    if (details.resourceType !== 'mainFrame' && details.resourceType !== 'subFrame') {
-      callback({}); return
-    }
+  // v1.10.134: register with a resource-type filter at the API level
+  // instead of an early-return in the body. Without the filter, this
+  // listener fires on EVERY response (every image, script, font, css,
+  // xhr) — and even when our body callback does nothing the IPC round-
+  // trip from network → main → callback is paid. Speedometer's heavy
+  // pages issue hundreds of sub-resource responses per iteration; that
+  // adds measurable variance. CSP only matters on the document itself,
+  // so mainFrame + subFrame is sufficient.
+  const CSP_FILTER = {
+    urls: ['<all_urls>'],
+    types: ['mainFrame', 'subFrame'],
+  }
+  ses.webRequest.onHeadersReceived(CSP_FILTER, (details, callback) => {
     let host = ''
     try { host = new URL(details.url).hostname.toLowerCase() } catch (_) {}
     const strip = CSP_STRIP_HOSTS.some(h => host === h || host.endsWith('.' + h))
@@ -1077,8 +999,20 @@ function setupContentBlocker() {
   ses.webRequest.onBeforeRequest(BLOCKER_FILTER, (details, callback) => {
     if (!blockerEnabled) { callback({}); return }
 
+    // v1.10.134: skip the URL parse for protocols that can't be in the
+    // blocklist anyway. `new URL()` allocates ~3 objects per call —
+    // fine once, but in the webRequest hot path during a heavy page
+    // these add up to measurable variance. We only have http(s) hosts
+    // in BLOCK_RULES, so anything starting with data:/blob:/file:/
+    // chrome-extension:/devtools: can short-circuit. The first 5 chars
+    // distinguish the cases without needing startsWith().
+    const u = details.url
+    if (u.charCodeAt(0) !== 104 /* 'h' */) { callback({}); return }
+    // 'http://' (7) and 'https://' (8) are the only 'h'-prefixed URL
+    // schemes we'll ever see; no need for stricter prefix-check.
+
     try {
-      const url = new URL(details.url)
+      const url = new URL(u)
       if (isWhitelisted(url.hostname)) { callback({}); return }
       if (isDomainBlocked(url.hostname)) {
         blockerStats.blocked++
@@ -1277,6 +1211,13 @@ function createWindow() {
         // app.on('web-contents-created') event doesn't fire for
         // WebContentsView, so TabManager invokes this directly.
         onContentsCreated: _setupTabContents,
+        // Re-add any visible floating views (tooltip / Shield popup /
+        // site-info / url-suggest / chrome-label) on top after a tab
+        // bumps itself to the top of the contentView z-order. Without
+        // this the tooltip flashes UNDER the page for ~1 frame on
+        // tab-switch, since addChildView(tab) ends up above the
+        // already-attached tooltip.
+        onTopBumped: () => _bringFloatingViewsToTop(),
       })
       _startupLog('TabManager: created')
     } catch (err) {
@@ -1404,6 +1345,41 @@ ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
 //   - Hidden via setVisible(false) — fast, no message pump flush
 //   - Cleaned up when main window closes
 let _tooltipView = null
+
+// ── Floating-view z-order maintenance ──
+// All popup / tooltip / dropdown WebContentsViews are siblings of
+// the tab WebContentsViews under win.contentView. Order in the
+// children array determines stacking — last one added wins.
+//
+// When a tab is switched (TabManager.setBounds re-adds the tab),
+// the new tab ends up on top, pushing any visible floating views
+// underneath. This function re-adds them on top in a deterministic
+// order so they stay visible across tab swaps.
+//
+// Only re-adds VISIBLE views — hidden ones don't need to fight for
+// z-order and re-adding them anyway can cause subtle painting bugs
+// where a hidden-but-attached view's old bounds briefly flash.
+function _bringFloatingViewsToTop() {
+  if (!win || win.isDestroyed()) return
+  const cv = win.contentView
+  if (!cv) return
+  // Order matters: later additions sit on top. The tooltip is the
+  // most ephemeral so it goes last (always topmost when visible).
+  const candidates = [
+    _urlSuggestView,
+    _shieldView,
+    _siteInfoView,
+    _chromeLabelView,
+    _tooltipView,
+  ]
+  for (const v of candidates) {
+    if (!v || !v.webContents || v.webContents.isDestroyed()) continue
+    let isVisible = false
+    try { isVisible = v.getVisible?.() ?? false } catch (_) {}
+    if (!isVisible) continue
+    try { cv.addChildView(v) } catch (_) {}
+  }
+}
 
 function _ensureTooltipView() {
   if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) return _tooltipView
@@ -1818,6 +1794,274 @@ ipcMain.on('chrome-menu:close', () => {
     }
     if (win && !win.isDestroyed()) win.webContents.send('chrome-menu:closed')
   } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  SEOZ Inspector — DevTools-style separate BrowserWindow
+//
+//  Pre-v1.10.135 the inspector lived as an in-DOM drawer inside the
+//  chrome BrowserWindow. That meant it had to fight WebContentsView
+//  z-order (the page is a native child view that always renders on
+//  top of HTML siblings) — every "open inspector" had to shrink the
+//  page bounds via --page-bottom-clip and the panel kept blacking out
+//  the page when the bookkeeping drifted out of sync.
+//
+//  Now the inspector is its own BrowserWindow loaded from
+//  inspector-window.html. It floats above the chrome window like
+//  Chromium's DevTools, can be moved/resized by the OS, and the
+//  chrome BrowserWindow no longer has to clip its WebContentsView.
+//
+//  Data flow:
+//    chrome (active tab via wv.executeJavaScript)  ←→  main  ←→  inspector window
+//
+//  Chrome remains the data provider — only it has a reference to the
+//  active tab's WebContentsView. Main is a thin bridge that
+//  (1) creates/destroys the BrowserWindow and (2) shuttles IPC
+//  between chrome and the inspector window.
+//
+//  Push channels:
+//    inspector-window → main (send):
+//      inspector:open                — chrome triggered it (legacy
+//                                       toggle path) — we mostly enter
+//                                       via win.webContents.send below.
+//      inspector:close               — close the BrowserWindow.
+//      inspector:request-data        — refresh page-analysis on active
+//                                       tab. Forwarded to chrome which
+//                                       runs analyzePage and sends back
+//                                       inspector:data-ready.
+//      inspector:toggle-picker       — toggle element-picker overlay.
+//      inspector:download-image      — fire image download in active
+//                                       tab.
+//
+//    chrome → main (send):
+//      inspector:data-ready {url, scheme, isOverlay, page}
+//      inspector:active-tab-changed {url, title, scheme}
+//      inspector:console-message {type, message, source, line, time}
+//      inspector:console-clear
+//      inspector:element-picked {tag, id, class, text, html}
+//
+//    main → inspector window:
+//      inspector:data, inspector:active-tab,
+//      inspector:console-message, inspector:console-clear,
+//      inspector:element-picked
+//
+//  Invoke channels (window → main → chrome) — request/reply with
+//  correlation ids:
+//    inspector:get-source     → string
+//    inspector:get-network    → array
+//    inspector:get-elements   → tree
+//    inspector:get-console    → array
+//
+//  Each invoke registers a one-shot pending promise in
+//  _inspectorPending keyed by reqId; chrome replies with
+//  inspector:bridge-reply {reqId, kind, data, error}.
+// ════════════════════════════════════════════════════════════════════
+
+let _inspectorWin = null
+let _inspectorReqSeq = 0
+const _inspectorPending = new Map()  // reqId → {resolve, reject, timer}
+
+function _inspectorWindowExists() {
+  return _inspectorWin && !_inspectorWin.isDestroyed()
+}
+
+function _ensureInspectorWindow() {
+  if (_inspectorWindowExists()) return _inspectorWin
+  if (!win || win.isDestroyed()) return null
+
+  const isDark = PM.profileGet('theme', 'light') === 'dark'
+
+  // Position to the right of the chrome window's right edge if there's
+  // room, otherwise overlap. Width/height match the legacy bottom-dock
+  // dimensions (full-width × 320px) but rendered as a free-floating
+  // window so the user can move it wherever they want.
+  const chromeBounds = win.getBounds()
+  const w = Math.min(960, Math.max(720, Math.round(chromeBounds.width * 0.6)))
+  const h = 480
+  const x = chromeBounds.x + Math.round((chromeBounds.width  - w) / 2)
+  const y = chromeBounds.y + Math.max(60, chromeBounds.height - h - 80)
+
+  _inspectorWin = new BrowserWindow({
+    width: w, height: h, minWidth: 480, minHeight: 240,
+    x, y,
+    parent: win,                    // floats above chrome window
+    title: 'SEOZ Inspector',
+    backgroundColor: isDark ? '#1a1d24' : '#ffffff',
+    titleBarStyle: 'hidden',
+    frame: false,
+    autoHideMenuBar: true,
+    icon: APP_ICON,
+    show: false,
+    skipTaskbar: false,
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/inspector-window-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+
+  _inspectorWin.setMenu(null)
+  _inspectorWin.loadFile(path.join(__dirname, '../renderer/inspector-window.html'))
+  _inspectorWin.once('ready-to-show', () => {
+    try { _inspectorWin.show() } catch (_) {}
+  })
+  _inspectorWin.on('closed', () => {
+    _inspectorWin = null
+    // Reject all pending invokes so the inspector renderer doesn't
+    // hang forever if it's in the middle of awaiting source/etc.
+    for (const [reqId, pending] of _inspectorPending) {
+      try { clearTimeout(pending.timer) } catch (_) {}
+      try { pending.reject(new Error('inspector window closed')) } catch (_) {}
+    }
+    _inspectorPending.clear()
+    // Tell chrome to clear any "inspector is open" UI state
+    // (e.g. context-menu label, status indicator).
+    try { if (win && !win.isDestroyed()) win.webContents.send('inspector:closed') } catch (_) {}
+  })
+
+  return _inspectorWin
+}
+
+// chrome → main: chrome wants to open the inspector. Spawns/focuses
+// the BrowserWindow, then asks chrome to push fresh data.
+ipcMain.on('inspector:open', () => {
+  try {
+    const w = _ensureInspectorWindow()
+    if (!w) return
+    if (w.isMinimized()) w.restore()
+    w.show(); w.focus()
+    // Trigger a data refresh — works whether window is already loaded
+    // or just spawned (chrome will resend on did-finish-load too).
+    if (win && !win.isDestroyed()) {
+      win.webContents.send('inspector:request-page-data')
+    }
+  } catch (err) {
+    console.error('[inspector:open] failed:', err)
+  }
+})
+
+// inspector window OR chrome → main: close. Chrome calls this from
+// e.g. context-menu "toggle inspector" when it's currently open.
+ipcMain.on('inspector:close', () => {
+  try {
+    if (_inspectorWindowExists()) _inspectorWin.close()
+  } catch (_) {}
+})
+
+// inspector window → main: refresh page-analysis. Forwarded to chrome,
+// which runs analyzePage and sends inspector:data-ready back.
+ipcMain.on('inspector:request-data', () => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('inspector:request-page-data')
+  } catch (_) {}
+})
+
+// inspector window → main: toggle element picker on active tab.
+ipcMain.on('inspector:toggle-picker', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('inspector:toggle-picker', { active: !!payload.active })
+  } catch (_) {}
+})
+
+// inspector window → main: download image.
+ipcMain.on('inspector:download-image', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('inspector:download-image', { src: String(payload.src || '') })
+  } catch (_) {}
+})
+
+// chrome → main: full page-analysis blob ready, pipe to inspector
+// window if it's still alive.
+ipcMain.on('inspector:data-ready', (_e, payload = {}) => {
+  try {
+    if (_inspectorWindowExists()) {
+      _inspectorWin.webContents.send('inspector:data', payload)
+    }
+  } catch (_) {}
+})
+
+// chrome → main: active tab switched — push light notification so the
+// inspector window can show a "Analyserar…" placeholder while chrome
+// runs analyzePage on the new tab.
+ipcMain.on('inspector:active-tab-changed', (_e, payload = {}) => {
+  try {
+    if (_inspectorWindowExists()) {
+      _inspectorWin.webContents.send('inspector:active-tab', payload)
+    }
+  } catch (_) {}
+})
+
+// chrome → main: live console message from active tab.
+ipcMain.on('inspector:console-message', (_e, payload = {}) => {
+  try {
+    if (_inspectorWindowExists()) {
+      _inspectorWin.webContents.send('inspector:console-message', payload)
+    }
+  } catch (_) {}
+})
+
+// chrome → main: page navigated, wipe console buffer in the window.
+ipcMain.on('inspector:console-clear', () => {
+  try {
+    if (_inspectorWindowExists()) {
+      _inspectorWin.webContents.send('inspector:console-clear')
+    }
+  } catch (_) {}
+})
+
+// chrome → main: user clicked an element with picker active.
+ipcMain.on('inspector:element-picked', (_e, payload = {}) => {
+  try {
+    if (_inspectorWindowExists()) {
+      _inspectorWin.webContents.send('inspector:element-picked', payload)
+    }
+  } catch (_) {}
+})
+
+// ── invoke bridge (window → main → chrome → main → window) ──
+//
+// Inspector window calls ipcRenderer.invoke('inspector:get-X'). Main
+// generates a reqId, stashes the promise, and asks chrome to fulfil
+// it via 'inspector:bridge-request'. Chrome runs the appropriate
+// wv.executeJavaScript and sends 'inspector:bridge-reply' back. Main
+// matches reqId → pending → resolves the original invoke promise.
+
+function _inspectorBridge(kind) {
+  return () => new Promise((resolve, reject) => {
+    if (!win || win.isDestroyed()) { reject(new Error('chrome window not available')); return }
+    const reqId = ++_inspectorReqSeq
+    const timer = setTimeout(() => {
+      if (_inspectorPending.has(reqId)) {
+        _inspectorPending.delete(reqId)
+        reject(new Error('inspector bridge timeout for ' + kind))
+      }
+    }, 8000)
+    _inspectorPending.set(reqId, { resolve, reject, timer })
+    try {
+      win.webContents.send('inspector:bridge-request', { reqId, kind })
+    } catch (err) {
+      _inspectorPending.delete(reqId)
+      clearTimeout(timer)
+      reject(err)
+    }
+  })
+}
+
+ipcMain.handle('inspector:get-source',   _inspectorBridge('source'))
+ipcMain.handle('inspector:get-network',  _inspectorBridge('network'))
+ipcMain.handle('inspector:get-elements', _inspectorBridge('elements'))
+ipcMain.handle('inspector:get-console',  _inspectorBridge('console'))
+
+// chrome → main: bridge reply.
+ipcMain.on('inspector:bridge-reply', (_e, payload = {}) => {
+  const { reqId, data, error } = payload || {}
+  const pending = _inspectorPending.get(reqId)
+  if (!pending) return  // already timed out / window closed
+  _inspectorPending.delete(reqId)
+  try { clearTimeout(pending.timer) } catch (_) {}
+  if (error) pending.reject(new Error(String(error)))
+  else       pending.resolve(data)
 })
 
 // ════════════════════════════════════════════════════════════════════
@@ -3245,6 +3489,111 @@ ipcMain.handle('trigger-sync', async (_, apiKey) => doAPISync(apiKey))
 
 ipcMain.handle('fetch-browser-api', async (_, { endpoint, apiKey, params, method, body }) => {
   return apiFetch(endpoint, apiKey, { params, method, body })
+})
+
+// ════════════════════════════════════════════════════════════════════
+//  Browser data import (Chrome / Edge / Brave / Opera / Vivaldi / Arc)
+//
+//  Phase-1 scope: bookmarks + history. All Chromium derivatives use
+//  the same User Data layout (Bookmarks JSON + History SQLite); the
+//  detect / parsers handle them uniformly. Passwords + cookies are
+//  Phase 2 (require DPAPI unwrap on Windows).
+//
+//  IPC surface:
+//    import:detect       → array of { browserId, profile, paths, hasBookmarks, hasHistory }
+//    import:run-bookmarks(bookmarksPath) → merge into PM bookmarks
+//    import:run-history(historyPath, opts) → merge into browsingHistory
+//
+//  Callers see { ok, stats: { added, skippedDup }, error? }. Merge is
+//  additive: existing bookmarks/history are kept and any new items
+//  (deduped by URL) are appended.
+// ════════════════════════════════════════════════════════════════════
+const importDetect    = require('./import/detect')
+const importBookmarks = require('./import/bookmarks')
+const importHistory   = require('./import/history')
+
+ipcMain.handle('import:detect', async () => {
+  try {
+    const sources = await importDetect.detectBrowsers()
+    return { ok: true, sources }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
+// Helper — match the renderer's storage shape so loadBookmarks() reads
+// what we wrote without any bridging. See the bookmarks sync adapter
+// for the same JSON-stringified-array convention.
+function _maybeJsonArrLocal(v, fallback) {
+  if (Array.isArray(v)) return v
+  if (typeof v === 'string') {
+    try { const p = JSON.parse(v); return Array.isArray(p) ? p : fallback } catch (_) { return fallback }
+  }
+  return fallback
+}
+
+ipcMain.handle('import:run-bookmarks', async (_e, { bookmarksPath } = {}) => {
+  if (!bookmarksPath) return { ok: false, error: 'bookmarksPath saknas' }
+  try {
+    const r = await importBookmarks.importFromFile(bookmarksPath)
+    if (!r.ok) return r
+    // Merge with existing — dedupe by URL.
+    const existing = _maybeJsonArrLocal(PM.profileGet('bookmarks', []), [])
+    const existingFolders = _maybeJsonArrLocal(PM.profileGet('bmFolders', []), [])
+    const seenUrls = new Set(existing.map(b => b.url))
+    const maxId = existing.reduce((m, b) => Math.max(m, Number(b.id) || 0), 0)
+    let nextId = maxId + 1
+    let added = 0, skippedDup = 0
+    const newBookmarks = []
+    for (const b of r.bookmarks) {
+      if (seenUrls.has(b.url)) { skippedDup++; continue }
+      seenUrls.add(b.url)
+      newBookmarks.push({
+        id:      nextId++,
+        title:   b.title,
+        url:     b.url,
+        folder:  b.folder || null,
+        favicon: '',
+      })
+      added++
+    }
+    const mergedFolders = Array.from(new Set([...existingFolders, ...r.folders])).filter(Boolean)
+    PM.profileSet('bookmarks', JSON.stringify([...existing, ...newBookmarks]))
+    PM.profileSet('bmFolders', JSON.stringify(mergedFolders))
+    // Tell renderer to reload its in-memory copy (same hook the sync
+    // engine uses on remote-pull apply).
+    try { if (win && !win.isDestroyed()) win.webContents.send('sync:bookmarks-applied') } catch (_) {}
+    return { ok: true, stats: { added, skippedDup, totalRead: r.stats.read } }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
+})
+
+ipcMain.handle('import:run-history', async (_e, { historyPath, maxAgeDays = 90, maxRows = 5000 } = {}) => {
+  if (!historyPath) return { ok: false, error: 'historyPath saknas' }
+  try {
+    const r = await importHistory.importFromFile(historyPath, { maxAgeDays, maxRows })
+    if (!r.ok) return r
+    const seoz = importHistory.toSeozFormat(r.history)
+    const existing = _maybeJsonArrLocal(PM.profileGet('browsingHistory', []), [])
+    const seenUrls = new Set(existing.map(h => h.url + '::' + h.time))
+    let added = 0, skippedDup = 0
+    const merged = [...existing]
+    for (const h of seoz) {
+      const key = h.url + '::' + h.time
+      if (seenUrls.has(key)) { skippedDup++; continue }
+      seenUrls.add(key)
+      merged.push(h)
+      added++
+    }
+    // Sort newest-first, cap at 500 like the in-renderer addHistory does.
+    merged.sort((a, b) => (b.time || 0) - (a.time || 0))
+    if (merged.length > 500) merged.length = 500
+    PM.profileSet('browsingHistory', JSON.stringify(merged))
+    return { ok: true, stats: { added, skippedDup, total: merged.length } }
+  } catch (err) {
+    return { ok: false, error: err?.message || String(err) }
+  }
 })
 
 // ════════════════════════════════════════════════════════════════════
@@ -5189,19 +5538,11 @@ function _setupTabContents(contents) {
     win.webContents.send('webview-fullscreen', false)
   })
 
-  // v1.10.131: when an OAuth popup opens via window.open() and we
-  // return action:'allow' (below), Electron creates a new
-  // BrowserWindow and fires 'did-create-window' on the parent's
-  // webContents. Apply the same Chrome shim (navigator.userAgentData,
-  // window.chrome, WebAuthn block) that tabs get — otherwise Google
-  // sign-in detects the missing window.chrome.runtime / wrong UA
-  // data and blocks login with "Webbläsaren kanske inte är säker".
-  contents.on('did-create-window', (newWin /* , details */) => {
-    try {
-      const newWc = newWin && newWin.webContents
-      if (newWc) applyChromeShim(newWc)
-    } catch (_) {}
-  })
+  // NB: did-create-window used to call applyChromeShim() to install
+  // a CDP-based Chrome shim on OAuth popup BrowserWindows. Removed
+  // in v1.10.134 — stealth lives in webview-preload.js (which is
+  // loaded as the popup's preload below) so the popup gets the same
+  // navigator.* + WebAuthn patches automatically.
 
   contents.setWindowOpenHandler(({ url, disposition, features }) => {
     if (!url || !/^https?:\/\//i.test(url)) return { action: 'deny' }

@@ -123,9 +123,33 @@ contextBridge.exposeInMainWorld('seoz', {
     }),
   },
 
-  // chromeLabel bridge removed in v1.10.135 — dock labels are now a
-  // DOM overlay (#dockLabelEl) since they only paint inside the
-  // sidebar (chrome region only, no page-area overlap).
+  // Generic chrome-label tooltip — single shared WebContentsView used
+  // for hover labels on dock icons, etc.
+  //
+  // History: v1.10.116 sibling WCV → v1.10.135 DOM overlay (worked
+  // for sidebar-only labels but broke when the label visually
+  // extended into the page area, since DOM in chrome can't paint
+  // above the tab WebContentsView). v1.10.137 reverted to sibling WCV.
+  chromeLabel: {
+    show: (anchorX, anchorY, text, side) => ipcRenderer.send('chrome-label:show', { anchorX, anchorY, text, side }),
+    hide: ()                              => ipcRenderer.send('chrome-label:hide'),
+  },
+
+  // Generic context-menu sibling WebContentsView (v1.10.137).
+  // Replaces the in-DOM #ctxMenu + chrome-clip-active mechanism.
+  // Chrome (showCtx) keeps action callbacks indexed by id; popup
+  // emits the id back, chrome dispatches.
+  ctxMenu: {
+    show: (anchorX, anchorY, items, isDark) =>
+            ipcRenderer.send('ctx-menu:show', { anchorX, anchorY, items, isDark }),
+    hide: () => ipcRenderer.send('ctx-menu:hide'),
+    onAction: (cb) => ipcRenderer.on('ctx-menu:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[ctxMenu onAction]', err) }
+    }),
+    onClosed: (cb) => ipcRenderer.on('ctx-menu:closed', () => {
+      try { cb() } catch (err) { console.error('[ctxMenu onClosed]', err) }
+    }),
+  },
 
   // URL-suggest dropdown — sibling WebContentsView (reverted in
   // v1.10.136 alongside tooltip — same page-area-overlap reason).

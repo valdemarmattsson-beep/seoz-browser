@@ -1,0 +1,142 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>SEOZ ctx menu</title>
+<style>
+  /* Transparent root — only the .menu paints. View is sized to hug
+     the menu's measured bounds so it doesn't intercept clicks
+     elsewhere. */
+  html, body {
+    margin: 0; padding: 0; background: transparent; overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    color: #f8f8f8;
+  }
+
+  /* Mirrors the chrome's .ctx-menu CSS (index.html:2057-2075) so the
+     popup looks identical to the previous in-DOM menu. Inline tokens
+     because this loads in its own renderer with no shared stylesheet. */
+  .menu {
+    background: #1a1d23;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 8px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.35);
+    min-width: 160px;
+    padding: 4px 0;
+    margin: 4px;            /* leave room for shadow */
+    overflow: hidden;
+  }
+
+  .item {
+    padding: 6px 12px;
+    font-size: 11px;
+    color: #f8f8f8;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 7px;
+    transition: background .1s;
+  }
+  .item:hover:not(.disabled) { background: rgba(255,255,255,.06) }
+  .item.danger { color: #ef6464 }
+  .item.disabled { color: rgba(255,255,255,.45); opacity: .5; cursor: default }
+
+  .sep { height: 1px; background: rgba(255,255,255,.08); margin: 4px 8px }
+
+  .ico {
+    width: 14px; height: 14px; flex-shrink: 0;
+    display: inline-flex; align-items: center; justify-content: center;
+    color: rgba(255,255,255,.5);
+  }
+  .ico svg { width: 13px; height: 13px }
+  .item.danger .ico { color: #ef6464 }
+
+  /* Light theme override (chrome can pass isDark=false) */
+  body.light .menu { background: #ffffff; border-color: rgba(0,0,0,.08); box-shadow: 0 8px 24px rgba(0,0,0,.18) }
+  body.light .item { color: #1a1d23 }
+  body.light .item:hover:not(.disabled) { background: rgba(0,0,0,.05) }
+  body.light .sep { background: rgba(0,0,0,.08) }
+  body.light .ico { color: rgba(0,0,0,.45) }
+</style>
+</head>
+<body>
+<div class="menu" id="menu"></div>
+<script>
+  // ──────────────────────────────────────────────────────────────────
+  //  Generic context-menu renderer.
+  //
+  //  Receives {items, isDark} and renders. Items are either '---'
+  //  (separator) or { id, label, icon?, danger?, disabled? } where
+  //  `id` is opaque to us — chrome maps it back to a callback.
+  //  `icon` is an SVG markup string (escaped on chrome side already).
+  //  Click on a non-disabled item → emit `ctx-menu:action` with the id.
+  //  Escape / blur → emit `ctx-menu:close` so chrome can clear state.
+  // ──────────────────────────────────────────────────────────────────
+  const menu = document.getElementById('menu')
+
+  function escHTML(s) {
+    return String(s == null ? '' : s)
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
+  }
+
+  let _items = []
+
+  function render() {
+    menu.innerHTML = _items.map((it) => {
+      if (it === '---' || (it && it.sep)) return '<div class="sep"></div>'
+      const cls = 'item' + (it.danger ? ' danger' : '') + (it.disabled ? ' disabled' : '')
+      const ico = it.icon
+        ? `<span class="ico">${it.icon}</span>`
+        : ''
+      return `<div class="${cls}" data-id="${escHTML(it.id)}">${ico}<span>${escHTML(it.label)}</span></div>`
+    }).join('')
+
+    // Tell chrome our measured size so main can size the view to fit.
+    // Generous initial size while loading; this tightens it.
+    requestAnimationFrame(() => {
+      const r = menu.getBoundingClientRect()
+      if (window.seoz?.ctxMenu?.resize) {
+        window.seoz.ctxMenu.resize(Math.ceil(r.width + 8), Math.ceil(r.height + 8))
+      }
+    })
+  }
+
+  // mousedown (not click) so we react before the native blur sequence
+  // could re-trigger the close handler in the chrome renderer. mousedown
+  // also matches the previous in-DOM menu's behavior.
+  menu.addEventListener('mousedown', (e) => {
+    const item = e.target.closest && e.target.closest('.item')
+    if (!item || item.classList.contains('disabled')) return
+    e.preventDefault()
+    const id = item.dataset.id
+    if (id && window.seoz?.ctxMenu?.action) {
+      window.seoz.ctxMenu.action(id)
+    }
+  })
+
+  document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape' && window.seoz?.ctxMenu?.close) {
+      window.seoz.ctxMenu.close()
+    }
+  })
+
+  // The popup view is unfocusable in normal click flow (the chrome
+  // input still has focus), but if it ever does receive focus and
+  // then loses it we should auto-close so a stale menu doesn't
+  // linger after the user clicks elsewhere.
+  window.addEventListener('blur', () => {
+    if (window.seoz?.ctxMenu?.close) window.seoz.ctxMenu.close()
+  })
+
+  if (window.seoz?.ctxMenu?.onItems) {
+    window.seoz.ctxMenu.onItems(({ items, isDark }) => {
+      document.body.classList.toggle('light', isDark === false)
+      _items = items || []
+      render()
+    })
+  }
+</script>
+</body>
+</html>

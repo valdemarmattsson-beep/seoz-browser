@@ -2185,6 +2185,134 @@ ipcMain.on('client-picker:close', () => {
 })
 
 // ════════════════════════════════════════════════════════════════════
+//  Generic context-menu popup — sibling WebContentsView (v1.10.137)
+//
+//  Replaces the in-DOM #ctxMenu and the chrome-clip-active mechanism
+//  it relied on. The chrome renderer's showCtx() builds an items list
+//  (with auto-generated ids), keeps an action-callback map keyed by
+//  id, and pushes the items into this view. On click the popup sends
+//  back the id; chrome looks up + invokes the callback.
+//
+//  Channels:
+//    chrome → main:
+//      ctx-menu:show {anchorX, anchorY, items, isDark}
+//      ctx-menu:hide
+//    main → popup-renderer:
+//      ctx-menu:items {items, isDark}
+//    popup-renderer → main:
+//      ctx-menu:action {id}
+//      ctx-menu:resize {width, height}
+//      ctx-menu:close
+//    main → chrome:
+//      ctx-menu:action {id}    forwarded from popup
+//      ctx-menu:closed         after popup hides (lets chrome reset
+//                              its _ctxMenuOpen flag)
+// ════════════════════════════════════════════════════════════════════
+let _ctxMenuView = null
+let _ctxMenuLastAnchor = null   // { anchorX, anchorY } — re-clamped on resize
+
+function _ensureCtxMenuView() {
+  if (_ctxMenuView && _ctxMenuView.webContents && !_ctxMenuView.webContents.isDestroyed()) return _ctxMenuView
+  if (!win || win.isDestroyed()) return null
+
+  _ctxMenuView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/ctx-menu-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _ctxMenuView.setBackgroundColor('#00000000') } catch (_) {}
+  _ctxMenuView.setVisible(false)
+  _ctxMenuView.webContents.loadFile(path.join(__dirname, '../renderer/ctx-menu-popup.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_ctxMenuView?.webContents && !_ctxMenuView.webContents.isDestroyed()) _ctxMenuView.webContents.close() } catch (_) {}
+      _ctxMenuView = null
+    })
+  }
+  return _ctxMenuView
+}
+
+function _positionCtxMenu(width, height) {
+  if (!_ctxMenuView || !_ctxMenuLastAnchor) return
+  if (!win || win.isDestroyed()) return
+  const cb = win.getContentBounds()
+  const { anchorX = 0, anchorY = 0 } = _ctxMenuLastAnchor
+  // Clamp inside content area, accounting for the menu's measured size.
+  let x = Math.round(anchorX)
+  let y = Math.round(anchorY)
+  if (x + width  > cb.width  - 4) x = Math.max(4, cb.width  - width  - 4)
+  if (y + height > cb.height - 4) y = Math.max(4, cb.height - height - 4)
+  x = Math.max(0, x)
+  y = Math.max(0, y)
+  _ctxMenuView.setBounds({ x, y, width, height })
+}
+
+ipcMain.on('ctx-menu:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureCtxMenuView()
+    if (!v) return
+    if (!win || win.isDestroyed()) return
+
+    const { anchorX = 0, anchorY = 0, items = [], isDark = true } = payload
+    _ctxMenuLastAnchor = { anchorX, anchorY }
+
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('ctx-menu:items', { items, isDark })
+    }
+    // Provisional bounds — popup's resize callback tightens.
+    const cb = win.getContentBounds()
+    const w = 240
+    const h = Math.min(cb.height - 16, Math.max(40, items.length * 30 + 16))
+    _ctxMenuView.setBounds({ x: 0, y: 0, width: w, height: h })
+    _positionCtxMenu(w, h)
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[ctx-menu:show] failed:', err)
+  }
+})
+
+ipcMain.on('ctx-menu:hide', () => {
+  try {
+    if (_ctxMenuView && _ctxMenuView.webContents && !_ctxMenuView.webContents.isDestroyed()) {
+      _ctxMenuView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('ctx-menu:resize', (_e, payload = {}) => {
+  try {
+    if (!_ctxMenuView || _ctxMenuView.webContents.isDestroyed()) return
+    const w = Math.max(80, Math.min(420, Math.round(payload.width)  || 200))
+    const h = Math.max(20, Math.min(700, Math.round(payload.height) || 80))
+    _positionCtxMenu(w, h)
+  } catch (_) {}
+})
+
+ipcMain.on('ctx-menu:action', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('ctx-menu:action', payload)
+    if (_ctxMenuView && _ctxMenuView.webContents && !_ctxMenuView.webContents.isDestroyed()) {
+      _ctxMenuView.setVisible(false)
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('ctx-menu:closed')
+  } catch (_) {}
+})
+
+ipcMain.on('ctx-menu:close', () => {
+  try {
+    if (_ctxMenuView && _ctxMenuView.webContents && !_ctxMenuView.webContents.isDestroyed()) {
+      _ctxMenuView.setVisible(false)
+    }
+    if (win && !win.isDestroyed()) win.webContents.send('ctx-menu:closed')
+  } catch (_) {}
+})
+
+// ════════════════════════════════════════════════════════════════════
 //  Bookmark-folder dropdown — sibling WebContentsView
 //
 //  Each folder on the bookmark bar pops a list of its contents. The
@@ -2337,10 +2465,90 @@ ipcMain.on('bm-folder:close', () => {
 })
 
 // ════════════════════════════════════════════════════════════════════
-//  Chrome-label (dock-icon hover label) was a sibling WebContentsView
-//  in v1.10.116-1.10.134. Replaced in v1.10.135 with a DOM overlay
-//  (#dockLabelEl in index.html) for Device Mode compatibility. See
-//  the renderer's _wireDockTooltips() for the new implementation.
+//  Chrome-label (dock-icon hover label) — sibling WebContentsView.
+//  v1.10.135 tried as DOM overlay; reverted in v1.10.137 because
+//  dock icons sit on the right sidebar edge and labels extend LEFT
+//  into the page area, where the tab WebContentsView paints above
+//  any chrome DOM.
+// ════════════════════════════════════════════════════════════════════
+let _chromeLabelView = null
+let _chromeLabelLastAnchor = null
+
+function _ensureChromeLabelView() {
+  if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) return _chromeLabelView
+  if (!win || win.isDestroyed()) return null
+
+  _chromeLabelView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/chrome-label-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _chromeLabelView.setBackgroundColor('#00000000') } catch (_) {}
+  _chromeLabelView.setVisible(false)
+  _chromeLabelView.webContents.loadFile(path.join(__dirname, '../renderer/chrome-label.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_chromeLabelView?.webContents && !_chromeLabelView.webContents.isDestroyed()) _chromeLabelView.webContents.close() } catch (_) {}
+      _chromeLabelView = null
+    })
+  }
+  return _chromeLabelView
+}
+
+function _positionChromeLabel(width, height) {
+  if (!_chromeLabelView || !_chromeLabelLastAnchor) return
+  if (!win || win.isDestroyed()) return
+  const cb = win.getContentBounds()
+  const { anchorX = 0, anchorY = 0, side = 'left' } = _chromeLabelLastAnchor
+  let x = side === 'right' ? Math.round(anchorX) : Math.round(anchorX - width)
+  let y = Math.round(anchorY - height / 2)
+  x = Math.max(0, Math.min(cb.width  - width,  x))
+  y = Math.max(0, Math.min(cb.height - height, y))
+  _chromeLabelView.setBounds({ x, y, width, height })
+}
+
+ipcMain.on('chrome-label:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureChromeLabelView()
+    if (!v) return
+    if (!win || win.isDestroyed()) return
+    const { anchorX = 0, anchorY = 0, text = '', side = 'left' } = payload
+    _chromeLabelLastAnchor = { anchorX, anchorY, side }
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('chrome-label:update', text)
+    }
+    const b = v.getBounds()
+    const w = Math.max(b.width || 0, 200)
+    const h = Math.max(b.height || 0, 32)
+    _chromeLabelView.setBounds({ x: b.x || 0, y: b.y || 0, width: w, height: h })
+    _positionChromeLabel(w, h)
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[chrome-label:show] failed:', err)
+  }
+})
+
+ipcMain.on('chrome-label:hide', () => {
+  try {
+    if (_chromeLabelView && _chromeLabelView.webContents && !_chromeLabelView.webContents.isDestroyed()) {
+      _chromeLabelView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('chrome-label:resize', (_e, payload = {}) => {
+  try {
+    if (!_chromeLabelView || _chromeLabelView.webContents.isDestroyed()) return
+    const w = Math.max(20, Math.min(400, Math.round(payload.width)  || 100))
+    const h = Math.max(16, Math.min(60,  Math.round(payload.height) || 28))
+    _positionChromeLabel(w, h)
+  } catch (_) {}
+})
 // ════════════════════════════════════════════════════════════════════
 //  Site Info popup — sibling WebContentsView
 //

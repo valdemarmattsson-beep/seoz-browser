@@ -1803,12 +1803,6 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .url-wrap{position:relative}
 .url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
 .url-suggest.open{display:block}
-/* Dock-icon hover label — DOM overlay (v1.10.135). Stays as DOM
-   because it only paints inside the sidebar; tab tooltip and
-   URL-suggest reverted to sibling WCVs in v1.10.136. */
-.dock-label{position:fixed;z-index:1000;background:#f0f4f8;color:#131920;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);display:none;pointer-events:none}
-.dock-label.open{display:block}
-.dock-label::after{content:'';position:absolute;left:100%;top:50%;transform:translateY(-50%);border:4px solid transparent;border-left-color:#f0f4f8}
 .url-sg{padding:6px 12px;display:flex;align-items:center;gap:9px;cursor:pointer;transition:background .1s}
 .url-sg:hover,.url-sg.sel{background:rgba(255,255,255,.06)}
 .url-sg img{width:14px;height:14px;border-radius:2px;flex-shrink:0}
@@ -4407,7 +4401,10 @@ body.no-seoz .seoz-panel { display:none !important }
 </div>
 
 <!-- CONTEXT MENU -->
-<div class="ctx-menu" id="ctxMenu"></div>
+<!-- #ctxMenu removed in v1.10.137 — context menu is now a sibling
+     WebContentsView (see main.js _ensureCtxMenuView). The .ctx-menu /
+     .ctx-item / .ctx-sep / .ctx-ico CSS classes also unused now and
+     could be cleaned up later. -->
 
 <!-- TOAST -->
 <div id="toast"><div class="td" id="toastDot"></div><span id="toastMsg"></span></div>
@@ -10164,16 +10161,16 @@ function toggleDock() {
   }
 }
 
-// ── Dock-icon hover labels — DOM overlay (v1.10.135) ────────────────
-// Was a sibling chrome-label WebContentsView (v1.10.116-1.10.134).
-// Now a plain fixed-positioned <div> in the chrome renderer so it
-// reframes correctly under DevTools Device Mode. Page WebContentsView
-// is at z=0 (addChildView(view, 0)) so this DOM element renders
-// above tab content even when it sits over the page area.
+// ── Dock-icon hover labels via floating WebContentsView ──────────
+// History: in-DOM .dtt → sibling chrome-label WebContentsView
+// (v1.10.116) → DOM overlay (v1.10.135 — broke because the label
+// extends into page-area where tab WCV paints above chrome DOM)
+// → sibling WebContentsView again (v1.10.137). The .dtt nodes are
+// still the data source — JS reads textContent on hover and
+// forwards via IPC.
 function _wireDockTooltips() {
   const dock = document.querySelector('.dock')
-  const labelEl = document.getElementById('dockLabelEl')
-  if (!dock || !labelEl) return
+  if (!dock || !window.seoz?.chromeLabel) return
   let _hoverTimer = null
   let _shown = false
   const showFor = (di) => {
@@ -10181,27 +10178,15 @@ function _wireDockTooltips() {
     if (!dtt) return
     const text = (dtt.textContent || '').trim()
     if (!text) return
-    labelEl.textContent = text
-    labelEl.classList.add('open')
-    // Position so the label sits to the LEFT of the dock icon, with
-    // the right-pointing arrow (::after) touching the icon. Measure
-    // post-render so we know the label's width.
     const r = di.getBoundingClientRect()
-    requestAnimationFrame(() => {
-      const lr = labelEl.getBoundingClientRect()
-      // Right edge of label aligns with left edge of icon (minus a
-      // tiny gap so the arrow has visual space).
-      const x = Math.max(2, Math.round(r.left - lr.width - 4))
-      // Vertically centre on the icon.
-      const y = Math.max(2, Math.round(r.top + r.height / 2 - lr.height / 2))
-      labelEl.style.left = x + 'px'
-      labelEl.style.top  = y + 'px'
-    })
+    // anchorX = LEFT edge of the dock icon → label sits to its LEFT.
+    // anchorY = vertical centre of the icon.
+    window.seoz.chromeLabel.show(Math.round(r.left), Math.round(r.top + r.height / 2), text, 'left')
     _shown = true
   }
   const hide = () => {
     if (!_shown) return
-    labelEl.classList.remove('open')
+    try { window.seoz.chromeLabel.hide() } catch (_) {}
     _shown = false
   }
   // Event delegation — one set of listeners covers all .di children
@@ -14210,52 +14195,83 @@ SE.bmFolder?.onAction((payload) => {
 })
 SE.bmFolder?.onClosed(() => { _bmFolderOpen = false; _bmFolderActive = null })
 
-// ── Context menu ──
+// ── Context menu (v1.10.137 — sibling WebContentsView) ────────────
+//
+// Replaces the in-DOM #ctxMenu + chrome-clip-active page-shrink hack.
+// We keep the action callbacks here (they can't be serialized over
+// IPC); the popup view receives a serialized item list and ships
+// click events back as { id }.
+let _ctxActions = new Map()  // id → action fn
+let _ctxNextId = 0
+let _ctxMenuOpen = false
+
 function showCtx(e, items) {
   closeAllDrops()
-  // Hide the floating tab tooltip first. v1.10.113 used sendSync to
-  // guarantee the tooltip was gone before the ctx menu rendered, but
-  // BrowserWindow.hide() on Windows can occasionally block on the
-  // window-message pump flush — and a blocked main process means the
-  // sync IPC hangs the renderer. Whole app froze on right-click.
-  // (v1.10.115 fix.)
-  //
-  // Now: fire-and-forget hide(), then defer the menu render by one
-  // animation frame. That ~16ms gives main plenty of time to process
-  // the hide IPC + actually hide the BrowserWindow, with zero risk
-  // of a renderer-side deadlock. The tooltip's pop-up-menu z-level
-  // would otherwise visually occlude the menu for that brief window.
+  // Hide the floating tab tooltip first. v1.10.115: must be fire-and-
+  // forget — sendSync on Windows could deadlock against the message
+  // pump while BrowserWindow.hide() flushes.
   try {
     clearTimeout(window._tabTipShowTimer)
     clearTimeout(window._tabTipHideTimer)
     if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
   } catch (_) {}
 
-  // Snapshot the click coords — the MouseEvent itself is fine to
-  // close over, but pulling the numbers out is clearer about intent.
-  const cx = e.clientX, cy = e.clientY
-  requestAnimationFrame(() => {
-    const menu = document.getElementById('ctxMenu')
-    menu.innerHTML = ''
-    items.forEach(item => {
-      if (item === '---') { const sep = document.createElement('div'); sep.className = 'ctx-sep'; menu.appendChild(sep); return }
-      const el = document.createElement('div')
-      el.className = 'ctx-item' + (item.danger ? ' danger' : '') + (item.disabled ? ' disabled' : '')
-      if (item.icon) {
-        const safe = String(item.label).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;')
-        el.innerHTML = '<span class="ctx-ico">' + item.icon + '</span><span>' + safe + '</span>'
-      } else {
-        el.textContent = item.label
-      }
-      if (!item.disabled) el.onclick = () => { hideCtx(); item.action() }
-      menu.appendChild(el)
-    })
-    menu.style.left = Math.min(cx, window.innerWidth - 200) + 'px'
-    menu.style.top = Math.min(cy, window.innerHeight - items.length * 30) + 'px'
-    menu.classList.add('open')
+  if (!window.seoz?.ctxMenu) return
+
+  // Build serializable item list. Each non-separator item gets a
+  // unique id; we keep the action fn in _ctxActions so the popup
+  // can reference it without us shipping closures over IPC.
+  _ctxActions.clear()
+  const payload = items.map((item) => {
+    if (item === '---') return '---'
+    const id = 'ctx_' + (++_ctxNextId)
+    if (typeof item.action === 'function' && !item.disabled) {
+      _ctxActions.set(id, item.action)
+    }
+    return {
+      id,
+      label: String(item.label || ''),
+      icon: item.icon || null,            // SVG markup string (already escaped on chrome side)
+      danger: !!item.danger,
+      disabled: !!item.disabled,
+    }
   })
+
+  const isDark = document.documentElement.dataset.theme === 'dark' ||
+                 !document.documentElement.dataset.theme
+  window.seoz.ctxMenu.show(
+    Math.round(e.clientX),
+    Math.round(e.clientY),
+    payload,
+    isDark,
+  )
+  _ctxMenuOpen = true
 }
-function hideCtx() { document.getElementById('ctxMenu').classList.remove('open') }
+
+function hideCtx() {
+  if (!_ctxMenuOpen) return
+  _ctxMenuOpen = false
+  _ctxActions.clear()
+  try { window.seoz?.ctxMenu?.hide?.() } catch (_) {}
+}
+
+;(function _wireCtxMenuBridge() {
+  if (!window.seoz?.ctxMenu?.onAction) return
+  window.seoz.ctxMenu.onAction(({ id }) => {
+    const fn = _ctxActions.get(id)
+    _ctxMenuOpen = false
+    _ctxActions.clear()
+    if (typeof fn === 'function') {
+      try { fn() } catch (err) { console.error('[ctx action]', err) }
+    }
+  })
+  if (window.seoz.ctxMenu.onClosed) {
+    window.seoz.ctxMenu.onClosed(() => {
+      _ctxMenuOpen = false
+      _ctxActions.clear()
+    })
+  }
+})()
 
 function bmCtxItems(bm) {
   const folders = getAllFolders()
@@ -21036,13 +21052,6 @@ try { SE.storeSet('paneCount', 1) } catch(e) {}
 window.__designGetWebview = function() { return wv; }
 </script>
 <script src="design-mode.js"></script>
-
-<!-- Dock-icon hover label — DOM overlay (v1.10.135). Stays as DOM
-     because it only paints inside the sidebar (chrome region only),
-     no overlap with the page area where tab WebContentsView would
-     hide it. Tab tooltip + URL-suggest reverted to sibling WCVs in
-     v1.10.136 — those DO extend into the page area. -->
-<div class="dock-label" id="dockLabelEl" aria-hidden="true"></div>
 
 </body>
 </html>

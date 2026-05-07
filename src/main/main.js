@@ -5442,11 +5442,15 @@ function _setupTabContents(contents) {
       return
     }
     // ── Tab-native: DevTools ───────────────────────────────────
+    // v1.10.143: open without mode so Electron picks the user's last
+    // dock setting (docked = Device Mode works naturally inside the
+    // same window, matching every other browser). User can detach via
+    // DevTools' three-dot menu if they prefer.
     if (input.key === 'F12' || (ctrl && shift && (key === 'i' || key === 'j'))) {
       event.preventDefault()
       try {
         if (contents.isDevToolsOpened()) contents.closeDevTools()
-        else contents.openDevTools({ mode: 'detach' })
+        else contents.openDevTools()
       } catch (_) {}
       return
     }
@@ -5597,10 +5601,10 @@ function _setupTabContents(contents) {
     template.push({ type: 'separator' })
     template.push({ label: 'Granska element', accelerator: 'Ctrl+Shift+I', click: () => {
       try {
-        if (!contents.isDevToolsOpened()) contents.openDevTools({ mode: 'detach' })
+        if (!contents.isDevToolsOpened()) contents.openDevTools()
         contents.inspectElement(params.x || 0, params.y || 0)
       } catch (_) {
-        try { contents.openDevTools({ mode: 'detach' }) } catch (__) {}
+        try { contents.openDevTools() } catch (__) {}
       }
     }})
 

@@ -735,7 +735,11 @@ class TabManager {
     ipcMain.handle('tab:get-zoom-factor', (_e, tabId) => this._withWC(tabId, (wc) => wc.getZoomFactor()) || 1)
 
     // DevTools
-    ipcMain.on('tab:open-devtools', (_e, tabId) => this._withWC(tabId, (wc) => { try { wc.openDevTools({ mode: 'detach' }) } catch (_) {} }))
+    // v1.10.143: openDevTools() with no mode lets Electron use its default
+    // (docked, usually right side) — matches what every other browser does
+    // and lets Device Mode work naturally inside the same window. Users
+    // can still detach via DevTools' own three-dot menu → Dock side.
+    ipcMain.on('tab:open-devtools', (_e, tabId) => this._withWC(tabId, (wc) => { try { wc.openDevTools() } catch (_) {} }))
     ipcMain.on('tab:close-devtools', (_e, tabId) => this._withWC(tabId, (wc) => { try { wc.closeDevTools() } catch (_) {} }))
 
     // Misc

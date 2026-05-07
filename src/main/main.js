@@ -5586,6 +5586,23 @@ function _setupTabContents(contents) {
     template.push({ type: 'separator' })
     template.push({ label: 'Visa sidkälla', click: () => send('view-source', { url: pageURL }) })
     template.push({ label: 'SEOZ Inspector', click: () => send('toggle-inspector') })
+    // v1.10.141: Granska element opens Chromium DevTools on THIS tab
+    // (not on the chrome window). That's the correct entry point for
+    // Device Mode + element inspection — pressing F12 on the chrome
+    // window opens DevTools on the chrome's renderer, which produces
+    // the confusing "browser shrinks but page is squeezed" effect
+    // when toggling Device Mode. Right-click → Granska does what
+    // every other browser does. inspectElement(x,y) also pre-
+    // highlights the element under the cursor.
+    template.push({ type: 'separator' })
+    template.push({ label: 'Granska element', accelerator: 'Ctrl+Shift+I', click: () => {
+      try {
+        if (!contents.isDevToolsOpened()) contents.openDevTools({ mode: 'detach' })
+        contents.inspectElement(params.x || 0, params.y || 0)
+      } catch (_) {
+        try { contents.openDevTools({ mode: 'detach' }) } catch (__) {}
+      }
+    }})
 
     try {
       const menu = Menu.buildFromTemplate(template)

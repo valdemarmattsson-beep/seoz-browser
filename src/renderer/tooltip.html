@@ -1,0 +1,207 @@
+<!DOCTYPE html>
+<html lang="sv">
+<head>
+<meta charset="utf-8">
+<title>SEOZ tab tooltip</title>
+<style>
+  /* Transparent root — the BrowserWindow itself is `transparent:true`
+     and `frame:false`, so the only visible chrome is the .card below. */
+  html, body { margin: 0; padding: 0; background: transparent; overflow: hidden;
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    -webkit-user-select: none; user-select: none;
+    color: #f8f8f8;
+  }
+
+  /* Card layout matches what the in-DOM .tab-tip-card used to look like
+     (v1.10.106 and earlier). Inline tokens here instead of CSS variables
+     because this HTML loads in its own renderer with no design-system
+     stylesheet. Theme-awareness is intentionally simple: assume dark
+     since the SEOZ chrome is dark by default. */
+  .card {
+    background: #1a1d23;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 10px;
+    box-shadow: 0 8px 24px rgba(0,0,0,.4);
+    padding: 10px 12px;
+    margin: 4px;          /* small gutter so the box-shadow isn't clipped at window edge */
+    overflow: hidden;
+  }
+
+  .preview {
+    display: none;
+    width: calc(100% + 24px);
+    margin: -10px -12px 10px;
+    height: 140px;
+    object-fit: cover;
+    object-position: top center;
+    background: #0f1116;
+    border-bottom: 1px solid rgba(255,255,255,.08);
+  }
+  .preview.show { display: block }
+
+  .head { display: flex; gap: 8px; align-items: center; margin-bottom: 6px }
+  .fav {
+    width: 16px; height: 16px; border-radius: 3px; flex-shrink: 0;
+    object-fit: contain;
+    display: none;
+  }
+  .fav.show { display: block }
+  .title {
+    flex: 1; min-width: 0;
+    font-size: 12px; font-weight: 600; color: #f8f8f8;
+    line-height: 1.3;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  .url {
+    font-size: 11px; color: rgba(255,255,255,.55);
+    line-height: 1.4;
+    word-break: break-all;
+    margin-bottom: 2px;
+    /* Truncate to 2 lines max so tooltip height stays predictable. */
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .domain {
+    font-size: 10.5px; color: rgba(255,255,255,.4);
+    margin-top: 4px;
+    overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+  }
+
+  /* Action buttons — pin / split. Get pointer events when the cursor
+     enters them (renderer toggles setIgnoreMouseEvents in main). */
+  .actions {
+    display: flex; gap: 6px; margin-top: 10px;
+    padding-top: 8px; border-top: 1px solid rgba(255,255,255,.06);
+  }
+  .action {
+    flex: 1; height: 28px;
+    display: inline-flex; align-items: center; justify-content: center; gap: 5px;
+    background: transparent;
+    border: 1px solid rgba(255,255,255,.08);
+    border-radius: 6px;
+    color: rgba(255,255,255,.65);
+    font: inherit; font-size: 11px; font-weight: 500;
+    cursor: pointer;
+    transition: background .12s, color .12s, border-color .12s;
+  }
+  .action:hover {
+    background: rgba(70,128,255,.12);
+    border-color: rgba(70,128,255,.45);
+    color: #f8f8f8;
+  }
+  .action svg { width: 12px; height: 12px }
+</style>
+</head>
+<body>
+<div class="card" id="card">
+  <img class="preview" id="preview" alt="">
+  <div class="head">
+    <img class="fav" id="fav" src="" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
+    <div class="title" id="title"></div>
+  </div>
+  <div class="url" id="url"></div>
+  <div class="domain" id="domain"></div>
+  <div class="actions">
+    <button class="action" id="actPin" data-action="pin">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
+      <span>Fäst</span>
+    </button>
+    <button class="action" id="actSplit" data-action="split">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
+      <span>Splitvy</span>
+    </button>
+  </div>
+</div>
+<script>
+  // ──────────────────────────────────────────────────────────────────
+  //  Tooltip renderer — three jobs:
+  //  1) Update content when main sends `tooltip:update`
+  //  2) Tell main when the cursor is over the .card (so the main
+  //     window's renderer can cancel its hide timer — otherwise the
+  //     tooltip hides 120ms after the user leaves the tab even if
+  //     they're on their way to click an action button)
+  //  3) Tell main when the cursor enters/leaves an action button so
+  //     it can flip setIgnoreMouseEvents on this window. With
+  //     ignoreMouseEvents(true, { forward: true }) we still receive
+  //     mousemove events for hover detection, but click events
+  //     pass through to the window underneath. Flipping to false
+  //     while the cursor is on a button lets the click reach us.
+  // ──────────────────────────────────────────────────────────────────
+
+  let _currentTabId = 0
+
+  // Measure the rendered card and tell main how tall the BrowserWindow
+  // should be. Otherwise action buttons get clipped when the preview
+  // image is present (content tall ~300px, fixed window 200px).
+  function _reportSize() {
+    const card = document.getElementById('card')
+    if (!card || !window.seoz?.tooltip?.requestResize) return
+    const r = card.getBoundingClientRect()
+    // +8px for the .card's outer margin (4px each side, plus a little
+    // breathing room so the box-shadow isn't clipped).
+    window.seoz.tooltip.requestResize(Math.ceil(r.height + 12))
+  }
+
+  if (window.seoz && window.seoz.tooltip && window.seoz.tooltip.onUpdate) {
+    window.seoz.tooltip.onUpdate((data) => {
+      const fav = document.getElementById('fav')
+      const title = document.getElementById('title')
+      const url = document.getElementById('url')
+      const domain = document.getElementById('domain')
+      const preview = document.getElementById('preview')
+
+      title.textContent = data.title || data.url || ''
+      url.textContent = data.url || ''
+      domain.textContent = data.domain || ''
+      _currentTabId = Number(data.tabId) || 0
+
+      if (data.favicon) {
+        fav.src = data.favicon
+      } else {
+        fav.removeAttribute('src')
+        fav.classList.remove('show')
+      }
+
+      if (data.preview) {
+        preview.src = data.preview
+        preview.classList.add('show')
+      } else {
+        preview.removeAttribute('src')
+        preview.classList.remove('show')
+      }
+
+      // Layout has updated synchronously for everything except the
+      // preview <img>, which loads async. Report now (text-only height)
+      // and again on image load (final height).
+      requestAnimationFrame(_reportSize)
+    })
+    // The preview image loading changes the card height — re-measure.
+    document.getElementById('preview').addEventListener('load', () => {
+      requestAnimationFrame(_reportSize)
+    })
+  }
+
+  const card = document.getElementById('card')
+  if (card && window.seoz?.tooltip?.cursorOnCard) {
+    card.addEventListener('mouseenter', () => window.seoz.tooltip.cursorOnCard(true))
+    card.addEventListener('mouseleave', () => window.seoz.tooltip.cursorOnCard(false))
+  }
+
+  // Action buttons. v1.10.116 dropped the setInteractive flip-flop
+  // because we're now a sibling WebContentsView — mouse events go
+  // here naturally when the cursor is on the tooltip, no
+  // setIgnoreMouseEvents juggling needed.
+  document.querySelectorAll('.action').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.action
+      if (window.seoz?.tooltip?.triggerAction) {
+        window.seoz.tooltip.triggerAction(action, _currentTabId)
+      }
+    })
+  })
+</script>
+</body>
+</html>

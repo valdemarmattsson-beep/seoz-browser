@@ -1803,28 +1803,9 @@ body:not(.chrome-clip-active) .tab-handle{ transition:top .1s ease-in }
 .url-wrap{position:relative}
 .url-suggest{position:absolute;top:calc(100% + 4px);left:0;right:0;background:var(--card);border:1px solid var(--border);border-radius:8px;box-shadow:0 8px 24px rgba(0,0,0,.35);z-index:500;max-height:320px;overflow-y:auto;display:none;padding:4px 0}
 .url-suggest.open{display:block}
-/* Tab-preview tooltip — DOM overlay (v1.10.135). Replaces the
-   sibling-WebContentsView so it scales correctly under DevTools
-   Device Mode. Tabs are at z=0 in the BrowserWindow stack
-   (addChildView(view, 0)), so DOM elements painted by the chrome
-   renderer in the page area DO render above the active tab. */
-.tab-tooltip{position:fixed;z-index:1000;background:#1a1d23;border:1px solid rgba(255,255,255,.08);border-radius:10px;box-shadow:0 8px 24px rgba(0,0,0,.4);padding:10px 12px;min-width:220px;max-width:320px;display:none;color:#f8f8f8;-webkit-user-select:none;user-select:none;font-family:'Inter',-apple-system,BlinkMacSystemFont,'Segoe UI',sans-serif}
-.tab-tooltip.open{display:block}
-.tt-preview{display:none;width:calc(100% + 24px);margin:-10px -12px 10px;height:140px;object-fit:cover;object-position:top center;background:#0f1116;border-bottom:1px solid rgba(255,255,255,.08)}
-.tt-preview.show{display:block}
-.tt-head{display:flex;gap:8px;align-items:center;margin-bottom:6px}
-.tt-fav{width:16px;height:16px;border-radius:3px;flex-shrink:0;object-fit:contain;display:none}
-.tt-fav.show{display:block}
-.tt-title{flex:1;min-width:0;font-size:12px;font-weight:600;color:#f8f8f8;line-height:1.3;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tt-url{font-size:11px;color:rgba(255,255,255,.55);line-height:1.4;word-break:break-all;margin-bottom:2px;display:-webkit-box;-webkit-line-clamp:2;-webkit-box-orient:vertical;overflow:hidden}
-.tt-domain{font-size:10.5px;color:rgba(255,255,255,.4);margin-top:4px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
-.tt-actions{display:flex;gap:6px;margin-top:10px;padding-top:8px;border-top:1px solid rgba(255,255,255,.06)}
-.tt-action{flex:1;height:28px;display:inline-flex;align-items:center;justify-content:center;gap:5px;background:transparent;border:1px solid rgba(255,255,255,.08);border-radius:6px;color:rgba(255,255,255,.65);font:inherit;font-size:11px;font-weight:500;cursor:pointer;transition:background .12s,color .12s,border-color .12s}
-.tt-action:hover{background:rgba(70,128,255,.12);border-color:rgba(70,128,255,.45);color:#f8f8f8}
-.tt-action svg{width:12px;height:12px}
-/* Dock-icon hover label — DOM overlay (v1.10.135). Same visual as
-   the previous chrome-label WebContentsView but positioned in the
-   chrome renderer so it survives Device Mode reframing. */
+/* Dock-icon hover label — DOM overlay (v1.10.135). Stays as DOM
+   because it only paints inside the sidebar; tab tooltip and
+   URL-suggest reverted to sibling WCVs in v1.10.136. */
 .dock-label{position:fixed;z-index:1000;background:#f0f4f8;color:#131920;font-size:10px;font-weight:600;padding:4px 9px;border-radius:5px;white-space:nowrap;box-shadow:0 2px 6px rgba(0,0,0,.25);display:none;pointer-events:none}
 .dock-label.open{display:block}
 .dock-label::after{content:'';position:absolute;left:100%;top:50%;transform:translateY(-50%);border:4px solid transparent;border-left-color:#f0f4f8}
@@ -3815,12 +3796,9 @@ body.no-seoz .seoz-panel { display:none !important }
         </div>
         <button class="bm-star" id="bmStar" onclick="toggleBookmark()" title="Bokmärk sida" aria-label="Bokmärk sida"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><polygon points="12 2 15.09 8.26 22 9.27 17 14.14 18.18 21.02 12 17.77 5.82 21.02 7 14.14 2 9.27 8.91 8.26 12 2"/></svg></button>
         <button class="bm-star" id="siteInfoBtn" onclick="toggleSiteInfo(event)" title="Webbplatsinformation" aria-label="Webbplatsinformation" style="margin-left:2px"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><line x1="12" y1="16" x2="12" y2="12"/><line x1="12" y1="8" x2="12.01" y2="8"/></svg></button>
-        <!-- URL suggest dropdown — DOM overlay (v1.10.135). Lives in
-             chrome renderer so it scales correctly under DevTools
-             Device Mode. Tab WebContentsView is at z=0 (bottom) thanks
-             to addChildView(view, 0), so this dropdown extending below
-             the URL bar still renders above page content. -->
-        <div class="url-suggest" id="urlSuggestPanel" role="listbox" aria-label="URL-förslag"></div>
+        <!-- URL suggest dropdown is a sibling WebContentsView (see
+             main.js _ensureUrlSuggestView) — see comment in the
+             URL-AUTOCOMPLETE IIFE below for the full history. -->
       </div>
       <button class="flow-btn" onclick="doNav('https://flow.seoz.io')" title="Öppna SEOZ Flow" aria-label="Öppna SEOZ Flow"><svg width="17" height="17" viewBox="0 0 200 200" fill="none" aria-hidden="true"><circle cx="100" cy="100" r="8" fill="currentColor"/><path d="M100 40 A 60 60 0 0 1 160 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/><path d="M100 160 A 60 60 0 0 1 40 100" stroke="currentColor" stroke-width="18" stroke-linecap="round"/></svg></button>
       <div style="position:relative;-webkit-app-region:no-drag" id="blockerWrap">
@@ -9198,13 +9176,11 @@ function renderTabs() {
         // 420ms intent delay — quick hovers (e.g. moving the cursor
         // across the tab strip) don't pop a tooltip.
         window._tabTipShowTimer = setTimeout(() => {
+          if (!window.seoz?.tooltip) return
           let domain = ''
           try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
-          // First show: render text content immediately + any cached
-          // preview. Don't block on capturePage — that takes 50-200ms
-          // and would make the tooltip feel sluggish.
           const cached = _tabPreviewCache.get(tab.id)
-          _tabTipShow(left, rect.bottom + 4, {
+          window.seoz.tooltip.show(left, rect.bottom + 4, {
             tabId: tab.id,
             title: tab.title || tab.url || '',
             url: tab.url || '',
@@ -9212,21 +9188,18 @@ function renderTabs() {
             favicon: tab.favicon || '',
             preview: cached || '',
           })
-          // No cache → fire a screenshot in the background. Capture
-          // bookkeeping is per-tab so concurrent hovers on different
-          // tabs don't step on each other.
           if (!cached) _captureAndUpdateTooltip(tab, { left, top: rect.bottom + 4, domain })
         }, 420)
       })
       el.addEventListener('mouseleave', () => {
         clearTimeout(window._tabTipShowTimer)
         clearTimeout(window._tabTipHideTimer)
-        // Short grace before hiding — gives the user a moment in case
-        // the cursor is just transiting between adjacent tabs OR
-        // moving onto the tooltip itself to click an action button.
-        // The tooltip's mouseenter handler cancels this timer
-        // mid-flight if the cursor lands on the card.
-        window._tabTipHideTimer = setTimeout(_tabTipHide, 180)
+        // Short grace before hiding. Tooltip's renderer signals back
+        // via cursor-on-card to cancel this timer if the cursor lands
+        // on the card mid-flight.
+        window._tabTipHideTimer = setTimeout(() => {
+          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+        }, 180)
       })
       // DIAGNOSTIC v1.10.118: minimal contextmenu handler.
       // Tooltip is already disabled (v1.10.117). Now we also short-
@@ -9437,12 +9410,9 @@ const _tabPreviewCache = new Map()
 // has hovered another tab or moved away by the time the capture
 // resolves, we skip the update — no point pushing a stale preview.
 async function _captureAndUpdateTooltip(tab, anchor) {
-  if (!tab) return
+  if (!tab || !window.seoz?.tooltip) return
   const handle = _tabWebviews.get(tab.id)
   if (!handle || typeof handle.capturePage !== 'function') return
-  // Skip overlay tabs (home/mail/settings) — capturing them gives a
-  // black/empty image since the WebContentsView is hidden behind
-  // chrome HTML overlays.
   if (typeof isOverlayUrl === 'function' && isOverlayUrl(tab.url)) return
   const startTabId = tab.id
   let dataURL = ''
@@ -9454,22 +9424,11 @@ async function _captureAndUpdateTooltip(tab, anchor) {
     }
   } catch (_) { /* swallow — capture races with navigations etc */ }
   if (!dataURL) return
-  // Cache for next hover.
   _tabPreviewCache.set(startTabId, dataURL)
-  // Push the preview into the tooltip — but only if it's still showing
-  // for THIS tab (not a different one the user moved onto). The hover
-  // intent timer is a coarse proxy: if it's still pending we know the
-  // user has hovered something else but the show hasn't fired yet, so
-  // we skip. If it's null we assume current tooltip is for our tab
-  // (no stronger guarantee without round-tripping through main).
   if (window._tabTipShowTimer) return
-  // Tooltip might have been hidden between capture start and now.
-  // Only update if it's still showing for the same tab.
-  const ttEl = document.getElementById('tabTooltipEl')
-  if (!ttEl || !ttEl.classList.contains('open') || Number(ttEl.dataset.tabId) !== startTabId) return
   let domain = ''
   try { domain = new URL(tab.url).hostname.replace(/^www\./, '') } catch (_) {}
-  _tabTipShow(anchor.left, anchor.top, {
+  window.seoz.tooltip.show(anchor.left, anchor.top, {
     tabId: startTabId,
     title: tab.title || tab.url || '',
     url: tab.url || '',
@@ -9479,78 +9438,24 @@ async function _captureAndUpdateTooltip(tab, anchor) {
   })
 }
 
-// ── Tab-tooltip DOM overlay (v1.10.135) ─────────────────────────────
-// Replaces the previous sibling-WebContentsView (_ensureTooltipView in
-// main.js) with a plain DOM overlay. Same visual + behaviour but
-// works correctly under DevTools Device Mode because positioning is
-// in renderer coordinates instead of BrowserWindow pixel-space.
-function _tabTipShow(anchorX, anchorY, data) {
-  const el = document.getElementById('tabTooltipEl')
-  if (!el) return
-  // Update content
-  document.getElementById('ttTitle').textContent  = data.title || data.url || ''
-  document.getElementById('ttUrl').textContent    = data.url    || ''
-  document.getElementById('ttDomain').textContent = data.domain || ''
-  el.dataset.tabId = String(data.tabId || 0)
-
-  const fav = document.getElementById('ttFav')
-  if (data.favicon) {
-    if (fav.src !== data.favicon) fav.src = data.favicon
-  } else {
-    fav.removeAttribute('src')
-    fav.classList.remove('show')
+// ── Floating-window tooltip bridge ──────────────────────────────────
+;(function _wireTooltipBridge() {
+  if (!window.seoz?.tooltip) return
+  if (typeof window.seoz.tooltip.onCursorOnCard === 'function') {
+    window.seoz.tooltip.onCursorOnCard((on) => {
+      if (on) {
+        clearTimeout(window._tabTipHideTimer)
+      } else {
+        clearTimeout(window._tabTipHideTimer)
+        window._tabTipHideTimer = setTimeout(() => {
+          if (window.seoz?.tooltip) window.seoz.tooltip.hide()
+        }, 180)
+      }
+    })
   }
-
-  const preview = document.getElementById('ttPreview')
-  if (data.preview) {
-    if (preview.src !== data.preview) preview.src = data.preview
-  } else {
-    preview.removeAttribute('src')
-    preview.classList.remove('show')
-  }
-
-  // Open + position. Clamp to viewport so it doesn't get cut off at
-  // window edges. tooltip is fixed-positioned so coordinates are
-  // viewport-relative which matches anchorX/Y.
-  el.classList.add('open')
-  // Need bounds AFTER showing to measure. requestAnimationFrame so
-  // the browser has a frame to lay out.
-  requestAnimationFrame(() => {
-    const r = el.getBoundingClientRect()
-    const vw = document.documentElement.clientWidth
-    const vh = document.documentElement.clientHeight
-    let x = Math.max(4, Math.min(vw - r.width - 4, anchorX))
-    let y = Math.max(4, Math.min(vh - r.height - 4, anchorY))
-    el.style.left = x + 'px'
-    el.style.top  = y + 'px'
-  })
-}
-
-function _tabTipHide() {
-  const el = document.getElementById('tabTooltipEl')
-  if (!el) return
-  el.classList.remove('open')
-  el.dataset.tabId = ''
-}
-
-// Wire mouseenter/mouseleave on the tooltip card itself so we cancel
-// the hide timer when cursor lands on it (so user can click an
-// action button without the tooltip fading mid-reach), and the
-// action buttons.
-;(function _wireTabTip() {
-  const el = document.getElementById('tabTooltipEl')
-  if (!el) return
-  el.addEventListener('mouseenter', () => {
-    clearTimeout(window._tabTipHideTimer)
-  })
-  el.addEventListener('mouseleave', () => {
-    clearTimeout(window._tabTipHideTimer)
-    window._tabTipHideTimer = setTimeout(_tabTipHide, 180)
-  })
-  el.querySelectorAll('.tt-action').forEach(btn => {
-    btn.addEventListener('click', () => {
-      const action = btn.dataset.action
-      const tabId = Number(el.dataset.tabId) || 0
+  if (typeof window.seoz.tooltip.onAction === 'function') {
+    window.seoz.tooltip.onAction(({ action, tabId }) => {
+      tabId = Number(tabId) || 0
       if (!tabId) return
       if (action === 'split') {
         if (activeId !== tabId) switchTab(tabId)
@@ -9559,9 +9464,8 @@ function _tabTipHide() {
       } else if (action === 'pin') {
         toast('Fästa flikar kommer i nästa version', '#94a3b8')
       }
-      _tabTipHide()
     })
-  })
+  }
 })()
 
 ;(function _wireTabContextMenuBridge() {
@@ -14324,7 +14228,7 @@ function showCtx(e, items) {
   try {
     clearTimeout(window._tabTipShowTimer)
     clearTimeout(window._tabTipHideTimer)
-    if (typeof _tabTipHide === 'function') _tabTipHide()
+    if (window.seoz?.tooltip?.hide) window.seoz.tooltip.hide()
   } catch (_) {}
 
   // Snapshot the click coords — the MouseEvent itself is fine to
@@ -15889,25 +15793,23 @@ function clearHistory() {
 // ══════════════════════════════════════════════════════
 //  URL AUTOCOMPLETE
 //
-//  v1.10.135: dropdown is back to a DOM overlay inside the chrome
-//  renderer. The previous sibling-WebContentsView approach worked
-//  visually but broke under DevTools Device Mode (the popup view's
-//  bounds live in BrowserWindow pixel-space, not the renderer's
-//  CSS viewport, so it floated detached when the renderer was
-//  scaled). Z-order is no longer a problem either — addChildView(
-//  view, 0) (v1.10.134) keeps tabs at the bottom of the stack, so
-//  DOM elements painted by the chrome renderer DO render above the
-//  active tab WebContentsView even when they extend below the URL
-//  bar visually.
+//  v1.10.136: dropdown is back to a sibling WebContentsView (see
+//  main.js _ensureUrlSuggestView). The DOM-overlay attempt in
+//  v1.10.135 looked correct under DevTools Device Mode but got
+//  hidden by the active tab WebContentsView in normal use, since
+//  the chrome renderer is BrowserWindow.contentView's primary paint
+//  surface and tab views composite on top of it.
+//
+//  Chrome owns the source of truth (history data + match logic +
+//  keyboard selection) and pushes the rendered list into the popup
+//  via IPC. Popup emits hover/pick back.
 // ══════════════════════════════════════════════════════
 ;(function(){
   const input = document.getElementById('urlInput')
-  const wrap  = input?.closest('.url-wrap')
-  const panel = document.getElementById('urlSuggestPanel')
-  if (!input || !wrap || !panel) return
-
+  const wrap = input?.closest('.url-wrap')
   let selIdx = -1
   let matches = []
+  let _open = false
   let _query = ''
 
   function dedupe(arr) {
@@ -15915,47 +15817,19 @@ function clearHistory() {
     return arr.filter(h => { if (seen.has(h.url)) return false; seen.add(h.url); return true })
   }
 
-  function escHTML(s) {
-    return String(s == null ? '' : s)
-      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
-      .replace(/"/g, '&quot;').replace(/'/g, '&#39;')
-  }
-
-  function highlight(text, q) {
-    if (!q) return escHTML(text)
-    const t = String(text || '')
-    const i = t.toLowerCase().indexOf(String(q).toLowerCase())
-    if (i === -1) return escHTML(t)
-    return escHTML(t.slice(0, i)) +
-           '<span class="url-sg-match">' + escHTML(t.slice(i, i + q.length)) + '</span>' +
-           escHTML(t.slice(i + q.length))
-  }
-
-  function render() {
-    panel.innerHTML = matches.map((h, i) => {
-      const fav = h.favicon
-        ? `<img src="${escHTML(h.favicon)}" onerror="this.style.display='none'">`
-        : '<span style="width:14px;flex-shrink:0"></span>'
-      return `<div class="url-sg ${i === selIdx ? 'sel' : ''}" data-i="${i}" role="option" aria-selected="${i === selIdx}">
-        ${fav}
-        <div class="url-sg-info">
-          <div class="url-sg-title">${highlight(h.title || '', _query)}</div>
-          <div class="url-sg-url">${highlight(h.url || '', _query)}</div>
-        </div>
-      </div>`
-    }).join('')
-  }
-
-  function updateSelHighlight() {
-    panel.querySelectorAll('.url-sg').forEach((el, i) => {
-      const sel = i === selIdx
-      el.classList.toggle('sel', sel)
-      el.setAttribute('aria-selected', sel ? 'true' : 'false')
-    })
-    if (selIdx >= 0) {
-      const el = panel.querySelectorAll('.url-sg')[selIdx]
-      if (el) el.scrollIntoView({ block: 'nearest' })
-    }
+  function pushItems() {
+    if (!_open) return
+    if (!window.seoz?.urlSuggest) return
+    if (!wrap) return
+    const r = wrap.getBoundingClientRect()
+    window.seoz.urlSuggest.show(
+      Math.round(r.left),
+      Math.round(r.bottom + 4),
+      Math.round(r.width),
+      matches,
+      selIdx,
+      _query,
+    )
   }
 
   function showSuggestions() {
@@ -15968,7 +15842,6 @@ function clearHistory() {
       !/google\.\w+\/search/i.test(h.url) &&
       !h.title.toLowerCase().includes('sök på google')
     )).sort((a, b) => {
-      // Prioritize root/main pages over subpages
       try {
         const aPath = new URL(a.url).pathname
         const bPath = new URL(b.url).pathname
@@ -15981,61 +15854,36 @@ function clearHistory() {
     }).slice(0, 8)
     if (!matches.length) { hideSuggestions(); return }
     selIdx = -1
-    render()
-    panel.classList.add('open')
+    _open = true
+    pushItems()
   }
 
   function hideSuggestions() {
+    _open = false
     selIdx = -1
     matches = []
-    panel.classList.remove('open')
-    panel.innerHTML = ''
+    try { window.seoz?.urlSuggest?.hide?.() } catch (_) {}
   }
 
-  // Click on item → navigate. mousedown so we fire before the URL
-  // input's blur handler hides us (blur uses 150ms grace, but
-  // mousedown fires first regardless).
-  panel.addEventListener('mousedown', (e) => {
-    e.preventDefault() // don't steal focus from input mid-click
-    const item = e.target.closest && e.target.closest('.url-sg')
-    if (!item) return
-    const i = Number(item.dataset.i)
-    const h = matches[i]
-    if (h && h.url) {
-      hideSuggestions()
-      doNav(h.url)
-    }
-  })
-
-  // Hover → keep selIdx in sync so keyboard nav resumes from where
-  // the mouse last was.
-  panel.addEventListener('mouseover', (e) => {
-    const item = e.target.closest && e.target.closest('.url-sg')
-    if (!item) return
-    const i = Number(item.dataset.i)
-    if (i !== selIdx) {
-      selIdx = i
-      updateSelHighlight()
-    }
-  })
+  function updateSel() {
+    try { window.seoz?.urlSuggest?.updateSel?.(selIdx) } catch (_) {}
+  }
 
   input.addEventListener('input', showSuggestions)
   input.addEventListener('focus', () => { if (input.value.trim()) showSuggestions() })
-  // 150ms grace before hiding so a click on a panel item still
-  // registers (mousedown above fires before the input's blur
-  // synthesises a hide).
   input.addEventListener('blur', () => setTimeout(hideSuggestions, 150))
+  window.addEventListener('resize', () => { if (_open) pushItems() })
 
   input.addEventListener('keydown', e => {
-    if (!matches.length || !panel.classList.contains('open')) return
+    if (!_open || !matches.length) return
     if (e.key === 'ArrowDown') {
       e.preventDefault()
       selIdx = (selIdx + 1) % matches.length
-      updateSelHighlight()
+      updateSel()
     } else if (e.key === 'ArrowUp') {
       e.preventDefault()
       selIdx = selIdx <= 0 ? matches.length - 1 : selIdx - 1
-      updateSelHighlight()
+      updateSel()
     } else if (e.key === 'Enter' && selIdx >= 0) {
       e.preventDefault()
       const url = matches[selIdx].url
@@ -16045,6 +15893,20 @@ function clearHistory() {
       hideSuggestions()
     }
   })
+
+  if (window.seoz?.urlSuggest?.onPick) {
+    window.seoz.urlSuggest.onPick((url) => {
+      hideSuggestions()
+      if (url) doNav(url)
+    })
+  }
+  if (window.seoz?.urlSuggest?.onHover) {
+    window.seoz.urlSuggest.onHover((idx) => {
+      if (typeof idx === 'number' && idx >= 0 && idx < matches.length) {
+        selIdx = idx
+      }
+    })
+  }
 })()
 
 // ══════════════════════════════════════════════════════
@@ -21175,30 +21037,11 @@ window.__designGetWebview = function() { return wv; }
 </script>
 <script src="design-mode.js"></script>
 
-<!-- ── Floating overlays — DOM-rendered (v1.10.135) ────────────────────
-     Tab-preview tooltip + dock-icon label. Both used to be sibling
-     WebContentsViews; converted to DOM overlays so they reframe
-     correctly under DevTools Device Mode. Positioned via fixed +
-     getBoundingClientRect of the anchor element. -->
-<div class="tab-tooltip" id="tabTooltipEl" aria-hidden="true">
-  <img class="tt-preview" id="ttPreview" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
-  <div class="tt-head">
-    <img class="tt-fav" id="ttFav" src="" alt="" onload="this.classList.add('show')" onerror="this.classList.remove('show')">
-    <div class="tt-title" id="ttTitle"></div>
-  </div>
-  <div class="tt-url" id="ttUrl"></div>
-  <div class="tt-domain" id="ttDomain"></div>
-  <div class="tt-actions">
-    <button class="tt-action" data-action="pin" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><line x1="12" y1="17" x2="12" y2="22"/><path d="M5 17h14v-1.76a2 2 0 0 0-1.11-1.79l-1.78-.9A2 2 0 0 1 15 10.76V6h1a1 1 0 0 0 1-1V4a1 1 0 0 0-1-1H8a1 1 0 0 0-1 1v1a1 1 0 0 0 1 1h1v4.76a2 2 0 0 1-1.11 1.79l-1.78.9A2 2 0 0 0 5 15.24z"/></svg>
-      <span>Fäst</span>
-    </button>
-    <button class="tt-action" data-action="split" type="button">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="3" width="18" height="18" rx="2"/><line x1="12" y1="3" x2="12" y2="21"/></svg>
-      <span>Splitvy</span>
-    </button>
-  </div>
-</div>
+<!-- Dock-icon hover label — DOM overlay (v1.10.135). Stays as DOM
+     because it only paints inside the sidebar (chrome region only),
+     no overlap with the page area where tab WebContentsView would
+     hide it. Tab tooltip + URL-suggest reverted to sibling WCVs in
+     v1.10.136 — those DO extend into the page area. -->
 <div class="dock-label" id="dockLabelEl" aria-hidden="true"></div>
 
 </body>

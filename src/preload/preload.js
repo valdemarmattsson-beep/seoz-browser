@@ -31,12 +31,27 @@ contextBridge.exposeInMainWorld('seoz', {
     try { cb(payload || {}) } catch (err) { console.error('[onTabMenuAction]', err) }
   }),
 
-  // Tab-preview tooltip / dock-icon hover label / URL-suggest dropdown
-  // — these used to be exposed here as IPC bridges to sibling
-  // WebContentsViews. v1.10.135 moved them back to plain DOM overlays
-  // in the chrome renderer so they reframe correctly under DevTools
-  // Device Mode. The renderer talks to itself via direct DOM now;
-  // no IPC needed.
+  // Tab-preview tooltip — sibling WebContentsView.
+  //
+  // v1.10.135 tried to convert this to a DOM overlay in the chrome
+  // renderer for DevTools Device Mode compatibility, but reverted in
+  // v1.10.136: the chrome renderer is BrowserWindow.contentView's
+  // primary paint surface, and tab WebContentsViews are children
+  // that paint ON TOP of it. DOM elements extending into the page
+  // area got hidden under the active tab. Until we refactor the
+  // chrome renderer into its own child WebContentsView, this stays
+  // as a sibling view (positions correctly in normal mode but
+  // detaches under DevTools Device Mode — known limitation).
+  tooltip: {
+    show: (anchorX, anchorY, content) => ipcRenderer.send('tooltip:show', { anchorX, anchorY, content }),
+    hide: () => ipcRenderer.send('tooltip:hide'),
+    onCursorOnCard: (cb) => ipcRenderer.on('tooltip:cursor-on-card', (_e, on) => {
+      try { cb(!!on) } catch (err) { console.error('[onCursorOnCard]', err) }
+    }),
+    onAction: (cb) => ipcRenderer.on('tooltip:action', (_e, payload) => {
+      try { cb(payload || {}) } catch (err) { console.error('[onAction]', err) }
+    }),
+  },
 
   // Auto-recovery from Google "Inloggningen misslyckades" — clears
   // cookies + storage for google.com hosts so the next sign-in gets
@@ -108,8 +123,24 @@ contextBridge.exposeInMainWorld('seoz', {
     }),
   },
 
-  // chromeLabel + urlSuggest bridges removed in v1.10.135 — both are
-  // now DOM overlays (see comment on tooltip above).
+  // chromeLabel bridge removed in v1.10.135 — dock labels are now a
+  // DOM overlay (#dockLabelEl) since they only paint inside the
+  // sidebar (chrome region only, no page-area overlap).
+
+  // URL-suggest dropdown — sibling WebContentsView (reverted in
+  // v1.10.136 alongside tooltip — same page-area-overlap reason).
+  urlSuggest: {
+    show:      (anchorX, anchorY, width, items, selIdx, query) =>
+                 ipcRenderer.send('urlSuggest:show', { anchorX, anchorY, width, items, selIdx, query }),
+    hide:      ()    => ipcRenderer.send('urlSuggest:hide'),
+    updateSel: (idx) => ipcRenderer.send('urlSuggest:update-sel', idx),
+    onPick:    (cb)  => ipcRenderer.on('urlSuggest:pick', (_e, url) => {
+      try { cb(url) } catch (err) { console.error('[urlSuggest onPick]', err) }
+    }),
+    onHover:   (cb)  => ipcRenderer.on('urlSuggest:hover', (_e, idx) => {
+      try { cb(idx) } catch (err) { console.error('[urlSuggest onHover]', err) }
+    }),
+  },
 
   // SEOZ Shield popup — sibling WebContentsView that floats above the
   // page (so the page stays visible under the popup, no chrome-clip

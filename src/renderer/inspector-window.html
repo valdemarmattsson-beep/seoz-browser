@@ -595,6 +595,7 @@ function render() {
   if (tab === 'network')  { return renderInspNetworkAsync(body) }
   if (tab === 'elements') { return renderInspElementsAsync(body) }
   if (tab === 'source')   { return renderInspSourceAsync(body) }
+  if (tab === 'tracking') { return renderInspTrackingAsync(body) }
 
   const d = inspectorData;
   if (!d) {
@@ -689,9 +690,27 @@ function renderInspOverview(d) {
   html += '</div>';
 
   if (issues.length) {
+    // Stash for the click delegation to look up the issue text by index
+    // (we can't bake closures into innerHTML strings — need indexed
+    // dispatch to pass the issue payload to _createTaskFromInspector).
+    _lastOverviewIssues = issues.slice();
+    const canTask = _domainMatches();
     html += '<div class="insp-section"><div class="insp-section-title">Problem att åtgärda</div>';
-    issues.forEach(i => { html += `<div style="padding:2px 0;color:var(--r);font-size:11px">⚠ ${esc(i)}</div>` });
+    issues.forEach((i, idx) => {
+      const taskBtn = canTask
+        ? `<button data-issue-task="${idx}" title="Skapa task för det här problemet"
+             style="margin-left:6px;padding:2px 8px;border:none;border-radius:4px;background:var(--p);color:#fff;font-size:9px;font-weight:700;cursor:pointer;flex-shrink:0">+ Task</button>`
+        : '';
+      html += `<div style="padding:3px 0;color:var(--r);font-size:11px;display:flex;align-items:center;gap:4px">
+        <span style="flex:1">⚠ ${esc(i)}</span>${taskBtn}
+      </div>`;
+    });
     html += '</div>';
+    if (canTask && activeClient) {
+      html += `<div style="font-size:9px;color:var(--muted);text-align:right;padding:2px 0">Tasks skapas i <strong style="color:var(--head)">${esc(activeClient.name || '?')}</strong></div>`;
+    } else if (activeClient) {
+      html += `<div style="font-size:9px;color:var(--muted);text-align:right;padding:2px 0">Sidan tillhör inte ${esc(activeClient.name || '?')} — tasks går inte att skapa här</div>`;
+    }
   }
   return html;
 }
@@ -1069,10 +1088,131 @@ function renderElemNode(node, depth) {
   return html;
 }
 
+// Spårning tab — fetches the tracking-tag detection blob from chrome
+// (which runs _INSPECTOR_TRACKING_JS in the active page) and groups
+// the result by category. Categories shown:
+//   tagManager · analytics · marketing · chat · consent · other
+// Each row shows the service name, detected ID (e.g. GTM-XXXXX,
+// G-YYYY, Meta Pixel ID), the signal that triggered detection
+// (script-src / inline / global) and — if from script-src — the
+// full URL so the user can verify which file/CDN it came from.
+async function renderInspTrackingAsync(container) {
+  if (trackingData == null) {
+    container.innerHTML = '<div style="text-align:center;padding:20px;color:var(--muted)">Skannar sidan efter spårningstaggar…</div>';
+    try {
+      trackingData = await seoz.inspector.getTracking();
+    } catch (e) {
+      container.innerHTML = '<div style="padding:16px;color:var(--r)">Kunde inte skanna: ' + esc(e.message) + '</div>';
+      return;
+    }
+  }
+
+  const t = trackingData;
+  if (!t) {
+    container.innerHTML = `<div style="padding:12px;text-align:center;color:var(--muted)">
+      <button class="act-btn" id="trkReloadBtn" style="width:auto;display:inline-flex;padding:0 16px">Skanna om</button>
+    </div>`;
+    return;
+  }
+
+  const total = (t.items || []).length;
+
+  // KPI strip — quick visual of what was found
+  let html = `<div style="display:grid;grid-template-columns:repeat(6,1fr);gap:6px;margin-bottom:14px">
+    <div class="kpi"><div class="kpi-l">Totalt</div><div class="kpi-v">${total}</div></div>
+    <div class="kpi"><div class="kpi-l">Tag mgr</div><div class="kpi-v">${t.counts?.tagManager ?? 0}</div></div>
+    <div class="kpi"><div class="kpi-l">Analytics</div><div class="kpi-v">${t.counts?.analytics ?? 0}</div></div>
+    <div class="kpi"><div class="kpi-l">Marketing</div><div class="kpi-v">${t.counts?.marketing ?? 0}</div></div>
+    <div class="kpi"><div class="kpi-l">Chat</div><div class="kpi-v">${t.counts?.chat ?? 0}</div></div>
+    <div class="kpi"><div class="kpi-l">Consent</div><div class="kpi-v">${t.counts?.consent ?? 0}</div></div>
+  </div>`;
+
+  if (!total) {
+    html += '<div style="padding:16px;text-align:center;color:var(--muted);font-size:11px">Inga kända spårningstaggar hittades. Sidan kan ändå spåra dig via förstaparts-cookies eller serverside-events.</div>';
+  } else {
+    const groups = [
+      { key: 'tagManager', label: 'Tag managers',          col: 'var(--p)' },
+      { key: 'analytics',  label: 'Analytics',             col: 'var(--g)' },
+      { key: 'marketing',  label: 'Marketing & pixlar',    col: 'var(--w)' },
+      { key: 'chat',       label: 'Chat & support',        col: 'var(--p)' },
+      { key: 'consent',    label: 'Consent / cookie-banner', col: 'var(--p)' },
+      { key: 'other',      label: 'Övrigt',                col: 'var(--muted)' },
+    ];
+
+    for (const g of groups) {
+      const items = (t.items || []).filter(it => it.category === g.key);
+      if (!items.length) continue;
+      // Dedupe within a category by name+id so the same service
+      // detected via both script-src and global only renders once.
+      const seen = new Set();
+      const uniq = [];
+      for (const it of items) {
+        const key = it.name + '|' + (it.id || '');
+        if (seen.has(key)) continue;
+        seen.add(key);
+        uniq.push(it);
+      }
+      html += `<div class="insp-section"><div class="insp-section-title" style="color:${g.col}">${esc(g.label)} (${uniq.length})</div>`;
+      for (const it of uniq) {
+        const idTag = it.id ? `<span class="insp-tag blue">${esc(it.id)}</span>` : '';
+        const sigTag = `<span class="insp-tag" style="background:rgba(127,127,127,.15);color:var(--muted)">${esc(it.signal)}</span>`;
+        const srcLine = it.src
+          ? `<div style="font-size:9px;color:var(--muted);word-break:break-all;margin-top:3px">${esc(it.src)}</div>`
+          : '';
+        html += `<div class="insp-row">
+          <div class="insp-label" style="width:auto;min-width:120px;color:var(--head);font-weight:700">${esc(it.name)}</div>
+          <div class="insp-value">${idTag}${sigTag}${srcLine}</div>
+        </div>`;
+      }
+      html += '</div>';
+    }
+  }
+
+  // dataLayer — GTM's canonical event stream. If the page uses GTM,
+  // this is where you verify events fire.
+  if (t.dataLayer && typeof t.dataLayer.length === 'number' && t.dataLayer.length > 0) {
+    html += `<div class="insp-section"><div class="insp-section-title">window.dataLayer</div>`;
+    html += `<div class="insp-row"><div class="insp-label">Events</div><div class="insp-value">${t.dataLayer.length}</div></div>`;
+    if (t.dataLayer.sample && t.dataLayer.sample.length) {
+      html += `<div class="insp-code">${esc(t.dataLayer.sample.join('\n'))}</div>`;
+    }
+    html += '</div>';
+  }
+
+  // Footer — script + cookie counts as a sanity check + reload btn
+  html += `<div style="display:flex;align-items:center;gap:8px;font-size:9px;color:var(--muted);padding:6px 0;margin-top:6px;border-top:1px solid var(--border)">
+    <span>${t.scriptCount || 0} script-taggar (varav ${t.inlineCount || 0} inline)</span>
+    <span>·</span>
+    <span>${t.cookieCount || 0} cookies</span>
+    <span style="flex:1"></span>
+    <button class="inspector-btn" id="trkReloadBtn" title="Skanna om" style="font-size:10px">↻</button>
+  </div>`;
+
+  container.innerHTML = html;
+}
+
 // ── Body-level click delegation (covers tabs that re-render their HTML
 //    after async fetches; we attach listeners by selector instead of
 //    individual buttons). ──
 document.getElementById('inspectorBody').addEventListener('click', e => {
+  // Per-issue + Task button (Översikt → Problem att åtgärda)
+  const issueBtn = e.target.closest('[data-issue-task]');
+  if (issueBtn) {
+    const idx = parseInt(issueBtn.dataset.issueTask, 10);
+    const issue = _lastOverviewIssues[idx];
+    if (!issue) return;
+    const url = (inspectorData && inspectorData.url) || '';
+    const hints = _issueToTaskHints(issue);
+    _createTaskFromInspector({
+      title: issue,
+      description: 'Identifierat av SEOZ Inspector\\nSida: ' + url,
+      url,
+      severity: hints.severity,
+      skill_type: hints.skill_type,
+      effort_h: 1,
+    });
+    return;
+  }
   // Elements tree expand/collapse
   const tog = e.target.closest('[data-toggle]');
   if (tog) {
@@ -1112,6 +1252,13 @@ document.getElementById('inspectorBody').addEventListener('click', e => {
   // Elements reload
   if (e.target.closest('#elemReloadBtn')) {
     elemTree = null;
+    render();
+  }
+  // Tracking reload (Spårning tab) — drop the cache and re-fetch
+  // detection from the active page. Useful when the user navigated
+  // and wants to see if the new page injects new pixels.
+  if (e.target.closest('#trkReloadBtn')) {
+    trackingData = null;
     render();
   }
 });

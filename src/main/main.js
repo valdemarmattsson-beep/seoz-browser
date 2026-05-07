@@ -75,6 +75,29 @@ const APP_ICON = nativeImage.createFromPath(
   path.join(__dirname, '../../assets/icon.ico')
 )
 
+// v1.10.135: stamp the SEOZ icon onto detached DevTools windows so
+// the taskbar / titlebar shows our icon instead of Electron's default.
+// Electron creates the detached DevTools BrowserWindow internally
+// without a way to pass an icon at open time, so we hook the
+// 'devtools-opened' event (fires after the DevTools webContents has
+// loaded its UI; the host BrowserWindow exists by then) and call
+// setIcon on it. Idempotent — re-runs on every devtools-opened, so
+// closing + re-opening DevTools picks up the icon again.
+function _attachDevToolsIconHook(wc) {
+  if (!APP_ICON || !wc || wc.isDestroyed()) return
+  const apply = () => {
+    try {
+      const dt = wc.devToolsWebContents
+      if (!dt) return
+      const dwin = BrowserWindow.fromWebContents(dt)
+      if (dwin && !dwin.isDestroyed()) dwin.setIcon(APP_ICON)
+    } catch (_) {}
+  }
+  // Use .on() (not .once()) so this works for the lifetime of the
+  // webContents — open + close + open again all get the icon stamped.
+  try { wc.on('devtools-opened', apply) } catch (_) {}
+}
+
 // Legacy store — kept for migration & window bounds (shared across profiles)
 const store = new Store({
   defaults: {
@@ -1315,32 +1338,37 @@ ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
   }
 })
 
-// ── Tab tooltip — DOM overlay (v1.10.135) ───────────────────────────
-// Was a sibling WebContentsView (v1.10.116-1.10.134) and before that
-// a separate BrowserWindow (v1.10.107-1.10.115). Now a plain DOM
-// overlay (#tabTooltipEl) in the chrome renderer. Reason: sibling
-// views' bounds live in BrowserWindow pixel-space, not the renderer's
-// CSS viewport, so they detach under DevTools Device Mode (visible
-// in screenshots from the field). With addChildView(view, 0)
-// (v1.10.134) tabs sit at z=0, so DOM elements composite above page
-// content even when extending into the page area.
+// ── Tab tooltip — sibling WebContentsView ───────────────────────────
+//
+// History: BrowserWindow (v1.10.107) → sibling WebContentsView
+// (v1.10.116) → DOM overlay (v1.10.135) → sibling WCV again (v1.10.136).
+// The DOM-overlay attempt assumed addChildView(tab, 0) put tabs UNDER
+// the chrome renderer's surface, but it doesn't — the chrome renderer
+// is BrowserWindow.contentView's primary paint, and ALL child views
+// paint on top of it. So DOM popups in the chrome got hidden by the
+// active tab whenever they extended into the page area. Moving back
+// to sibling WCV until we refactor the chrome renderer into its own
+// child WebContentsView (then DOM overlays would work properly).
+let _tooltipView = null
 
 // ── Floating-view z-order maintenance ──
-// Shield + Site Info popups remain sibling WebContentsViews because
-// they need to render their own complex CSS over the page area. When
-// a tab is switched (TabManager.setBounds re-adds the tab), the new
-// tab ends up on top, pushing any visible floating views underneath.
-// This function re-adds them on top so they stay visible.
+// Shield + Site Info + tooltip + URL-suggest are sibling
+// WebContentsViews under win.contentView. When a tab is switched
+// (TabManager.setBounds re-adds the tab), the new tab ends up on top
+// in the children array. This function re-adds the visible floating
+// views so they stay above tabs across switches.
 //
-// Only re-adds VISIBLE views — hidden ones don't need to fight for
-// z-order and re-adding them anyway can cause subtle painting bugs.
+// Only re-adds VISIBLE views — re-adding hidden ones can cause subtle
+// painting bugs where their old bounds briefly flash.
 function _bringFloatingViewsToTop() {
   if (!win || win.isDestroyed()) return
   const cv = win.contentView
   if (!cv) return
   const candidates = [
+    _urlSuggestView,
     _shieldView,
     _siteInfoView,
+    _tooltipView,
   ]
   for (const v of candidates) {
     if (!v || !v.webContents || v.webContents.isDestroyed()) continue
@@ -1350,6 +1378,92 @@ function _bringFloatingViewsToTop() {
     try { cv.addChildView(v) } catch (_) {}
   }
 }
+
+function _ensureTooltipView() {
+  if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) return _tooltipView
+  if (!win || win.isDestroyed()) return null
+
+  _tooltipView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/tooltip-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _tooltipView.setBackgroundColor('#00000000') } catch (_) {}
+  _tooltipView.setVisible(false)
+  _tooltipView.webContents.loadFile(path.join(__dirname, '../renderer/tooltip.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_tooltipView?.webContents && !_tooltipView.webContents.isDestroyed()) _tooltipView.webContents.close() } catch (_) {}
+      _tooltipView = null
+    })
+  }
+  return _tooltipView
+}
+
+ipcMain.on('tooltip:show', (_e, payload = {}) => {
+  try {
+    const tt = _ensureTooltipView()
+    if (!tt) return
+    if (!win || win.isDestroyed()) return
+
+    const { anchorX = 0, anchorY = 0, content = {} } = payload
+    const cb = win.getContentBounds()
+    const w = 320
+    const h = (_tooltipView.getBounds().height) || 200
+    let x = Math.max(4, Math.min(cb.width - w - 4, Math.round(anchorX)))
+    let y = Math.max(4, Math.min(cb.height - h - 4, Math.round(anchorY)))
+    tt.setBounds({ x, y, width: w, height: h })
+
+    if (tt.webContents && !tt.webContents.isDestroyed()) {
+      tt.webContents.send('tooltip:update', content)
+    }
+
+    try { win.contentView.addChildView(tt) } catch (_) {}
+    tt.setVisible(true)
+  } catch (err) {
+    console.error('[tooltip:show] failed:', err)
+  }
+})
+
+ipcMain.on('tooltip:hide', () => {
+  try {
+    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
+      _tooltipView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('tooltip:resize', (_e, payload = {}) => {
+  try {
+    if (!_tooltipView || _tooltipView.webContents.isDestroyed()) return
+    const want = Math.max(80, Math.min(420, Math.round(payload.height) || 200))
+    const b = _tooltipView.getBounds()
+    if (b.height === want) return
+    if (!win || win.isDestroyed()) return
+    const cb = win.getContentBounds()
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _tooltipView.setBounds({ x: b.x, y, width: b.width, height: want })
+  } catch (_) {}
+})
+
+ipcMain.on('tooltip:cursor-on-card', (_e, on) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('tooltip:cursor-on-card', !!on)
+  } catch (_) {}
+})
+
+ipcMain.on('tooltip:action', (_e, payload = {}) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('tooltip:action', payload)
+    if (_tooltipView && _tooltipView.webContents && !_tooltipView.webContents.isDestroyed()) {
+      _tooltipView.setVisible(false)
+    }
+  } catch (_) {}
+})
 
 // ════════════════════════════════════════════════════════════════════
 //  SEOZ Shield popup — sibling WebContentsView
@@ -2413,10 +2527,106 @@ ipcMain.on('site-info:action', async (_e, action) => {
   }
 })
 
-// URL-suggest dropdown was a sibling WebContentsView in v1.10.133-
-// 1.10.134. Replaced in v1.10.135 with a DOM overlay (#urlSuggestPanel
-// inside .url-wrap in index.html) for Device Mode compatibility. See
-// the renderer's URL-AUTOCOMPLETE IIFE for the new implementation.
+// URL-suggest dropdown — sibling WebContentsView. Same history as
+// the tab tooltip: tried as DOM overlay in v1.10.135, reverted in
+// v1.10.136 because the dropdown extends below the URL bar into the
+// page area where the tab WebContentsView paints over it.
+let _urlSuggestView = null
+let _urlSuggestLastBounds = null
+
+function _ensureUrlSuggestView() {
+  if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) return _urlSuggestView
+  if (!win || win.isDestroyed()) return null
+
+  _urlSuggestView = new WebContentsView({
+    webPreferences: {
+      preload: path.join(__dirname, '../preload/url-suggest-preload.js'),
+      contextIsolation: true,
+      nodeIntegration: false,
+      sandbox: false,
+    },
+  })
+  try { _urlSuggestView.setBackgroundColor('#00000000') } catch (_) {}
+  _urlSuggestView.setVisible(false)
+  _urlSuggestView.webContents.loadFile(path.join(__dirname, '../renderer/url-suggest.html'))
+
+  if (win) {
+    win.once('closed', () => {
+      try { if (_urlSuggestView?.webContents && !_urlSuggestView.webContents.isDestroyed()) _urlSuggestView.webContents.close() } catch (_) {}
+      _urlSuggestView = null
+    })
+  }
+  return _urlSuggestView
+}
+
+ipcMain.on('urlSuggest:show', (_e, payload = {}) => {
+  try {
+    const v = _ensureUrlSuggestView()
+    if (!v) return
+    if (!win || win.isDestroyed()) return
+
+    const {
+      anchorX = 0, anchorY = 0, width = 320,
+      items = [], selIdx = -1, query = '',
+    } = payload
+
+    _urlSuggestLastBounds = { x: Math.round(anchorX), y: Math.round(anchorY), width: Math.round(width) }
+    if (v.webContents && !v.webContents.isDestroyed()) {
+      v.webContents.send('urlSuggest:set-items', { items, selIdx, query })
+    }
+    const cb = win.getContentBounds()
+    const w = Math.max(120, Math.min(cb.width - 8, _urlSuggestLastBounds.width))
+    const x = Math.max(4, Math.min(cb.width - w - 4, _urlSuggestLastBounds.x))
+    const y = Math.max(4, Math.min(cb.height - 80, _urlSuggestLastBounds.y))
+    v.setBounds({ x, y, width: w, height: 80 })
+    try { win.contentView.addChildView(v) } catch (_) {}
+    v.setVisible(true)
+  } catch (err) {
+    console.error('[urlSuggest:show] failed:', err)
+  }
+})
+
+ipcMain.on('urlSuggest:hide', () => {
+  try {
+    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
+      _urlSuggestView.setVisible(false)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:update-sel', (_e, idx) => {
+  try {
+    if (_urlSuggestView && _urlSuggestView.webContents && !_urlSuggestView.webContents.isDestroyed()) {
+      _urlSuggestView.webContents.send('urlSuggest:set-sel', idx)
+    }
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:resize', (_e, payload = {}) => {
+  try {
+    if (!_urlSuggestView || _urlSuggestView.webContents.isDestroyed()) return
+    if (!_urlSuggestLastBounds || !win || win.isDestroyed()) return
+    const want = Math.max(40, Math.min(380, Math.round(payload.height) || 80))
+    const cb = win.getContentBounds()
+    const b = _urlSuggestLastBounds
+    const w = Math.max(120, Math.min(cb.width - 8, b.width))
+    const x = Math.max(4, Math.min(cb.width - w - 4, b.x))
+    const y = Math.max(4, Math.min(cb.height - want - 4, b.y))
+    _urlSuggestView.setBounds({ x, y, width: w, height: want })
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:pick', (_e, url) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:pick', url)
+  } catch (_) {}
+})
+
+ipcMain.on('urlSuggest:hover', (_e, idx) => {
+  try {
+    if (win && !win.isDestroyed()) win.webContents.send('urlSuggest:hover', idx)
+  } catch (_) {}
+})
 
 // ── Window controls ──
 // Tear-off: open a dragged tab as a new window at the drop location
@@ -2787,7 +2997,17 @@ ipcMain.on('popup-autofill-fill', (_e, { popupId, payload } = {}) => {
 })
 
 // ── DevTools ──
-ipcMain.on('toggle-devtools', () => win?.webContents.toggleDevTools())
+ipcMain.on('toggle-devtools', () => {
+  if (!win || win.isDestroyed()) return
+  // Attach the icon hook idempotently on every toggle. _attachDevToolsIconHook
+  // uses .on() so duplicate listeners would stack — guard with a flag on
+  // the webContents object so we attach at most once per chrome session.
+  if (!win.webContents._seozDevToolsIconHooked) {
+    _attachDevToolsIconHook(win.webContents)
+    try { win.webContents._seozDevToolsIconHooked = true } catch (_) {}
+  }
+  win.webContents.toggleDevTools()
+})
 
 // ── Content blocker ──
 ipcMain.handle('blocker-get-enabled', () => blockerEnabled)
@@ -4959,6 +5179,11 @@ ipcMain.on('update-jump-list', () => {
 // nested <webview> (contentsType === 'webview'), which the event does
 // fire for.
 function _setupTabContents(contents) {
+  // Stamp our SEOZ icon on the detached DevTools window when this
+  // tab's DevTools opens. Without this Electron's default Atom icon
+  // shows up in the taskbar / titlebar.
+  _attachDevToolsIconHook(contents)
+
   // Keyboard shortcut interception. With WebContentsView, keyboard
   // events fire in the tab's renderer (not the chrome's renderer where
   // our custom keydown handlers live), so chrome shortcuts like Ctrl+H

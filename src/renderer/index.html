@@ -20819,6 +20819,12 @@ document.addEventListener('keydown', e => {
       else toast('Aktiv flik har ingen webview att inspektera', '#e58a00')
     } catch (_) {}
   }
+  // Ctrl+Shift+Alt+I → DevTools on the chrome renderer itself (where
+  // window.synced + seozDebugClients() and our other debug helpers
+  // live). v1.10.145 — added because v1.10.142 redirected the
+  // standard shortcuts to tabs and left no way to inspect the chrome
+  // without going through the kebab menu.
+  else if (ctrl && e.shiftKey && e.altKey && key === 'i') { e.preventDefault(); SE.toggleDevTools() }
   // Ctrl+Alt+I → SEOZ Inspector (our SEO analysis panel — moved from
   // F12 in v1.10.141 so F12 follows the universal browser convention).
   else if (ctrl && e.altKey && key === 'i') { e.preventDefault(); toggleInspector() }

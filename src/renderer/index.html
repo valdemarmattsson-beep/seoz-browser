@@ -3613,7 +3613,12 @@ body.no-seoz .seoz-panel { display:none !important }
 .update-banner.google-rej-banner .ub-btn.primary:hover{background:#d97706;color:#fff}
 
 /* ── TOAST ── */
-#toast{position:fixed;bottom:20px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:11px;font-weight:600;color:var(--head);box-shadow:0 4px 12px rgba(0,0,0,.25);display:flex;align-items:center;gap:7px;z-index:1000;transform:translateY(40px);opacity:0;transition:all .25s ease;pointer-events:none}
+/* Toast — must stay above the page area (chrome-h = 112px) or the
+   tab WebContentsView paints over it. v1.10.147 moved from
+   bottom:20px (deep page-area, hidden) to top inside the chrome
+   region, slides down from titlebar. pointer-events:none keeps
+   clicks falling through to the chrome elements behind it. */
+#toast{position:fixed;top:8px;right:16px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:9px 14px;font-size:11px;font-weight:600;color:var(--head);box-shadow:0 4px 12px rgba(0,0,0,.35);display:flex;align-items:center;gap:7px;z-index:1000;transform:translateY(-40px);opacity:0;transition:all .25s ease;pointer-events:none;-webkit-app-region:no-drag;max-width:calc(100vw - 200px)}
 #toast.on{transform:translateY(0);opacity:1}
 .td{width:7px;height:7px;border-radius:50%;flex-shrink:0}
 

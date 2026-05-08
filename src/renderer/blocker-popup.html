@@ -140,12 +140,16 @@
       }
     }
     // Re-measure card height and tell main so the WebContentsView
-    // resizes. View now fits the card exactly — the +12 buffer used
-    // to compensate for the (now removed) margin/box-shadow gap.
+    // resizes. v1.10.148: +6 buffer because exact-fit clipped the
+    // card's bottom rounded border into a sharp horizontal line on
+    // certain DPI scales. The 1px border + 10px border-radius needs
+    // a hair of breathing room so the curve actually paints; without
+    // it the WCV's hard clip cuts the bottom 1-2 pixels and the
+    // border-radius becomes invisible at the bottom edge.
     requestAnimationFrame(() => {
       const r = card.getBoundingClientRect()
       if (window.seoz?.shield?.requestResize) {
-        window.seoz.shield.requestResize(Math.ceil(r.height))
+        window.seoz.shield.requestResize(Math.ceil(r.height + 6))
       }
     })
   }

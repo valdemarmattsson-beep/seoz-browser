@@ -13960,7 +13960,19 @@ function toggleClientDrop(btn) {
 
 async function refreshClientsKeepDropOpen(opts = {}) {
   const key = await SE.getApiKey()
-  if (!key) return
+  if (!key) {
+    // v1.10.146: previously this silently returned — clicking ↻ did
+    // nothing visible, so users couldn't tell if the request even
+    // fired. Now toast the reason if the user explicitly triggered
+    // (verbose=true means they clicked ↻ or ran forceRefreshClients).
+    if (opts.verbose) {
+      try {
+        toast('Ingen API-nyckel — logga in i Konto-vyn först', '#dc2626')
+      } catch (_) {}
+    }
+    console.warn('[seoz-clients] refreshClientsKeepDropOpen: no API key, aborting (verbose=' + !!opts.verbose + ')')
+    return
+  }
   try {
     // The user-facing refresh path (the ↻ button in the picker, plus
     // the keyboard / explicit `forceRefreshClients` entry points) does

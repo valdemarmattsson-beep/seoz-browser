@@ -2800,6 +2800,13 @@ ipcMain.on('urlSuggest:show', (_e, payload = {}) => {
     v.setBounds({ x, y, width: w, height: 80 })
     try { win.contentView.addChildView(v) } catch (_) {}
     v.setVisible(true)
+    // v1.10.144: addChildView + setVisible can shift Chromium's focus
+    // to the popup webContents. The user is actively typing in the
+    // URL input when this fires, so focus stealing on first letter
+    // gave the impression the input "stopped working" — they had to
+    // click back into it. Explicitly return focus to the chrome's
+    // webContents where the URL input lives.
+    try { win.webContents.focus() } catch (_) {}
   } catch (err) {
     console.error('[urlSuggest:show] failed:', err)
   }

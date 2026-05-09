@@ -5644,7 +5644,20 @@ function _attachWebviewListeners(el, tabId) {
   })
 
   el.addEventListener('did-navigate', e => {
-    const t = _myTab(); if (t) t.url = e.url
+    const t = _myTab()
+    // v1.10.151: SEOZ overlay tabs (seoz://home/mail/settings) load
+    // about:blank into their underlying webview as a placeholder. That
+    // load fires did-navigate with e.url='about:blank' and used to
+    // overwrite the seoz:// sentinel URL — leaving tab.url as
+    // 'about:blank' (which isHomeUrl() matches), so syncOverlayVisibility
+    // would flip the overlay to Home while the tab's title (e.g.
+    // "Inställningar") stayed pinned to whatever opened it. Result:
+    // tab handle reads "Inställningar" but the page shows Home.
+    // Skip URL/favicon mutation when the synthetic about:blank load
+    // arrives on a tab that's already pinned to an overlay sentinel —
+    // updateURL() already has a matching guard for the URL-bar refresh.
+    const isOverlayBlankLoad = (e.url === 'about:blank' && t && isOverlayUrl(t.url) && t.url !== 'about:blank' && t.url !== '')
+    if (t && !isOverlayBlankLoad) t.url = e.url
     // v1.10.149: preemptively set a Google-favicon-service URL for every
     // tab on navigation. Previously this was set inside updateURL() which
     // only fires for the active tab; background tabs whose pages didn't
@@ -5654,7 +5667,7 @@ function _attachWebviewListeners(el, tabId) {
     // any domain, so this guarantees every tab shows a favicon. If the
     // page later emits its own, the page-favicon-updated handler
     // overrides this fallback.
-    if (t) {
+    if (t && !isOverlayBlankLoad) {
       try {
         const host = new URL(e.url).hostname
         if (host) {
@@ -5701,7 +5714,10 @@ function _attachWebviewListeners(el, tabId) {
     else if (e.channel === 'seoz-autofill-save') _handleAutofillSave(e.args[0] || {})
   })
   el.addEventListener('did-navigate-in-page', e => {
-    const t = _myTab(); if (t) t.url = e.url
+    const t = _myTab()
+    // Same overlay-sentinel guard as did-navigate above (v1.10.151).
+    const isOverlayBlankLoad = (e.url === 'about:blank' && t && isOverlayUrl(t.url) && t.url !== 'about:blank' && t.url !== '')
+    if (t && !isOverlayBlankLoad) t.url = e.url
     if (_isActive()) updateURL(e.url)
     _persistTabs()
   })
@@ -9142,10 +9158,13 @@ const getActive = () => tabs.find(t => t.id === activeId)
 
 function renderTabs() {
   // Normalise stale titles: tabs sitting on the SEOZ home overlay should
-  // always read "SEOZ" — covers leftover state from older sessions where
-  // a home tab inherited "Mejl" or "Ny flik" after being re-used.
+  // always read "SEOZ". Covers leftover state from older sessions where
+  // a home tab inherited "Mejl" / "Ny flik" / "Inställningar" after being
+  // re-used or after the v1.10.150-and-earlier did-navigate bug where an
+  // about:blank load from the underlying webview clobbered the seoz://
+  // sentinel URL but left the title pointing at the original overlay.
   tabs.forEach(t => {
-    if (isHomeUrl(t.url) && (t.title === 'Mejl' || t.title === 'Ny flik' || !t.title)) {
+    if (isHomeUrl(t.url) && (t.title === 'Mejl' || t.title === 'Ny flik' || t.title === 'Inställningar' || !t.title)) {
       t.title = 'SEOZ'
     }
   })

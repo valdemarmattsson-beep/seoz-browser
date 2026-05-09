@@ -14873,9 +14873,13 @@ async function initCookieMode() {
 }
 
 function updateCookieSegUI() {
-  // The cookie segmented control lives inside the Shield popup (now
-  // a separate WebContentsView). Push the new mode there. No HTML
-  // counterpart to update in the chrome.
+  // Two surfaces show the cookie segmented control:
+  //   1) The Shield popup (its own WebContentsView) — push state via IPC
+  //   2) The Settings → Shield card (lives in this chrome document) —
+  //      its buttons were rendered with template-literal `active` classes
+  //      based on _cookieMode at render-time and never updated again, so
+  //      clicking didn't visually flip the selection. Sync the DOM here
+  //      so both surfaces stay in lock-step. (v1.10.150 fix.)
   try {
     if (window.seoz?.shieldPopup?.updateState) {
       window.seoz.shieldPopup.updateState({
@@ -14884,6 +14888,24 @@ function updateCookieSegUI() {
         cookieMode: _cookieMode,
       })
     }
+  } catch (_) {}
+  // Sync the in-document settings segment, if it's currently mounted.
+  try {
+    const segs = document.querySelectorAll('.settings-card .cookie-seg')
+    segs.forEach(seg => {
+      seg.querySelectorAll('.cookie-seg-btn').forEach(btn => {
+        // Buttons render with onclick="setCookieMode('off|accept|reject')".
+        // Parse the mode out of that handler string so we don't need to
+        // bolt extra data attributes onto the existing markup.
+        const m = (btn.getAttribute('onclick') || '').match(/setCookieMode\(['"](off|accept|reject)['"]\)/)
+        if (!m) return
+        const mode = m[1]
+        const active = mode === _cookieMode
+        btn.classList.toggle('active', active)
+        btn.classList.toggle('accept', active && mode === 'accept')
+        btn.classList.toggle('reject', active && mode === 'reject')
+      })
+    })
   } catch (_) {}
 }
 

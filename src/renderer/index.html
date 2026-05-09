@@ -5645,6 +5645,24 @@ function _attachWebviewListeners(el, tabId) {
 
   el.addEventListener('did-navigate', e => {
     const t = _myTab(); if (t) t.url = e.url
+    // v1.10.149: preemptively set a Google-favicon-service URL for every
+    // tab on navigation. Previously this was set inside updateURL() which
+    // only fires for the active tab; background tabs whose pages didn't
+    // emit a `page-favicon-updated` (no <link rel="icon">, broken
+    // /favicon.ico, slow CDN, etc.) ended up with no icon at all. The
+    // Google service is a fast CDN that always returns SOMETHING for
+    // any domain, so this guarantees every tab shows a favicon. If the
+    // page later emits its own, the page-favicon-updated handler
+    // overrides this fallback.
+    if (t) {
+      try {
+        const host = new URL(e.url).hostname
+        if (host) {
+          t.favicon = 'https://www.google.com/s2/favicons?domain=' + host + '&sz=32'
+          scheduleRenderTabs()
+        }
+      } catch (_) {}
+    }
     if (_isActive()) updateURL(e.url)
     _persistTabs()
     // Invalidate cached tab-tooltip preview (URL changed → screenshot

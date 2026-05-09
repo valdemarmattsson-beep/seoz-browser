@@ -26,7 +26,10 @@ contextBridge.exposeInMainWorld('seoz', {
   // Native context menu for tab right-click. v1.10.118 switched away
   // from HTML showCtx to bypass the chrome-clip-active mechanism that
   // was suspected of freezing the app on right-click.
-  showTabMenu: (tabId) => ipcRenderer.send('tab:show-menu', { tabId }),
+  // v1.10.152: opts.pinned drives the dynamic "Fäst flik" / "Lossa flik"
+  // label in the menu. Defaults to false for backward compatibility with
+  // older callers that pass only the tabId.
+  showTabMenu: (tabId, opts = {}) => ipcRenderer.send('tab:show-menu', { tabId, pinned: !!opts.pinned }),
   onTabMenuAction: (cb) => ipcRenderer.on('tab:menu-action', (_e, payload) => {
     try { cb(payload || {}) } catch (err) { console.error('[onTabMenuAction]', err) }
   }),

@@ -1588,6 +1588,18 @@ input,textarea,select{user-select:text}
 .tab:hover:not(.active){background:rgba(255,255,255,.05)}
 .tab.active{background:var(--card);color:var(--head);font-weight:600}
 .tab.dragging{opacity:.45;transform:scale(.97);transition:opacity .1s,transform .1s}
+/* Pinned tabs — Chrome-style narrow flik that only shows the favicon.
+   Title + close-X are hidden; the .tab itself shrinks to just-enough
+   width for the icon. The pinned section gets a subtle right border so
+   it's visually separate from the regular tabs.
+   Added in v1.10.152. */
+.tab.pinned{width:36px;flex:0 0 36px;padding:0;justify-content:center;gap:0}
+.tab.pinned .tab-title{display:none}
+.tab.pinned .tab-x{display:none}
+.tab.pinned::after{display:none}
+/* Last pinned tab gets a divider on the right to separate from regular flikar. */
+.tab.pinned.last-pinned{margin-right:6px;position:relative}
+.tab.pinned.last-pinned::before{content:'';position:absolute;right:-3px;top:6px;bottom:6px;width:1px;background:rgba(255,255,255,.18);pointer-events:none}
 .tab.drag-over-left::before,
 .tab.drag-over-right::before{
   content:'';position:absolute;top:4px;bottom:4px;width:2px;
@@ -5986,7 +5998,7 @@ function _persistTabs() {
         activeId,
         tabs: tabs
           .filter(t => !t.isMcp)  // don't persist transient MCP session tabs
-          .map(t => ({ id: t.id, url: t.url, title: t.title, favicon: t.favicon })),
+          .map(t => ({ id: t.id, url: t.url, title: t.title, favicon: t.favicon, pinned: !!t.pinned })),
       }
       localStorage.setItem(_TABS_STORAGE_KEY, JSON.stringify(data))
     } catch (_) {}
@@ -6008,6 +6020,7 @@ function _restoreTabs() {
     tabs = data.tabs.map(t => ({
       id: t.id, url: t.url, title: t.title || 'SEOZ',
       favicon: t.favicon || null, loading: false, _zoom: 100,
+      pinned: !!t.pinned,
     }))
     activeId = data.activeId && tabs.some(t => t.id === data.activeId) ? data.activeId : tabs[0].id
     nextId = Math.max(...tabs.map(t => t.id)) + 1
@@ -9168,6 +9181,14 @@ function renderTabs() {
       t.title = 'SEOZ'
     }
   })
+  // v1.10.152: pinned tabs always sort to the front of the array. Sort
+  // is stable in modern JS so relative order within the pinned and
+  // unpinned sections is preserved.
+  tabs.sort((a, b) => {
+    const ap = a.pinned ? 0 : 1
+    const bp = b.pinned ? 0 : 1
+    return ap - bp
+  })
   const bar = document.getElementById('tabbar')
   const ntBtn = document.getElementById('newtabBtn')
   const existing = bar.querySelectorAll('.tab[data-tab-id]')
@@ -9233,6 +9254,7 @@ function renderTabs() {
             domain,
             favicon: tab.favicon || '',
             preview: cached || '',
+            pinned: !!tab.pinned,
           })
           if (!cached) _captureAndUpdateTooltip(tab, { left, top: rect.bottom + 4, domain })
         }, 420)
@@ -9259,7 +9281,7 @@ function renderTabs() {
         // Replaced with native Menu.popup() via IPC — bypasses HTML
         // ctx menu + chrome-clip-active mechanism entirely.
         if (window.seoz?.showTabMenu) {
-          window.seoz.showTabMenu(tab.id)
+          window.seoz.showTabMenu(tab.id, { pinned: !!tab.pinned })
         }
       })
       attachTabDnD(el)
@@ -9272,6 +9294,11 @@ function renderTabs() {
 
     // Update active state
     el.classList.toggle('active', tab.id === activeId)
+
+    // Pinned-tab styling (v1.10.152). Title and X are hidden via CSS
+    // when .pinned is set. .last-pinned is applied below after the
+    // tabs[] sort so the divider lands on the rightmost pinned tab.
+    el.classList.toggle('pinned', !!tab.pinned)
 
     // MCP session tab styling — colored left border + label
     if (tab.isMcp) {
@@ -9385,6 +9412,28 @@ function renderTabs() {
       }
     }
   })
+  // v1.10.152: enforce DOM order to match the freshly-sorted tabs[]
+  // (pinned-first). Without this, pin/unpin only updates the .pinned
+  // class — the DOM keeps the original insertion order so a newly-pinned
+  // tab stays in place visually. We walk tabs[] in order and re-insert
+  // each tab element after the previous one. Also tag the rightmost
+  // pinned tab with .last-pinned so the CSS divider lands correctly.
+  const _tabsContainer = (ntBtn.parentNode || bar)
+  let _prevEl = null
+  let _lastPinnedEl = null
+  tabs.forEach(tab => {
+    const id = String(tab.id)
+    const el = _tabsContainer.querySelector('.tab[data-tab-id="' + CSS.escape(id) + '"]')
+    if (!el) return
+    if (tab.pinned) _lastPinnedEl = el
+    // expected next-sibling: the element after _prevEl, or first child if no prev
+    const expectedAfter = _prevEl ? _prevEl.nextSibling : _tabsContainer.firstChild
+    if (el !== expectedAfter) _tabsContainer.insertBefore(el, expectedAfter)
+    _prevEl = el
+  })
+  // Apply .last-pinned only to the rightmost pinned tab.
+  _tabsContainer.querySelectorAll('.tab.last-pinned').forEach(n => n.classList.remove('last-pinned'))
+  if (_lastPinnedEl) _lastPinnedEl.classList.add('last-pinned')
 }
 
 // Cached password list used by tab tooltips. Refreshed on init and
@@ -9481,6 +9530,7 @@ async function _captureAndUpdateTooltip(tab, anchor) {
     domain,
     favicon: tab.favicon || '',
     preview: dataURL,
+    pinned: !!tab.pinned,
   })
 }
 
@@ -9508,7 +9558,7 @@ async function _captureAndUpdateTooltip(tab, anchor) {
         if (typeof openSplitView === 'function' && !_splitWebviews.has(tabId)) openSplitView()
         else if (typeof closeSplitView === 'function' && _splitWebviews.has(tabId)) closeSplitView(tabId)
       } else if (action === 'pin') {
-        toast('Fästa flikar kommer i nästa version', '#94a3b8')
+        togglePin(tabId)
       }
     })
   }
@@ -9546,12 +9596,15 @@ async function _captureAndUpdateTooltip(tab, anchor) {
           break
         case 'close':       closeTab({ stopPropagation: () => {} }, tabId); break
         case 'close-others':
-          tabs.filter(t => t.id !== tabId).slice().reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
+          // Skip pinned tabs — Chrome behavior. Pinned tabs are explicit
+          // user state and shouldn't disappear behind a "close others".
+          tabs.filter(t => t.id !== tabId && !t.pinned).slice().reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
           break
         case 'close-right':
           const idx = tabs.findIndex(t => t.id === tabId)
-          if (idx >= 0) tabs.slice(idx + 1).reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
+          if (idx >= 0) tabs.slice(idx + 1).filter(t => !t.pinned).reverse().forEach(t => closeTab({ stopPropagation: () => {} }, t.id))
           break
+        case 'pin':         togglePin(tabId); break
       }
     })
   }
@@ -9753,6 +9806,29 @@ function switchTab(id) {
       setTimeout(() => { if (_inspectorOpen) _inspectorRunAnalyze() }, 100)
     }
   }
+}
+
+// v1.10.152: pin / unpin a tab. Sorting + DOM order is handled inside
+// renderTabs() (pinned tabs always sort to the front of tabs[]). Hide
+// any open tooltip so the (now stale) "Fäst"/"Lossa" label doesn't
+// linger on screen — next hover will fetch the fresh state.
+function togglePin(id) {
+  const tab = tabs.find(t => t.id === id)
+  if (!tab) return
+  // Internal overlay tabs (Hem/Mejl/Inställningar) shouldn't be
+  // pinnable — they're already first-class destinations elsewhere
+  // (chrome buttons, dock) and pinning them would only confuse the
+  // tab-handle layout.
+  if (isOverlayUrl(tab.url)) {
+    if (typeof toast === 'function') toast('Internsidor kan inte fästas', '#e58a00')
+    return
+  }
+  tab.pinned = !tab.pinned
+  if (typeof window.seoz?.tooltip?.hide === 'function') {
+    try { window.seoz.tooltip.hide() } catch (_) {}
+  }
+  scheduleRenderTabs ? scheduleRenderTabs() : renderTabs()
+  _persistTabs()
 }
 
 function closeTab(e, id) {
@@ -13133,7 +13209,7 @@ async function _saveTabsForProject(projectId) {
   if (!projectId) return
   const tabData = tabs
     .filter(t => t.url && t.url !== 'about:blank' && !isOverlayUrl(t.url))
-    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon }))
+    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon, pinned: !!t.pinned }))
   const activeTab = tabs.find(t => t.id === activeId)
   const activeUrl = activeTab && !isOverlayUrl(activeTab.url) ? activeTab.url : ''
   const all = (await SE.storeGet('tabsByProject', null)) || {}
@@ -13169,13 +13245,13 @@ async function _restoreTabsForProject(projectId) {
   }
   // First saved tab → reuse slot 0; rest → spawn new tabs.
   const first = targetTabs.shift()
-  if (tabs[0]) { tabs[0].url = first.url; tabs[0].title = first.title || 'Ny flik'; tabs[0].favicon = first.favicon || null }
+  if (tabs[0]) { tabs[0].url = first.url; tabs[0].title = first.title || 'Ny flik'; tabs[0].favicon = first.favicon || null; tabs[0].pinned = !!first.pinned }
   activeId = tabs[0].id
   wv = _tabWebviews.get(activeId)
   if (wv) wv.loadURL(first.url)
   for (const t of targetTabs) {
     nextId += 1
-    const newTabObj = { id: nextId, url: t.url, title: t.title || 'Ny flik', favicon: t.favicon || null, loading: false, _zoom: 100 }
+    const newTabObj = { id: nextId, url: t.url, title: t.title || 'Ny flik', favicon: t.favicon || null, loading: false, _zoom: 100, pinned: !!t.pinned }
     tabs.push(newTabObj)
     createWebviewForTab(nextId, t.url)
   }
@@ -13198,7 +13274,7 @@ async function _saveTabsForClient(clientId) {
   if (!clientId) return
   const tabData = tabs
     .filter(t => t.url && t.url !== 'about:blank' && !isOverlayUrl(t.url))
-    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon }))
+    .map(t => ({ url: t.url, title: t.title, favicon: t.favicon, pinned: !!t.pinned }))
   const activeTab = tabs.find(t => t.id === activeId)
   const activeUrl = activeTab && !isOverlayUrl(activeTab.url) ? activeTab.url : ''
   const all = (await SE.storeGet('tabsByClient', null)) || {}
@@ -13239,6 +13315,7 @@ async function _restoreTabsForClient(clientId) {
   tabs[0].favicon = first.favicon || null
   tabs[0].loading = false
   tabs[0]._zoom = 100
+  tabs[0].pinned = !!first.pinned
   wv = _wvTemplate
   wv.loadURL(isHomeUrl(first.url) ? 'about:blank' : first.url)
   activeId = 1
@@ -13247,7 +13324,7 @@ async function _restoreTabsForClient(clientId) {
   for (let i = 1; i < targetTabs.length; i++) {
     const s = targetTabs[i]
     const id = nextId++
-    tabs.push({ id, title: s.title || 'SEOZ', url: s.url, loading: false, favicon: s.favicon, _zoom: 100 })
+    tabs.push({ id, title: s.title || 'SEOZ', url: s.url, loading: false, favicon: s.favicon, _zoom: 100, pinned: !!s.pinned })
     createWebviewForTab(id, isHomeUrl(s.url) ? 'about:blank' : s.url)
   }
 

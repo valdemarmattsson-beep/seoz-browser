@@ -1320,7 +1320,7 @@ function createWindow() {
 // resize on open. The renderer sends the tabId, main builds the
 // menu from the same logic the HTML one used and either runs the
 // action directly or sends it back to the renderer for execution.
-ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
+ipcMain.on('tab:show-menu', (e, { tabId, pinned = false } = {}) => {
   try {
     if (!win || win.isDestroyed()) return
     if (!tabId) return
@@ -1334,6 +1334,11 @@ ipcMain.on('tab:show-menu', (e, { tabId } = {}) => {
       { label: 'Ladda om',         click: () => win.webContents.send('tab:menu-action', { tabId, action: 'reload' }) },
       { label: 'Duplicera flik',   click: () => win.webContents.send('tab:menu-action', { tabId, action: 'duplicate' }) },
       { type: 'separator' },
+      // v1.10.152: pin/unpin entry — label flips based on the tab's
+      // current state. Pinned tabs render narrow (icon-only) and
+      // sort to the front of the tab strip.
+      { label: pinned ? 'Lossa flik' : 'Fäst flik',
+                                  click: () => win.webContents.send('tab:menu-action', { tabId, action: 'pin' }) },
       { label: 'Öppna i splitvy',  click: () => win.webContents.send('tab:menu-action', { tabId, action: 'split' }) },
       { label: 'Bokmärk denna sida', click: () => win.webContents.send('tab:menu-action', { tabId, action: 'bookmark' }) },
       { label: 'Kopiera URL',      click: () => win.webContents.send('tab:menu-action', { tabId, action: 'copy-url' }) },

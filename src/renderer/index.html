@@ -3190,29 +3190,41 @@ body.no-seoz .seoz-panel { display:none !important }
 /* ── Password autofill save-prompt banner ──
    Shown when the user submits credentials on a page we haven't seen
    before. Slides in from the bottom-right; auto-hides after 12s. */
+/* v1.10.153: same trap as the toast in v1.10.147 — the banner used to
+   be anchored to bottom:20px;right:20px which placed it in the page
+   area where the active tab's WebContentsView paints over chrome. The
+   user never saw it. Re-anchor in the chrome region (top:8px) and
+   redesign as a compact horizontal chip so the whole element fits
+   inside the 112px chrome strip. The card now has icon + text + 3
+   inline buttons in a single row, ~42px tall.
+   Position collides with the toast (also top:8px right:16px) but
+   z-index:1200 > toast's 1000 so the save banner wins when both
+   show. The save banner is action-required (12s timeout); the toast
+   auto-dismisses in 3s, so any overlap is brief in practice. */
 .pw-save-banner{
-  position:fixed;bottom:20px;right:20px;z-index:600;
-  width:340px;background:var(--card);border:1px solid var(--border);
-  border-radius:12px;box-shadow:0 12px 36px rgba(0,0,0,.4);
-  padding:14px 16px;display:none;
-  transform:translateY(20px);opacity:0;
-  transition:transform .25s var(--ease-out),opacity .25s var(--ease-out);
+  position:fixed;top:8px;right:16px;z-index:1200;
+  max-width:520px;background:var(--card);border:1px solid var(--border);
+  border-radius:10px;box-shadow:0 8px 28px rgba(0,0,0,.4);
+  padding:8px 10px;display:none;
+  transform:translateY(-8px);opacity:0;
+  transition:transform .2s var(--ease-out),opacity .2s var(--ease-out);
 }
-.pw-save-banner.show{display:block;transform:translateY(0);opacity:1}
-.pw-save-hdr{display:flex;align-items:center;gap:8px;margin-bottom:8px}
+.pw-save-banner.show{display:flex;align-items:center;gap:10px;transform:translateY(0);opacity:1}
+.pw-save-hdr{display:flex;align-items:center;gap:8px;flex-shrink:0}
 .pw-save-icon{
-  width:24px;height:24px;border-radius:50%;background:rgba(70,128,255,.12);
+  width:22px;height:22px;border-radius:50%;background:rgba(70,128,255,.12);
   display:flex;align-items:center;justify-content:center;color:var(--p);flex-shrink:0;
 }
-.pw-save-icon svg{width:13px;height:13px}
-.pw-save-title{font-size:12px;font-weight:700;color:var(--head)}
-.pw-save-body{font-size:11px;color:var(--muted);line-height:1.45;margin-bottom:11px}
+.pw-save-icon svg{width:12px;height:12px}
+.pw-save-title{font-size:11.5px;font-weight:700;color:var(--head);white-space:nowrap}
+.pw-save-body{font-size:11px;color:var(--muted);line-height:1.35;flex:1;min-width:0;
+  overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pw-save-body strong{color:var(--head);font-weight:600}
-.pw-save-actions{display:flex;gap:6px}
+.pw-save-actions{display:flex;gap:5px;flex-shrink:0}
 .pw-save-btn{
-  flex:1;height:30px;border-radius:7px;font-size:11px;font-weight:600;cursor:pointer;
+  height:26px;padding:0 10px;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;
   font-family:inherit;border:1px solid var(--border);background:transparent;color:var(--txt);
-  transition:background .12s,border-color .12s,color .12s;
+  transition:background .12s,border-color .12s,color .12s;white-space:nowrap;
 }
 .pw-save-btn:hover{background:var(--panel)}
 .pw-save-btn.primary{background:var(--p);color:#fff;border-color:var(--p)}

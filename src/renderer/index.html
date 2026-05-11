@@ -5051,10 +5051,19 @@ let _overlayActive = false
 // an off-screen modal must not pin the page invisible.
 function _isElementActuallyVisible(el) {
   if (!el) return false
-  const r = el.getBoundingClientRect()
-  if (r.width <= 0 || r.height <= 0) return false
+  // offsetParent is null when the element OR any ancestor is display:none.
+  // (Exception: fixed-positioned elements always have null offsetParent,
+  // so we fall through to the rect check for those.) v1.10.154: belt-
+  // and-braces — the original rect-only check did catch most stale-show
+  // cases but the rendering glitch on tabs after leaving mail proved
+  // the check can miss a sub-tree under a freshly-hidden parent on the
+  // SAME frame the parent flips. offsetParent reflects the layout tree
+  // synchronously, so this never returns true for a dead sub-tree.
   const cs = getComputedStyle(el)
   if (cs.display === 'none' || cs.visibility === 'hidden' || cs.opacity === '0') return false
+  if (cs.position !== 'fixed' && !el.offsetParent) return false
+  const r = el.getBoundingClientRect()
+  if (r.width <= 0 || r.height <= 0) return false
   return true
 }
 
@@ -5085,9 +5094,21 @@ function _refreshOverlayState() {
   if (maxBottom > 0) {
     const wvStack = document.getElementById('wvStack')
     const wvTop = wvStack ? wvStack.getBoundingClientRect().top : 0
-    const clipPx = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
-    document.documentElement.style.setProperty('--chrome-clip-h', clipPx + 'px')
-    document.body.classList.add('chrome-clip-active')
+    const rawClip = Math.max(0, Math.ceil(maxBottom - wvTop) + 8)
+    // v1.10.154: sanity cap. The chrome strip is ~112px tall; any
+    // legit clip extending into the page area for a dropdown should be
+    // well under 320px (folder menus etc.). A clip pushing the WCV
+    // ~540px down means a stale .show class is being read as visible
+    // somewhere. Fall back to clip-off rather than burning half the
+    // viewport into a black void.
+    const CLIP_SANITY_CAP = 320
+    if (rawClip > CLIP_SANITY_CAP) {
+      try { console.warn('[chrome-clip] rawClip=' + rawClip + ' exceeded cap=' + CLIP_SANITY_CAP + '; treating as stale state and disabling clip') } catch (_) {}
+      document.body.classList.remove('chrome-clip-active')
+    } else {
+      document.documentElement.style.setProperty('--chrome-clip-h', rawClip + 'px')
+      document.body.classList.add('chrome-clip-active')
+    }
   } else {
     document.body.classList.remove('chrome-clip-active')
   }
@@ -6399,6 +6420,17 @@ function syncOverlayVisibility() {
   if (home) home.classList.toggle('show', onHome)
   if (mailEl) mailEl.classList.toggle('show', onMail)
   if (settingsEl) settingsEl.classList.toggle('show', onSettings)
+  // v1.10.154: re-evaluate chrome-clip-active on every overlay swap.
+  // The MutationObserver in _watchOverlays only fires for class changes
+  // on elements in _OVERLAY_IDS / _OVERLAY_CLASS_RE — it does NOT fire
+  // for #mailScreen / #homeScreen / #settingsScreen losing .show. So
+  // if the user opened a mail menu (mail-acct-menu.show → chrome-clip
+  // pushed WCV down) and then navigated away from mail without
+  // explicitly closing the menu, the menu's stale .show class plus
+  // #mailScreen losing .show would leave chrome-clip-active stuck on
+  // (WCV pinned ~540px down on every page) until some other mutation
+  // happened to trigger a refresh. Calling it here closes the gap.
+  try { if (typeof _refreshOverlayState === 'function') _refreshOverlayState() } catch (_) {}
   // Hide active tab while any overlay owns the tab area. wvEl is a
   // TabHandle now (placeholder div lives in wvEl.el); the WebContentsView
   // visibility is mirrored from el.style.display via ResizeObserver.

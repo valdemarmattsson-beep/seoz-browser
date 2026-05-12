@@ -179,6 +179,19 @@ const ALLOW_GLOBAL = new Set([
   'notifications',
   'fullscreen',          // element.requestFullscreen() — used by SEOZ portal
   'pointerLock',         // canvas/game pointer capture
+  // v1.10.155: Storage Access API. Third-party iframes (Cloudflare
+  // Turnstile, hCaptcha, reCAPTCHA, embedded payment widgets, SSO
+  // bridges) request this so they can read/write their own first-
+  // party cookies while embedded inside another origin. Without it,
+  // Turnstile's "Verify you are human" checkbox spins forever and
+  // resets — the widget couldn't persist its challenge token. Real
+  // Chrome auto-grants this after a user gesture in the embedded
+  // frame (exactly what clicking the checkbox is), and treats the
+  // capability as low-risk because the iframe is only reading cookies
+  // for ITS OWN origin, not the parent's. Denying it by default
+  // broke a category of legitimate widgets we actively want to work.
+  'storage-access',
+  'top-level-storage-access',
 ])
 const PROMPTABLE = new Set([
   'media',               // camera + mic combined (Chrome's getUserMedia)
